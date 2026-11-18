@@ -48,6 +48,7 @@ import { SessionJavaNavigationMark } from "./JavaNavigationMark.tsx";
 import { NewSession } from "./NewSession.tsx";
 import { ProposalInbox } from "./ProposalInbox.tsx";
 import { RoutineList } from "./RoutineList.tsx";
+import { SessionEditorButton } from "./SessionEditorButton.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { GroupFilterChip } from "./SessionGroupMarks.tsx";
@@ -500,6 +501,7 @@ function SessionPanel({
           {session.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </div>
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
+        <SessionEditorButton conn={conn} session={session} />
         {live && (
           <ModelChangeButton
             open={changingModel}
