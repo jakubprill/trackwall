@@ -45,4 +45,5 @@ The line under "Get started" in the list of categories says what is left: how ma
 - Sessions that are already running keep asking; one you start after the click does not.
 - When Copilot CLI's `config.json` cannot be read as its own, "Trust folder" leaves it alone and says why.
 - "Settings > Diagnostics" shows every check of the doctor, also those that do not stop a session, such as free disk space.
+- [Troubleshooting](/guide/troubleshooting) explains each step that does not turn green: installing and signing in to Copilot CLI, trusting your projects folder, and a company proxy.
 - In a container, Trackwall has to be running before the list can help; [Run in a dev container](/guide/dev-container) describes that part.

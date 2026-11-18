@@ -59,3 +59,4 @@ The doctor only looks. To time file writes it writes a few dozen small files int
 - Whether Copilot CLI itself is signed in is not checked; a session that cannot sign in says so in its terminal.
 - [Get started](/features/get-started) shows the few checks that stand before a first session as steps.
 - Errors of Trackwall itself are listed under [Trackwall errors](/features/trackwall-errors).
+- [Troubleshooting](/guide/troubleshooting) explains the fixes the doctor points to, such as where to set a proxy or certificate variable on your system.
