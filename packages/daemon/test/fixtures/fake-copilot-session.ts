@@ -40,9 +40,11 @@ import { recordBackgroundAgent, recordModelChange, recordUsage } from "../suppor
 import { pluginHooks } from "../support/plugin-hooks.ts";
 import { serveAcp } from "./fake-copilot-acp.ts";
 
-// `--version` answers as Copilot CLI does (`GitHub Copilot CLI 1.0.103.` and a hint), for the doctor (ADR-101).
+// `--version` answers as Copilot CLI does (`GitHub Copilot CLI 1.0.103.` and a hint), for the doctor (ADR-101): the tested
+// version, or `FAKE_COPILOT_VERSION` for a Copilot CLI Trackwall is not tested with (ADR-274).
 if (process.argv[2] === "--version") {
-  process.stdout.write(`GitHub Copilot CLI ${TESTED_COPILOT_CLI_VERSION}.\nRun 'copilot update' to check for updates.\n`);
+  const version = process.env.FAKE_COPILOT_VERSION || TESTED_COPILOT_CLI_VERSION;
+  process.stdout.write(`GitHub Copilot CLI ${version}.\nRun 'copilot update' to check for updates.\n`);
   process.exit(0);
 }
 
