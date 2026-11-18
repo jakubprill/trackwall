@@ -66,6 +66,20 @@ export const TrustedProjectsFolder = z.object({
 });
 export type TrustedProjectsFolder = z.infer<typeof TrustedProjectsFolder>;
 
+/**
+ * How the Copilot CLI sessions start compares with `TESTED_COPILOT_CLI_VERSION` (ADR-274): `older` may lack what the daemon
+ * relies on, `newer` may have changed it, `unknown` when Copilot CLI is missing, did not answer or said no version.
+ */
+export const CopilotCliRelation = z.enum(["older", "tested", "newer", "unknown"]);
+export type CopilotCliRelation = z.infer<typeof CopilotCliRelation>;
+
+export const CopilotCliVersion = z.discriminatedUnion("relation", [
+  /** What `copilot --version` says, as `x.y.z`, against the tested version, `TESTED_COPILOT_CLI_VERSION` of this daemon. */
+  z.object({ relation: z.enum(["older", "tested", "newer"]), version: z.string(), tested: z.string() }),
+  z.object({ relation: z.literal("unknown"), version: z.null(), tested: z.string() }),
+]);
+export type CopilotCliVersion = z.infer<typeof CopilotCliVersion>;
+
 const endpoint = apiEndpoints("doctor");
 
 export const doctorApi = {
@@ -78,4 +92,9 @@ export const doctorApi = {
    * changed safely; the message says why.
    */
   trustProjectsFolder: endpoint("trust-projects-folder", z.object({}).strict(), TrustedProjectsFolder),
+  /**
+   * Only the version of the Copilot CLI sessions start, without the other checks (ADR-274): the window asks for it when it
+   * connects and every hour, and warns about a version Trackwall is not tested with. Runs `copilot --version` and nothing else.
+   */
+  copilotCliVersion: endpoint("copilot-cli-version", z.object({}).strict(), CopilotCliVersion),
 };
