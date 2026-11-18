@@ -1,6 +1,6 @@
-import { agentsApi, countLabel, type Session, workspaceApi } from "@trackwall/protocol";
+import { agentsApi, countLabel, type Session } from "@trackwall/protocol";
 import { BellRing, Crown, Maximize2, Minimize2, PanelRightClose, PanelRightOpen, Square } from "lucide-react";
-import { type FocusEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FocusEvent, useEffect, useRef, useState } from "react";
 import { ModelChangeButton, SessionModelChange } from "@/components/ModelChange";
 import { SessionNotices } from "@/components/SessionNotices";
 import { SessionScreen } from "@/components/SessionScreen";
@@ -29,7 +29,6 @@ import { type SupervisorSummary, supervisorStateLabel } from "@/lib/supervisor";
 import { type SupervisorLayout, widenedOrNarrowed } from "@/lib/supervisor-layout";
 import { useAction } from "@/lib/use-action";
 import { type DayStartHandle, useDayStart } from "@/lib/use-day-start";
-import { useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 
 const SHORTCUT = sessionShortcutLabel(SUPERVISOR_SHORTCUT, IS_MAC);
@@ -49,6 +48,7 @@ export function SupervisorPanel({
   focused,
   onFocusedChange,
   onOpenInSessions,
+  projectsDir,
   onOpenGetStarted,
   onChanged,
 }: {
@@ -59,6 +59,8 @@ export function SupervisorPanel({
   focused: boolean;
   onFocusedChange: (focused: boolean) => void;
   onOpenInSessions: (selection: SessionSelection) => void;
+  /** The projects folder (`useProjectsDir`): the start card waits for it. */
+  projectsDir: string | null | undefined;
   /** Opens Settings › Get started, where the start card sends the user while no projects folder is set. */
   onOpenGetStarted: () => void;
   onChanged: () => void;
@@ -99,6 +101,7 @@ export function SupervisorPanel({
         onStart={setLastStart}
         focused={focused}
         onOpenInSessions={onOpenInSessions}
+        projectsDir={projectsDir}
         onOpenGetStarted={onOpenGetStarted}
         onChanged={onChanged}
         layout={layout}
@@ -143,6 +146,7 @@ function SupervisorBody({
   onStart,
   focused,
   onOpenInSessions,
+  projectsDir,
   onOpenGetStarted,
   onChanged,
   layout,
@@ -155,6 +159,7 @@ function SupervisorBody({
   onStart: (button: StartButton) => void;
   focused: boolean;
   onOpenInSessions: (selection: SessionSelection) => void;
+  projectsDir: string | null | undefined;
   onOpenGetStarted: () => void;
   onChanged: () => void;
   layout: SupervisorLayout;
@@ -164,12 +169,6 @@ function SupervisorBody({
   const { session } = supervisor;
   const day = useDayStart(conn, onChanged);
   const running = session !== undefined && isLive(session) ? session : undefined;
-  // The start card's projects folder, read only while the card shows: often until one is set, since that happens in
-  // Settings while the panel stays open, and rarely after, since only a hand edit of `workspace.yaml` takes it away.
-  const loadSettings = useCallback(() => post(conn, workspaceApi.settings, {}), [conn]);
-  const settings = useRemote(running ? undefined : loadSettings, {
-    pollMs: (data) => (data?.projectsDir === null ? FOLDER_UNSET_POLL_MS : FOLDER_SET_POLL_MS),
-  });
   return (
     <>
       <SupervisorHeader
@@ -189,7 +188,7 @@ function SupervisorBody({
           supervisor={supervisor}
           day={day}
           lastStart={lastStart}
-          projectsDir={settings.data?.projectsDir}
+          projectsDir={projectsDir}
           onStart={onStart}
           onChanged={onChanged}
           onOpenGetStarted={onOpenGetStarted}
@@ -200,10 +199,6 @@ function SupervisorBody({
     </>
   );
 }
-
-/** How often the start card reads the workspace settings while no projects folder is set, and once one is. */
-const FOLDER_UNSET_POLL_MS = 3000;
-const FOLDER_SET_POLL_MS = 5 * 60_000;
 
 /** The time of day in the user's locale; `supervisorStateLabel` takes it, so its tests do not depend on the locale. */
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });

@@ -41,6 +41,7 @@ import { useDaemonEvents, useDaemonLost } from "@/lib/use-daemon-events";
 import { useFileDrop } from "@/lib/use-file-drop";
 import { useJumpRequest } from "@/lib/use-jump-request";
 import { useNewWindow } from "@/lib/use-new-window";
+import { useProjectsDir } from "@/lib/use-projects-dir";
 import { useRepoWatch } from "@/lib/use-repo-watch";
 import { useSessionLink } from "@/lib/use-session-link";
 import { useSessionTree } from "@/lib/use-session-tree";
@@ -97,6 +98,7 @@ export function App() {
     (category: SettingsCategory) => setNav((nav) => ({ view: "settings", settingsCategory: category, visit: nav.visit + 1 })),
     [],
   );
+  const openGetStarted = useCallback(() => openSettings("get-started"), [openSettings]);
   const [session, setSession] = useState<SessionSelection>();
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>(
     () => startFromLocation(window.location.search, START_PARAMS.sessionLayout, SESSION_LAYOUTS) ?? "1",
@@ -147,6 +149,7 @@ export function App() {
   const mcpCallsLive = useMemo(() => events?.feed("mcp.calls.changed"), [events]);
   const terminalsLive = useMemo(() => events?.feed("terminals.changed"), [events]);
   const outcomes = useTaskOutcomes(conn, events);
+  const projectsDir = useProjectsDir(conn);
   const appUpdate = useAppUpdate(sessions.data && agentsInTurn(sessions.data.sessions));
   const tree = useSessionTree(sessions);
   const { rows } = tree;
@@ -328,6 +331,8 @@ export function App() {
                           outcomes={outcomes.byTask}
                           layout={sessionLayout}
                           onLayout={setSessionLayout}
+                          projectsDir={projectsDir}
+                          onOpenGetStarted={openGetStarted}
                         />
                       )}
                       {conn && view === "graph" && (
@@ -396,7 +401,8 @@ export function App() {
                     focused={supervisorFocused}
                     onFocusedChange={setSupervisorFocused}
                     onOpenInSessions={openInSessions}
-                    onOpenGetStarted={() => openSettings("get-started")}
+                    projectsDir={projectsDir}
+                    onOpenGetStarted={openGetStarted}
                     onChanged={sessions.reload}
                   />
                 </KeyboardElsewhere.Provider>

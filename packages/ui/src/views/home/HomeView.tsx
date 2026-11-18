@@ -3,6 +3,7 @@ import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Loading } from "@/components/Loading";
+import { ProjectsFolderNeeded } from "@/components/ProjectsFolderNeeded";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
@@ -199,12 +200,13 @@ export function HomeView({
  * settings file that cannot be read (`error`) is fixed where the folders are.
  */
 function HomeNeedsFolder({ error, onOpenSettings }: { error: string | undefined; onOpenSettings: (category: SettingsCategory) => void }) {
-  const broken = error !== undefined;
+  if (error === undefined)
+    return <ProjectsFolderNeeded needs="show your repos and sessions here" onOpenGetStarted={() => onOpenSettings("get-started")} />;
   return (
     <div className="flex flex-col items-start gap-3 p-6">
-      <p className="text-sm">{broken ? error : "Trackwall needs your projects folder before it can show your repos and sessions here."}</p>
-      <Button variant={broken ? "outline" : "default"} size="sm" onClick={() => onOpenSettings(broken ? "workspace" : "get-started")}>
-        {broken ? "Open Settings" : "Get started"}
+      <p className="text-sm">{error}</p>
+      <Button variant="outline" size="sm" onClick={() => onOpenSettings("workspace")}>
+        Open Settings
       </Button>
     </div>
   );
