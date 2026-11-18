@@ -1,4 +1,13 @@
-import { ApiEnvelope, DROP_NAME_HEADER, DROP_PATH, DroppedFile, type Endpoint, type ErrorCode } from "@trackwall/protocol";
+import {
+  ApiEnvelope,
+  DROP_NAME_HEADER,
+  DROP_PATH,
+  DroppedFile,
+  type Endpoint,
+  type ErrorCode,
+  WORK_BACKUP_UPLOAD_PATH,
+  WorkBackupRestore,
+} from "@trackwall/protocol";
 import type { z } from "zod";
 import type { Connection } from "./connection.ts";
 
@@ -59,6 +68,15 @@ export async function uploadDrop(conn: Connection, name: string, body: Blob | Ar
     body,
   });
   return path;
+}
+
+/** A work backup file to restore (ADR-275); answers what restoring it would do. */
+export function uploadWorkBackup(conn: Connection, file: Blob): Promise<WorkBackupRestore> {
+  return call(conn, WORK_BACKUP_UPLOAD_PATH, WorkBackupRestore, {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body: file,
+  });
 }
 
 /** A request to the daemon with its token. */
