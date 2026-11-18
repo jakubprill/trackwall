@@ -2,7 +2,6 @@ import {
   type BranchOnRemote,
   type FailedJob,
   type FollowedMergeRequest,
-  type FreshAutoReview,
   type HostedProject,
   type JobLog,
   type MergeRequest,
@@ -18,8 +17,8 @@ import {
   type PipelineFix,
   type PromptDelivery,
   type RepoHost,
-  type ReproductionCheck,
   type Task,
+  type TaskEvidence,
   type TaskMergeRequest,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
@@ -49,7 +48,7 @@ const AFTER_PUSH_MS = 10 * 60_000;
 
 /**
  * What the module needs from `agents`: the tasks, a task, its commits and uncommitted files, the squash of its round
- * commits (ADR-168), and a pipeline fix for its agent (ADR-197).
+ * commits (ADR-168), and a pipeline fix and merge request threads for its agent (ADR-197, ADR-256).
  */
 interface MergeRequestTasks {
   tasks(): Task[];
@@ -63,10 +62,6 @@ interface MergeRequestTasks {
   askToFixPipeline(id: string, fix: PipelineFix): PromptDelivery;
   /** Queues the merge request threads the user picked for the task's agent and asks its session to read them (ADR-256). */
   askToAddressThreads(id: string, comments: MergeRequestComments): PromptDelivery;
-  /** The task's last rules check (ADR-234), and whether the task's changes moved on after it; `null` without one. */
-  rulesCheck(id: string): Promise<FreshAutoReview | null>;
-  /** What the task's conversation has used so far, and on which models (ADR-228). */
-  taskConversationUse(id: string): Promise<Pick<MergeRequestEvidence, "usage" | "models">>;
 }
 
 /** What the module needs from `vcs`: the main remote as a project on a repo host, the task branch against it, and its push. */
@@ -96,8 +91,8 @@ export interface MergeRequestsDeps {
   openUrl: (url: string) => void;
   /** The end of a job's log, cleaned and masked like a log line (`logs`, ADR-197); `cut` when the daemon did not read all of it. */
   jobLogExcerpt: (raw: string, cut: boolean) => Promise<Omit<JobLog, "job">>;
-  /** The task's last reproduction check (`reproduction`, ADR-227); `null` without one. */
-  reproductionCheck: (task: string) => ReproductionCheck | null;
+  /** What Trackwall knows about the task's change (the facade's `taskEvidence`, ADR-276). */
+  taskEvidence: (task: string) => Promise<TaskEvidence>;
   /** The pipeline of a task's merge request failed since the read before (`pipelineFailedNow`). */
   onPipelineFailed: (task: Task, mergeRequest: MergeRequest) => void;
   log: (msg: string) => void;
@@ -148,12 +143,8 @@ export class MergeRequests {
    */
   async evidence(id: string): Promise<MergeRequestEvidence> {
     const task = this.#deps.tasks.task(id);
-    const [template, rules, use] = await Promise.all([
-      asRepoUnavailable(task, this.#template(task)),
-      this.#deps.tasks.rulesCheck(id),
-      this.#deps.tasks.taskConversationUse(id),
-    ]);
-    return { template, reproduction: this.#deps.reproductionCheck(id), rules, ...use };
+    const [template, evidence] = await Promise.all([asRepoUnavailable(task, this.#template(task)), this.#deps.taskEvidence(id)]);
+    return { ...evidence, template };
   }
 
   /** The repo's template for the repo host of its main remote; none without a known repo host. */

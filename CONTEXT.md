@@ -913,9 +913,13 @@ _Avoid_: regression test, proof, repro (in prose)
 Trackwall's own run of a task's reproduction test (ADR-227) in a **copy** of the repo beside the task's worktree (`<worktree>.repro`): first on the task's base with only its test files, where it must fail, then with all of the task's changes, where it must pass. `reproduced`, `not_reproduced`, `inconclusive` (it could not tell, such as a test that did not run) or `cancelled`.
 _Avoid_: verification (the whole `test` task in the worktree, ADR-64), red-green check (in the UI), proof
 
-**Evidence of a change** (ADR-222; `MergeRequestEvidence`, `evidenceLines`, "Evidence from Trackwall:" in a merge request's draft, ADR-238):
-What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test, Trackwall's reproduction check, the verification, the rules check and the plan the user approved. The merge request's draft lists what Trackwall itself saw of it under "Evidence from Trackwall:", each fact worded as whose word it is.
-_Avoid_: evidence (alone: that is the file and line of a fact on a repo card)
+**Evidence of a change** (ADR-222; `TaskEvidence`, `taskEvidenceApi`, ADR-276; `MergeRequestEvidence`, `evidenceLines`, "Evidence from Trackwall:" in a merge request's draft, ADR-238):
+What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test, Trackwall's reproduction check, the verification, the rules check and the plan the user approved. The daemon gives it as one **task evidence** (`TaskEvidence`), which the evidence card and the merge request's draft word; each fact says whose word it is (the user's approval, the agent's claim, Trackwall's check, what Trackwall saw), and a check says when the changes moved on after it.
+_Avoid_: evidence (alone: that is the file and line of a fact on a repo card), proof
+
+**Evidence card** (`TaskEvidenceCard`, `evidenceRows`, `EvidenceRow`, `EvidenceSource`; UI "Evidence" at the top of a task's "Changes" tab):
+The task evidence above the task's diff (ADR-276): one row per fact (plan, reproduction test, verification, rules check, models), its tone (green backs the change, red speaks against it, yellow is open or outdated, none is a gap) and whose word it is.
+_Avoid_: evidence panel, proof card, summary (that is the agent's report)
 
 **In review** (`Task.inReview`, the state "Ready for review" of a task, `READY_FOR_REVIEW`, column `review` of a board item):
 A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again, or until its next turn ends without changing the worktree (ADR-258). The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done".

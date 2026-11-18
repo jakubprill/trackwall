@@ -1,11 +1,9 @@
 import { z } from "zod";
 import { PromptDelivery, TaskId } from "./agents.ts";
 import { apiEndpoints, Done } from "./api.ts";
-import { FreshAutoReview } from "./auto-review.ts";
-import { CopilotUsage, ModelCalls } from "./copilot-usage.ts";
 import { RepoHostKind } from "./repo-hosts.ts";
-import { ReproductionCheck } from "./reproduction.ts";
 import { ReviewSide } from "./review.ts";
+import { TaskEvidence } from "./task-evidence.ts";
 import { WebAddress } from "./workspace.ts";
 
 /**
@@ -286,19 +284,10 @@ export const MergeRequestTemplate = z.object({ path: z.string(), text: z.string(
 export type MergeRequestTemplate = z.infer<typeof MergeRequestTemplate>;
 
 /**
- * What Trackwall knows of a task beyond the task itself and its verification, for the draft of its merge request
- * (ADR-238): the repo's template for the repo host at the task's base commit, the last reproduction check (ADR-227), the
- * last rules check (ADR-234) and whether the changes moved on after it, and what the task's conversation used on which
- * models (ADR-228). Each is `null` when there is none.
+ * What the draft of a task's merge request is made of besides the task itself (ADR-238): the task's evidence (ADR-276)
+ * and the repo's template for the repo host at the task's base commit, `null` when there is none.
  */
-export const MergeRequestEvidence = z.object({
-  template: MergeRequestTemplate.nullable(),
-  reproduction: ReproductionCheck.nullable(),
-  rules: FreshAutoReview.nullable(),
-  usage: CopilotUsage.nullable(),
-  /** The conversation's own model calls per model, the most first; empty when it made none or its log is unknown. */
-  models: z.array(ModelCalls),
-});
+export const MergeRequestEvidence = TaskEvidence.extend({ template: MergeRequestTemplate.nullable() });
 export type MergeRequestEvidence = z.infer<typeof MergeRequestEvidence>;
 
 const endpoint = apiEndpoints("merge-requests");

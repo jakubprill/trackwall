@@ -34,6 +34,13 @@ export function usageLabel(usage: CopilotUsage): string {
   return `${tokenCount(usage.inputTokens + usage.outputTokens)} tokens`;
 }
 
+/** Credits or premium requests with the tokens beside them, "3.4 AI credits, 1.2M tokens"; the tokens alone without either. */
+export function usageWithTokens(usage: CopilotUsage): string {
+  const tokens = `${tokenCount(usage.inputTokens + usage.outputTokens)} tokens`;
+  const label = usageLabel(usage);
+  return label === tokens ? tokens : `${label}, ${tokens}`;
+}
+
 /**
  * The shortest label, for the name line of a row in the Sessions list (ADR-261): "3.4k cr", "≥3.2 cr", "4 req", "1.2k tok".
  * The full label is in the tooltip (`usageDetails`).

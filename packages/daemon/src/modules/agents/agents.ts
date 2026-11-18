@@ -1184,12 +1184,12 @@ export class Agents {
     return this.#autoReviews.get(id, kind);
   }
 
-  /** The task's last rules check (ADR-234), and whether its changes moved on after it, for its merge request (ADR-238). */
+  /** The task's last rules check (ADR-234), and whether its changes moved on after it, for its evidence (ADR-276). */
   rulesCheck(id: string): Promise<FreshAutoReview | null> {
     return this.#autoReviews.withFreshness(id, "rules");
   }
 
-  /** What the task's conversation has used so far, and on which models (ADR-228), for its merge request (ADR-238). */
+  /** What the task's conversation has used so far, and on which models (ADR-228), for its evidence (ADR-276). */
   taskConversationUse(id: string): Promise<ConversationUse> {
     return this.#tasks.conversationUse(id);
   }
