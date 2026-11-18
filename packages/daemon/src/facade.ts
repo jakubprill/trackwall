@@ -17,6 +17,7 @@ import {
   type StateDirSource,
   type Task,
   type TaskChangedEndpoints,
+  type TaskEvidence,
   type TaskOutcome,
   type TerminalPlace,
 } from "@trackwall/protocol";
@@ -200,6 +201,13 @@ export interface Facade {
    * from `merge-requests`, for the Sessions list and the notification of a failed pipeline. A read from memory.
    */
   taskOutcomes: () => TaskOutcome[];
+  /**
+   * What Trackwall knows about a task's change (ADR-276), for the evidence card above its diff and the draft of its
+   * merge request: the plan and the reproduction test from `agents`, the last reproduction check of that test with its
+   * freshness from `reproduction`, the last verification from `verification`, the rules check and what the
+   * conversation used from `agents`.
+   */
+  taskEvidence: (task: string) => Promise<TaskEvidence>;
   /**
    * The diagnostics for a bug report (§4.14): a run of `doctor` and the `error-journal`, anonymized, with the version and
    * the system this daemon runs on, for "Copy diagnostics".
@@ -472,7 +480,7 @@ export function createFacade(o: FacadeOptions): Facade {
     repoHosts: () => workspace.repoHosts(),
     openUrl: o.openUrl,
     jobLogExcerpt: async (raw, cut) => logs.jobLogExcerpt(raw, await o.userEnv(), cut),
-    reproductionCheck: (task) => reproductionChecks.get(task),
+    taskEvidence: (task) => taskEvidence(task),
     onPipelineFailed: (task, mergeRequest) => agents.pipelineFailed(task.id, mergeRequest),
     log: o.log,
   });
@@ -591,6 +599,24 @@ export function createFacade(o: FacadeOptions): Facade {
     openEditor: (path) => o.openUrl(vscodeUrl(path)),
     openFolder: o.openFolder,
   });
+  async function taskEvidence(id: string): Promise<TaskEvidence> {
+    const task = agents.task(id);
+    const test = task.summary?.reproTest ?? null;
+    const [check, rules, use] = await Promise.all([
+      test && reproductionChecks.withFreshness(id, test),
+      agents.rulesCheck(id),
+      agents.taskConversationUse(id),
+    ]);
+    return {
+      task: id,
+      planApproved: task.plan === "approved",
+      reproduction: test && check && { test, ...check },
+      verification: verifications.get(id),
+      rules,
+      ...use,
+    };
+  }
+
   /** The outcome of every task with a verification or a merge request (ADR-154), for the UI and the supervisor (ADR-156). */
   function taskOutcomes(): TaskOutcome[] {
     const followed = mergeRequests.followed();
@@ -697,6 +723,7 @@ export function createFacade(o: FacadeOptions): Facade {
       return { repo, task, profile, ...read, envProblem: run.problem === null ? null : mask(run.problem) };
     },
     taskOutcomes,
+    taskEvidence,
     diagnostics,
     keepForRestart: () => {
       agents.keepRunningSessionsForResume();

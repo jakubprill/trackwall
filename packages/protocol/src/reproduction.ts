@@ -65,6 +65,11 @@ export const ReproductionCheck = z.object({
 });
 export type ReproductionCheck = z.infer<typeof ReproductionCheck>;
 
+/** Whether two reports name the same reproduction test: a later report may name another one, which a check of the first says nothing about. */
+export function sameReproTest(a: ReproTest, b: ReproTest): boolean {
+  return a.file === b.file && a.name === b.name;
+}
+
 const TaskRequest = z.object({ task: TaskId }).strict();
 
 const endpoint = apiEndpoints("reproduction");
