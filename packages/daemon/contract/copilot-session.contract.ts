@@ -920,11 +920,15 @@ describe("subagents and background agents with the real Copilot CLI (ADR-254)", 
     await waitFor(
       agents,
       id,
-      () => hooksOf(id).filter((h) => h === "agentStop main").length === 2,
+      () => hooksOf(id).filter((h) => h === "agentStop main").length === 2 && hooksOf(id).includes("notification main"),
       "the main agent's next turn",
       SESSION_MS,
     );
-    expect(hooksOf(id).slice(5)).toEqual(["agentStop subagent", "userPromptSubmitted main", "notification main", "agentStop main"]);
+    // Copilot CLI sends the turn's `agent_idle` notification and its agentStop side by side, in either order (on macOS
+    // the notification came last); a notification of that kind changes no state, so the order does not matter.
+    const next = hooksOf(id).slice(5);
+    expect(next.slice(0, 2)).toEqual(["agentStop subagent", "userPromptSubmitted main"]);
+    expect(next.slice(2).sort()).toEqual(["agentStop main", "notification main"]);
     expect(hookRecords(daemon.home, id).find((r) => r.event === "notification")?.payload.notification_type).toBe("agent_idle");
     const done = await waitFor(agents, id, (s) => s.state?.state === "Input", "the end of the main agent's work", SESSION_MS);
     expect(done.state).toMatchObject({ source: "hook", reason: "hook agentStop" });
