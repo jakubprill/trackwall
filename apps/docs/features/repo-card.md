@@ -1,6 +1,7 @@
 ---
 title: Repo card and tags
 description: See what a repo is made of, read from its build and configuration files, without building it.
+status: stable
 ---
 
 # Repo card and tags

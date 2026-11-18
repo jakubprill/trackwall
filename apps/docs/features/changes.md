@@ -1,6 +1,7 @@
 ---
 title: Changes across several repos
 description: Start one piece of work in several repos at once, made by one agent in one conversation and reviewed repo by repo.
+status: stable
 ---
 
 # Changes across several repos

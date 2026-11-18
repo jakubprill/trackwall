@@ -1,6 +1,7 @@
 ---
 title: Batch command
 description: Sync, install, set up and build many repos with one command, and see the result for each one.
+status: stable
 ---
 
 # Batch command

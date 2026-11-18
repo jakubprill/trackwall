@@ -1,11 +1,16 @@
 ---
 title: Container work backup
 description: Keep the commits, stashes and changes that exist only in your dev container in one small file on your computer.
+status: preview
 ---
 
 # Container work backup
 
 Keep the commits, stashes and changes that exist only in your dev container in one small file on your computer.
+
+::: warning Preview
+Trackwall does not restore a backup by itself yet, so the steps to bring your work back, and what the file holds for them, can still change.
+:::
 
 ## What you get
 

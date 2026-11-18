@@ -1,6 +1,7 @@
 ---
 title: Doctor
 description: The doctor in Settings checks what Trackwall needs on your computer and says what to do about anything missing.
+status: stable
 ---
 
 # Doctor

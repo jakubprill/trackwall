@@ -1,6 +1,7 @@
 ---
 title: Plan
 description: Write ideas down before they slip away, split business projects into tasks and start an agent task on any of them in two clicks.
+status: stable
 ---
 
 # Plan

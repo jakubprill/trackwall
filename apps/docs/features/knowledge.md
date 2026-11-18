@@ -1,6 +1,7 @@
 ---
 title: Workspace knowledge
 description: Keep short facts about your repos that every agent reads at the start, so no session has to find them out again.
+status: stable
 ---
 
 # Workspace knowledge
