@@ -57,6 +57,7 @@ export * from "./session-label.ts";
 export * from "./sockets.ts";
 export * from "./sync.ts";
 export * from "./task-attempts.ts";
+export * from "./task-evidence.ts";
 export * from "./task-history.ts";
 export * from "./task-model.ts";
 export * from "./task-outcomes.ts";

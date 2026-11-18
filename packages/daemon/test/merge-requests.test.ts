@@ -143,11 +143,14 @@ describe.skipIf(process.versions.bun === undefined)("a merge request from a task
     const evidence = await daemon.post(mergeRequestsApi.evidence, { task: task.id });
 
     expect(evidence).toEqual({
+      task: task.id,
       template: {
         path: ".gitlab/merge_request_templates/Default.md",
         text: "## What does this merge request do?\n\n## How to test\n",
       },
+      planApproved: false,
       reproduction: null,
+      verification: null,
       rules: null,
       usage: null,
       models: [],

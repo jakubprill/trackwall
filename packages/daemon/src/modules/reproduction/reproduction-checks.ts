@@ -3,6 +3,7 @@ import {
   type ReproductionRun,
   type ReproTest,
   type RunState,
+  sameReproTest,
   type TestCase,
   VERIFY_MISE_TASK,
 } from "@trackwall/protocol";
@@ -20,14 +21,19 @@ import { needsChangeRun, reproductionVerdict } from "./reproduction-verdict.ts";
  * names and the task's test side; runs the mise task `test` there (filtered to the test's class when the mise task takes
  * a filter); copies the rest of the task's changes in and runs it again; and reads the test's cases from the JUnit reports
  * each run wrote. The task's own worktree is only read, so the agent and its runs are never disturbed; a worktree that
- * changes during the check makes it inconclusive. The copy is removed before the check ends. It composes `agents`, `vcs`,
- * `workspace`, `mise` and `test-results` and keeps the last check of each task, also across a daemon restart, in
+ * changes during the check makes it inconclusive, and one that changes after it makes its verdict outdated (ADR-276).
+ * The copy is removed before the check ends. It composes `agents`, `vcs`, `workspace`, `mise` and `test-results` and keeps the last check of each task, also across a daemon restart, in
  * `reproduction-checks.json`.
  */
 
 export const REPRODUCTION_CHECKS_FILE = "reproduction-checks.json";
 
-const StoredChecks = z.object({ checks: z.array(ReproductionCheck) });
+/**
+ * A check with the fingerprint of the worktree it started on (ADR-276), `null` before its copy was made or when it
+ * could not be read; a file from before fingerprints has none, read as never outdated.
+ */
+const StoredCheck = ReproductionCheck.extend({ worktreeFingerprint: z.string().nullable().default(null) });
+const StoredChecks = z.object({ checks: z.array(StoredCheck) });
 /** `reproduction-checks.json` (ADR-223). */
 export const REPRODUCTION_CHECKS_FORMAT = stateFormat(StoredChecks);
 type StoredChecks = z.infer<typeof StoredChecks>;
@@ -90,6 +96,8 @@ export interface ReproductionChecksDeps {
 interface Entry {
   /** Replaced, never changed in place. */
   check: ReproductionCheck;
+  /** The fingerprint of the task's worktree the check copied from; `null` before it was read. */
+  fingerprint: string | null;
   abort: AbortController;
   /** Settles, never rejects, once the check has ended and its copy was removed (or its removal failed and was logged). */
   done: Promise<void>;
@@ -125,13 +133,14 @@ export class ReproductionChecks {
    * it left goes now.
    */
   #restore(): void {
-    for (const check of this.#file.read()?.checks ?? []) {
+    for (const { worktreeFingerprint, ...check } of this.#file.read()?.checks ?? []) {
       if (!this.#deps.tasks.findTask(check.task)) continue;
       const left = check.state === "running";
       // A check a crash left running, or one a stop cancelled before its copy was removed.
       const copyLeft = left || check.message === STOPPED_WITH_DAEMON;
       const done = copyLeft ? this.#removeCopy(check.task).catch(() => {}) : Promise.resolve();
-      this.#byTask.set(check.task, { check: left ? stopped(check, null) : check, abort: new AbortController(), done });
+      const kept = left ? stopped(check, null) : check;
+      this.#byTask.set(check.task, { check: kept, fingerprint: worktreeFingerprint, abort: new AbortController(), done });
     }
   }
 
@@ -141,7 +150,12 @@ export class ReproductionChecks {
    */
   keepForRestart(): void {
     const now = new Date().toISOString();
-    this.#file.follow({ checks: [...this.#byTask.values()].map(({ check }) => (check.state === "running" ? stopped(check, now) : check)) });
+    this.#file.follow({
+      checks: [...this.#byTask.values()].map(({ check, fingerprint }) => ({
+        ...(check.state === "running" ? stopped(check, now) : check),
+        worktreeFingerprint: fingerprint,
+      })),
+    });
     this.#file.stopFollowing();
     for (const entry of this.#byTask.values()) entry.abort.abort();
   }
@@ -150,6 +164,27 @@ export class ReproductionChecks {
   get(task: string): ReproductionCheck | null {
     if (!this.#deps.tasks.findTask(task)) return null;
     return this.#byTask.get(task)?.check ?? null;
+  }
+
+  /**
+   * The task's last check of `test` and whether its verdict is outdated (ADR-276): a `reproduced` or `not_reproduced`
+   * whose worktree now holds other files than the ones it copied. A check of a test the agent named before says nothing
+   * about this one, so it is `null` then, as without a check. A worktree that cannot be read leaves the verdict as it is
+   * (logged), as with a verification (ADR-209).
+   */
+  async withFreshness(task: string, test: ReproTest): Promise<{ check: ReproductionCheck | null; outdated: boolean }> {
+    const entry = this.#byTask.get(task);
+    const check = this.get(task);
+    if (!entry || !check || !sameReproTest(check.test, test)) return { check: null, outdated: false };
+    const verdict = check.state === "reproduced" || check.state === "not_reproduced";
+    if (!verdict || entry.fingerprint === null) return { check, outdated: false };
+    try {
+      const { worktree, base } = this.#deps.tasks.reproSubject(task);
+      return { check, outdated: (await this.#deps.vcs.worktreeFingerprint(worktree, base)) !== entry.fingerprint };
+    } catch (err) {
+      this.#deps.log(`reproduction check of task ${task}: fingerprint of its worktree: ${messageOf(err)}`);
+      return { check, outdated: false };
+    }
   }
 
   /**
@@ -164,6 +199,7 @@ export class ReproductionChecks {
     if (subject.reproTest === null) throw new DomainError("bad_request", "the task's agent named no reproduction test to check");
     const entry: Entry = {
       check: startedCheck(task, subject.repo, subject.reproTest),
+      fingerprint: null,
       abort: new AbortController(),
       done: Promise.resolve(),
     };
@@ -244,6 +280,7 @@ export class ReproductionChecks {
   async #check(entry: Entry, running: Running): Promise<Outcome> {
     const { subject, signal } = running;
     const fingerprint = await this.#deps.vcs.worktreeFingerprint(subject.worktree, subject.base);
+    entry.fingerprint = fingerprint;
     const changed = await this.#deps.vcs.changedPaths(subject.worktree, subject.base);
     if (changed.truncated) return { state: "inconclusive", message: "the task changes too many files for Trackwall to copy" };
     const { tests, rest } = testSide(changed.paths, entry.check.test.file, subject.miseConfigPaths);
@@ -302,7 +339,9 @@ export class ReproductionChecks {
   }
 
   #follow(): void {
-    this.#file.follow({ checks: [...this.#byTask.values()].map(({ check }) => check) });
+    this.#file.follow({
+      checks: [...this.#byTask.values()].map(({ check, fingerprint }) => ({ ...check, worktreeFingerprint: fingerprint })),
+    });
   }
 }
 
