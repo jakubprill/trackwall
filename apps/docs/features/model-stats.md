@@ -1,11 +1,16 @@
 ---
 title: Model statistics
 description: See which model passes verification most often on your own tasks, and what one task and one verified task cost on it.
+status: preview
 ---
 
 # Model statistics
 
 See which model passes verification most often on your own tasks, and what one task and one verified task cost on it.
+
+::: warning Preview
+Model statistics are new: what counts as a verified task and which figures the table shows can change in a 1.x version.
+:::
 
 ![The Models section in Settings, with four models, how often their tasks passed verification and what one cost, and a sentence naming the model that passes most often and the cheapest one per verified task.](/screenshots/model-stats.png)
 

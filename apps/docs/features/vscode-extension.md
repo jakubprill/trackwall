@@ -1,6 +1,7 @@
 ---
 title: VS Code extension
 description: See in VS Code which Trackwall session waits for you while you read other code, and open it in Trackwall with one click.
+status: stable
 ---
 
 # VS Code extension

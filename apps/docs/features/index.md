@@ -11,7 +11,7 @@ import { data as groups } from "./features.data.ts";
 
 # All features
 
-Everything Trackwall does today, grouped by what it helps with. Each name opens the feature's page.
+Everything Trackwall does today, grouped by what it helps with. Each name opens the feature's page. A feature marked "preview" can still change in a 1.x version; the rest keep what they do.
 
 <template v-for="group in groups" :key="group.id">
 <h2 :id="group.id">{{ group.text }}</h2>
@@ -19,7 +19,7 @@ Everything Trackwall does today, grouped by what it helps with. Each name opens 
 <table class="feature-list">
   <tbody>
     <tr v-for="feature in group.items" :key="feature.link">
-      <td><a :href="withBase(feature.link)">{{ feature.text }}</a></td>
+      <td><a :href="withBase(feature.link)">{{ feature.text }}</a> <Badge v-if="feature.preview" type="warning" text="preview" /></td>
       <td>{{ feature.description }}</td>
     </tr>
   </tbody>

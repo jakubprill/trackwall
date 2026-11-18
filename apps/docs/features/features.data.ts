@@ -6,7 +6,7 @@ export interface FeatureGroupSummary {
   text: FeatureGroup["text"];
   /** The anchor of the group's heading. */
   id: string;
-  items: (FeatureGroup["items"][number] & { description: string })[];
+  items: (FeatureGroup["items"][number] & { description: string; preview: boolean })[];
 }
 
 declare const data: FeatureGroupSummary[];
@@ -16,13 +16,14 @@ export { data };
 export default createContentLoader("features/*.md", {
   transform(pages): FeatureGroupSummary[] {
     const descriptions = new Map(pages.map((page) => [page.url, page.frontmatter.description]));
+    const previews = new Set(pages.filter((page) => page.frontmatter.status === "preview").map((page) => page.url));
     return FEATURE_GROUPS.map((group) => ({
       text: group.text,
       id: group.text.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
       items: group.items.map((item) => {
         const description = descriptions.get(item.link);
         if (typeof description !== "string") throw new Error(`${item.link}.md has no description in its frontmatter`);
-        return { ...item, description };
+        return { ...item, description, preview: previews.has(item.link) };
       }),
     }));
   },

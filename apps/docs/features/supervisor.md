@@ -1,6 +1,7 @@
 ---
 title: Supervisor
 description: Talk to one agent above all your repos, pinned on the right of every view, that plans the work and hands it to other agents.
+status: stable
 ---
 
 # Supervisor

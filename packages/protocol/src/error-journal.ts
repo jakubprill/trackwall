@@ -61,6 +61,13 @@ const endpoint = apiEndpoints("error-journal");
 
 const Empty = z.object({}).strict();
 
+/**
+ * What "Copy diagnostics" puts on the clipboard for a bug report: Trackwall's version and the system, every doctor check and
+ * the error journal, as Markdown, with the user's paths, names, hosts and secrets replaced like the journal's own errors.
+ */
+export const Diagnostics = z.object({ text: z.string() });
+export type Diagnostics = z.infer<typeof Diagnostics>;
+
 export const errorJournalApi = {
   /** The journal with the shell's errors read in, newest first. */
   errors: endpoint("errors", Empty, ErrorJournal),
@@ -68,4 +75,6 @@ export const errorJournalApi = {
   recordUiError: endpoint("record-ui-error", UiErrorReport, Done),
   /** Empties the journal, the shell's errors included. */
   clear: endpoint("clear", Empty, Done),
+  /** The diagnostics for a bug report: runs the doctor and reads the journal (`Diagnostics`). */
+  diagnostics: endpoint("diagnostics", Empty, Diagnostics),
 };

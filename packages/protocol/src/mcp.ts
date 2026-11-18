@@ -456,6 +456,14 @@ const GET_ERRORS = "get_errors";
 const GET_TEST_RESULTS = "get_test_results";
 const VERIFY_TASK = "verify_task";
 
+/**
+ * The MCP tools on their way out (§5.3, ADR-278): an agent's prompts, skills and instructions name tools and their
+ * arguments, so a tool is removed only in a release after one that marked it deprecated, and an argument is never removed. A
+ * deprecated tool stays here with `removedIn: null` and its description starts with `Deprecated since <since>`; once
+ * removed, its entry stays with the version that removed it, so the contract test knows the removal was announced.
+ */
+export const MCP_TOOL_DEPRECATIONS: Readonly<Record<string, { since: string; removedIn: string | null; instead: string | null }>> = {};
+
 export const mcpTools = {
   listRepos: {
     name: LIST_REPOS,
