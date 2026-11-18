@@ -189,6 +189,10 @@ _Avoid_: pull, update (without qualification)
 The user's fetch of one repo from its header: the sync of its default branch, then a fast-forward of the checked-out branch to the branch it tracks, under the same rules (ADR-269). It never merges, rebases, pushes or overwrites local changes; a skip has a reason (`PullSkipReason`). Only from the UI.
 _Avoid_: sync (that moves the default branch of every repo), update, `git pull` (which can merge or rebase)
 
+**Put aside** (`PutAside`, `PUT_ASIDE_MESSAGE`, `pull` with `putAside`, "Put aside and pull…", "Put aside by Trackwall" in the Changes tab):
+Changes in tracked files that Trackwall moved into a git stash so that a pull could go on, on the user's confirmation with the list of files (ADR-271). Brought back with Restore, or deleted for good with Delete; brought back at once when the pull did not move anything.
+_Avoid_: force, discard, reset (nothing is deleted), stash (for the user's own stashes, which Trackwall does not touch)
+
 **Batch command** (`BatchRun`, step `BatchStep`, repo result `BatchRepo`):
 Selected steps on selected repos with one button: sync (`sync`), tools from the repo's mise configuration (`tools`, `mise install`), dependencies (`setup`, the mise task `setup`) and build (`build`, the mise task `build`), in a repo always in this order, several repos at once, with the result of every step in every repo (ADR-27). A step error ends the repo, the others go on. Kept only in daemon memory.
 _Avoid_: bulk operation, workflow

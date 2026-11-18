@@ -1,19 +1,52 @@
-import { BATCH_STEPS, type BatchRepo, type BatchRun, type BatchStep, countLabel, type Repo } from "@trackwall/protocol";
+import { BATCH_STEPS, type BatchStep, countLabel, type Repo, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
 import { ListChecks, Play, Square } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Loading } from "@/components/Loading";
-import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
-import { batchProgress, batchRunLabel, STEP_HINT, STEP_LABEL, stepLabel, stepMessage } from "@/lib/batch-state";
+import { batchProgress, STEP_HINT, STEP_LABEL } from "@/lib/batch-state";
+import type { Connection } from "@/lib/connection";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { toggle } from "@/lib/set-toggle";
+import { workInRepoFolder } from "@/lib/upstream-pull";
 import type { BatchRunHandle } from "@/lib/use-batch-run";
+import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
+import { BatchResults } from "./BatchResults.tsx";
+
+/** The batch command with what works in each repo's folder, read from the sessions and running mise tasks (ADR-271). */
+export function BatchPanel({
+  conn,
+  batch,
+  repos,
+  sessions,
+  runningLive,
+}: {
+  conn: Connection;
+  batch: BatchRunHandle;
+  repos: readonly Repo[];
+  sessions: SessionList | undefined;
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
+}) {
+  const running = useRunningMiseTasks(conn, runningLive).data ?? [];
+  return <BatchView conn={conn} batch={batch} repos={repos} workInFolder={(repo) => workInRepoFolder(repo, sessions, running)} />;
+}
 
 /**
  * The batch command (ADR-27): choosing steps and repos, start, cancel and the result of every step in every repo. `repos`
  * is the repo list after the tag filter (ADR-25), so the filter picks a group of repos, and it can be narrowed by hand here.
  */
-export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: readonly Repo[] }) {
+export function BatchView({
+  conn,
+  batch,
+  repos,
+  workInFolder,
+}: {
+  conn: Connection;
+  batch: BatchRunHandle;
+  repos: readonly Repo[];
+  /** What works in a repo's folder itself (`workInRepoFolder`), which putting changes aside leaves out (ADR-271). */
+  workInFolder: (repo: string) => readonly string[];
+}) {
   // Nothing is ticked at the start: the user picks what runs, so a build of every repo never starts on a click by habit.
   const [steps, setSteps] = useState<ReadonlySet<BatchStep>>(() => new Set());
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
@@ -71,7 +104,7 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
       </div>
       {batch.error && <p className="text-destructive text-sm whitespace-pre-wrap break-words">{batch.error}</p>}
       {run === undefined && !batch.error && <Loading />}
-      {run && <Results run={run} />}
+      {run && <BatchResults conn={conn} run={run} workInFolder={workInFolder} />}
     </div>
   );
 }
@@ -85,58 +118,6 @@ export function BatchBar({ batch, onShow }: { batch: BatchRunHandle; onShow: () 
         <ListChecks /> {progress ? `Batch command ${progress.done}/${progress.total}` : "Batch command"}
       </Button>
     </div>
-  );
-}
-
-function Results({ run }: { run: BatchRun }) {
-  const progress = batchProgress(run);
-  return (
-    <Surface
-      label={batchRunLabel(run, new Date())}
-      meta={`${progress.done}/${progress.total}`}
-      note={progress.failed > 0 ? `Repos with errors: ${progress.failed}` : undefined}
-    >
-      <ul className="divide-y">
-        {run.repos.map((repo) => (
-          <ResultRow key={repo.path} repo={repo} />
-        ))}
-      </ul>
-    </Surface>
-  );
-}
-
-function ResultRow({ repo }: { repo: BatchRepo }) {
-  return (
-    <li className="flex flex-col gap-2 px-3 py-2">
-      <span className="truncate font-mono text-sm" title={repo.path}>
-        {repo.repo}
-      </span>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-        {repo.steps.map((step) => {
-          const { tone, label } = stepLabel(step);
-          return (
-            <span key={step.step} className="flex items-center gap-2" title={stepMessage(step)}>
-              <span className="text-muted-foreground">{STEP_LABEL[step.step]}</span>
-              {tone ? <StatusLabel tone={tone} label={label} /> : <span>{label}</span>}
-            </span>
-          );
-        })}
-      </div>
-      {repo.steps.map((step) =>
-        step.state === "failed" ? (
-          <div key={step.step} className="flex flex-col gap-1">
-            <span className="text-destructive text-xs whitespace-pre-wrap break-words">
-              {STEP_LABEL[step.step]}: {step.message}
-            </span>
-            {step.lastLines.length > 0 && (
-              <pre className="text-muted-foreground overflow-x-auto font-mono text-xs whitespace-pre-wrap break-all">
-                {step.lastLines.join("\n")}
-              </pre>
-            )}
-          </div>
-        ) : null,
-      )}
-    </li>
   );
 }
 

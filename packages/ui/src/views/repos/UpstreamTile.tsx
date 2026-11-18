@@ -5,12 +5,16 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { folderWorkWarning, pullLabel, pullResultLine, upstreamOffer } from "@/lib/upstream-pull";
+import { folderWorkWarning, pullLabel, pullResultLine, type UpstreamOffer, upstreamOffer } from "@/lib/upstream-pull";
+import { cn } from "@/lib/utils";
+import { PutAsideConfirm } from "./PutAsideConfirm.tsx";
 
 /** The pull's own state: running, its result or error, or the question asked first when something works in the folder. */
 type PullState =
   | { kind: "idle" }
   | { kind: "asking" }
+  /** The user chose to put the changes aside; the tile spans the row to list the files. */
+  | { kind: "putting-aside" }
   | { kind: "running" }
   | { kind: "done"; result: PullResult }
   | { kind: "failed"; message: string };
@@ -48,7 +52,7 @@ export function UpstreamTile({
   const start = () => (workInFolder.length > 0 ? setPull({ kind: "asking" }) : run());
 
   return (
-    <div className="surface flex min-w-0 flex-col gap-1 px-3 py-2">
+    <div className={cn("surface flex min-w-0 flex-col gap-1 px-3 py-2", pull.kind === "putting-aside" && "col-span-full")}>
       <dt className="hud-label">Upstream</dt>
       <dd className="flex min-w-0 flex-col gap-1 text-sm">
         {status.upstream ? (
@@ -78,18 +82,16 @@ export function UpstreamTile({
             {pull.kind === "running" ? "Pulling…" : pullLabel(offer.behind)}
           </Button>
         )}
-        {offer.kind === "blocked" && pull.kind !== "running" && (
-          <span className="flex flex-col items-start gap-1 text-xs">
-            <span className="text-warning">{offer.message}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-primary h-6 px-1"
-              onClick={offer.way === "changes" ? onShowChanges : onOpenShell}
-            >
-              {offer.way === "changes" ? "Show changes" : "Open Shell"}
-            </Button>
-          </span>
+        {offer.kind === "blocked" && pull.kind !== "running" && pull.kind !== "putting-aside" && (
+          <BlockedOffer
+            offer={offer}
+            onPutAside={() => setPull({ kind: "putting-aside" })}
+            onShowChanges={onShowChanges}
+            onOpenShell={onOpenShell}
+          />
+        )}
+        {pull.kind === "putting-aside" && (
+          <PutAsideConfirm conn={conn} targets={[{ repo, workInFolder }]} verb="pull" onClose={() => setPull({ kind: "idle" })} />
         )}
         {pull.kind === "asking" && (
           <span className="flex flex-col gap-1 text-xs">
@@ -115,5 +117,38 @@ export function UpstreamTile({
         )}
       </dd>
     </div>
+  );
+}
+
+/** Why the tile does not pull, with the way out: put the changes aside or look at them, or the Shell for a diverged branch. */
+function BlockedOffer({
+  offer,
+  onPutAside,
+  onShowChanges,
+  onOpenShell,
+}: {
+  offer: Extract<UpstreamOffer, { kind: "blocked" }>;
+  onPutAside: () => void;
+  onShowChanges: () => void;
+  onOpenShell: () => void;
+}) {
+  return (
+    <span className="flex flex-col items-start gap-1 text-xs">
+      <span className="text-warning">{offer.message}</span>
+      {offer.way === "changes" ? (
+        <span className="flex flex-wrap gap-1">
+          <Button variant="outline" size="sm" className="h-7" onClick={onPutAside}>
+            Put aside and pull…
+          </Button>
+          <Button variant="ghost" size="sm" className="text-primary h-7 px-1" onClick={onShowChanges}>
+            Show changes
+          </Button>
+        </span>
+      ) : (
+        <Button variant="ghost" size="sm" className="text-primary h-6 px-1" onClick={onOpenShell}>
+          Open Shell
+        </Button>
+      )}
+    </span>
   );
 }

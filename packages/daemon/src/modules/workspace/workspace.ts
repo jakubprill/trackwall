@@ -16,6 +16,8 @@ import {
   MAX_ALWAYS_ALLOWED_TOOLS,
   PATCH_MAX_BYTES,
   type PullResult,
+  type PutAside,
+  type PutAsideFile,
   type RemoteRepoList,
   type RemoteRepoMore,
   type RemoteRepoSearch,
@@ -107,7 +109,11 @@ interface WorkspaceVcs extends CodeSearchVcs, CommitSearchVcs {
   status(dir: string, how: StatusRead): Promise<RepoStatusOk>;
   remote(dir: string): Promise<string | null>;
   sync(dir: string): Promise<SyncResult>;
-  pull(dir: string): Promise<PullResult>;
+  pull(dir: string, options: { putAside: boolean }): Promise<PullResult>;
+  putAsideFiles(dir: string): Promise<PutAsideFile[]>;
+  putAsides(dir: string): Promise<PutAside[]>;
+  restorePutAside(dir: string, id: string): Promise<PutAside[]>;
+  deletePutAside(dir: string, id: string): Promise<PutAside[]>;
   log(dir: string, limit: number): Promise<Commit[]>;
   tree(dir: string, path: string): Promise<TreeEntry[] | undefined>;
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
@@ -415,10 +421,34 @@ export class Workspace {
   }
 
   /** A pull of one repo from its header (ADR-268); a repo that is being cloned is an error, as for `syncRepo`. */
-  async pullRepo(id: string): Promise<PullResult> {
+  async pullRepo(id: string, options: { putAside: boolean }): Promise<PullResult> {
     const entry = await this.entry(id);
     if (this.clones.runningInto(entry.path)) throw new DomainError("bad_request", `${id}: this repo is being cloned`);
-    return this.deps.vcs.pull(entry.path);
+    return this.deps.vcs.pull(entry.path, options);
+  }
+
+  /** The changed tracked files a pull with `putAside` would move into the stash (ADR-271). */
+  async putAsideFiles(id: string): Promise<PutAsideFile[]> {
+    const entry = await this.entry(id);
+    return this.inRepo(entry, () => this.deps.vcs.putAsideFiles(entry.path));
+  }
+
+  async putAsides(id: string): Promise<PutAside[]> {
+    const entry = await this.entry(id);
+    return this.inRepo(entry, () => this.deps.vcs.putAsides(entry.path));
+  }
+
+  /** A git refusal (the same files changed meanwhile) is a `bad_request` with git's words: nothing changed. */
+  async restorePutAside(id: string, putAside: string): Promise<PutAside[]> {
+    const entry = await this.entry(id);
+    return this.deps.vcs.restorePutAside(entry.path, putAside).catch((err: unknown) => {
+      throw new DomainError("bad_request", `the changes were not brought back: ${messageOf(err)}`);
+    });
+  }
+
+  async deletePutAside(id: string, putAside: string): Promise<PutAside[]> {
+    const entry = await this.entry(id);
+    return this.deps.vcs.deletePutAside(entry.path, putAside);
   }
 
   /** The last sync of the current projects folder; one from before a settings change says nothing about it. */

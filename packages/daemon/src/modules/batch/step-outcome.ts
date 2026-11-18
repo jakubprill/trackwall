@@ -10,7 +10,7 @@ export function syncOutcome(result: SyncResult): BatchStepState {
     case "up-to-date":
       return { state: "done", detail: `${result.branch} up to date` };
     case "skipped":
-      return { state: "skipped", message: result.message };
+      return { state: "skipped", message: result.message, syncReason: result.reason };
   }
 }
 
