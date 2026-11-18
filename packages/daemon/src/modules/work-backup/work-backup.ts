@@ -1,11 +1,18 @@
 import type { FileHandle } from "node:fs/promises";
 import { lstat, mkdir, readdir, rename, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { TRACKWALL_DIR, type TrackwallFolder, type UnpushedWork, WorkBackupInfo, type WorkBackupState } from "@trackwall/protocol";
+import {
+  MAX_WORK_BACKUP_BYTES,
+  TRACKWALL_DIR,
+  type TrackwallFolder,
+  type UnpushedWork,
+  WorkBackupInfo,
+  type WorkBackupState,
+} from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { openRegularFile } from "../../infra/regular-file.ts";
 import { readStateFile, stateFormat, writeStateFile } from "../../infra/state-file.ts";
-import { type ArchiveEntry, writeArchive } from "./archive.ts";
+import { type ArchiveEntry, entryFile, writeArchive } from "./archive.ts";
 import { BACKUP_FORMAT, type BackupManifest, type BackupRepo, type BackupStateFile } from "./manifest.ts";
 
 /**
@@ -26,8 +33,6 @@ export const WORK_BACKUP_INFO_FILE = "work-backup.json";
 const MAX_STATE_FILE_BYTES = 20 * 1024 * 1024;
 /** The folders of `.trackwall` a new container lacks and Trackwall cannot make again. */
 const TRACKWALL_FOLDERS: readonly TrackwallFolder[] = ["board", "knowledge", "routines", "task-templates"];
-/** The limit of a file download (ADR-188): the page holds the whole file in memory before it saves it. */
-const MAX_DOWNLOAD_BYTES = 1024 ** 3;
 
 /** What `vcs` bundles of one repo (`Vcs.bundleWork`); `null` when every ref is already on a remote. */
 type BundleWork = (dir: string, out: string) => Promise<Omit<BackupRepo, "repo" | "path" | "entry"> | null>;
@@ -82,7 +87,7 @@ export class WorkBackup {
   /** The last backup, opened for download. */
   async download(): Promise<{ name: string; size: number; handle: FileHandle }> {
     const last = await this.#last();
-    const opened = last && (await openRegularFile(join(this.#dir(), BACKUP_FILE), MAX_DOWNLOAD_BYTES));
+    const opened = last && (await openRegularFile(join(this.#dir(), BACKUP_FILE), MAX_WORK_BACKUP_BYTES));
     if (!last || !opened) throw new DomainError("not_found", "there is no work backup yet: make one first");
     return { name: last.fileName, ...opened };
   }
@@ -123,7 +128,7 @@ export class WorkBackup {
       const archive = join(work, BACKUP_FILE);
       const entries: ArchiveEntry[] = [
         { name: "manifest.json", data: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`) },
-        ...repos.map((r) => ({ name: r.entry, file: bundleFile(work, r.entry) })),
+        ...repos.map((r) => ({ name: r.entry, file: entryFile(work, r.entry) })),
         ...state.map(({ entry, file }) => ({ name: entry.entry, file })),
       ];
       await writeArchive(archive, entries, createdAt);
@@ -157,7 +162,7 @@ export class WorkBackup {
       const entry = `repos/${repos.length}.bundle`;
       try {
         const path = await this.#deps.repoPath(repo);
-        const bundle = await this.#deps.bundleWork(path, bundleFile(work, entry));
+        const bundle = await this.#deps.bundleWork(path, entryFile(work, entry));
         if (bundle !== null) repos.push({ repo, path: relative(projectsDir, path), entry, ...bundle });
       } catch (err) {
         skipped.push({ repo, message: messageOf(err) });
@@ -186,11 +191,6 @@ export class WorkBackup {
 function backupFileName(at: Date): string {
   const iso = at.toISOString();
   return `trackwall-backup-${iso.slice(0, 10)}-${iso.slice(11, 13)}${iso.slice(14, 16)}.tar.gz`;
-}
-
-/** Where a repo's bundle is written before it goes into the archive under `entry` (`repos/<n>.bundle`). */
-function bundleFile(work: string, entry: string): string {
-  return join(work, entry.replace("/", "-"));
 }
 
 async function isSmallRegularFile(file: string): Promise<boolean> {

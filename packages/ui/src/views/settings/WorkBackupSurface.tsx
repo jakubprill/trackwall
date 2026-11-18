@@ -9,6 +9,7 @@ import { saveFile } from "@/lib/folder-files";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 import { workBackupContents, workBackupWhen } from "@/lib/work-backup";
+import { WorkRestorePanel } from "./WorkRestorePanel";
 
 /**
  * The work backup (ADR-275): in a container, one file with the commits, stashes and uncommitted changes that exist only
@@ -53,6 +54,7 @@ export function WorkBackupSurface({ conn }: { conn: Connection }) {
       </div>
       {create.error && <p className="text-destructive text-xs">{create.error}</p>}
       {save.error && <p className="text-destructive text-xs">{save.error}</p>}
+      <WorkRestorePanel conn={conn} />
     </div>
   );
 }
