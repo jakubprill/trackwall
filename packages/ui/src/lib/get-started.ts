@@ -130,3 +130,15 @@ export function fixCommand(fix: string | null): string | null {
   const commands = [...(fix ?? "").matchAll(/`([^`]+)`/g)].map((m) => m[1] ?? "");
   return commands.length === 1 && commands[0] !== undefined && commands[0].includes(" ") ? commands[0] : null;
 }
+
+/** What the entry of "Get started" in the list of Settings categories says under its name (ADR-268), and whether it calls for the user. */
+export interface GetStartedEntry {
+  text: string;
+  state: "unknown" | "to-do" | "done";
+}
+
+export function getStartedEntry(open: number | null): GetStartedEntry {
+  if (open === null) return { text: "Check your setup", state: "unknown" };
+  if (open === 0) return { text: "All set", state: "done" };
+  return { text: open === 1 ? "1 step to do" : `${open} steps to do`, state: "to-do" };
+}

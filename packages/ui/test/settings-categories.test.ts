@@ -72,9 +72,14 @@ describe("Settings categories", () => {
   });
 
   test("Settings opens on Get started until a session exists, and on Workspace with the projects folder first after that", () => {
-    expect(firstSettingsCategory(undefined)).toBe("get-started");
-    expect(firstSettingsCategory(0)).toBe("get-started");
-    expect(firstSettingsCategory(3)).toBe("workspace");
+    expect(firstSettingsCategory(undefined, null)).toBe("get-started");
+    expect(firstSettingsCategory(0, 0)).toBe("get-started");
+    expect(firstSettingsCategory(3, null)).toBe("workspace");
+    expect(firstSettingsCategory(3, 0)).toBe("workspace");
     expect(settingsCategory("workspace").sections[0]).toBe("projects-folder");
+  });
+
+  test("Settings opens on Get started also after a session exists, while the doctor's last run left a step open", () => {
+    expect(firstSettingsCategory(3, 1)).toBe("get-started");
   });
 });
