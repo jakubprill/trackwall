@@ -100,6 +100,7 @@ import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
 import { VERIFICATIONS_FILE, VERIFICATIONS_FORMAT, Verifications } from "./modules/verification/verifications.ts";
 import { ViewerAccess } from "./modules/viewer-access/viewer-access.ts";
 import { WORK_BACKUP_DIR, WORK_BACKUP_INFO_FILE, WORK_BACKUP_INFO_FORMAT, WorkBackup } from "./modules/work-backup/work-backup.ts";
+import { WorkRestore } from "./modules/work-backup/work-restore.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
@@ -141,6 +142,8 @@ export interface Facade {
   droppedFiles: DroppedFiles;
   /** The backup of the work that lives only in the container, for the user to download (ADR-275). */
   workBackup: WorkBackup;
+  /** Bringing a work backup back into the repos of a new container, after a look at what it does (ADR-275). */
+  workRestore: WorkRestore;
   testReports: TestReports;
   verifications: Verifications;
   /** Whether a task's reproduction test fails without its fix and passes with it, in a copy of the repo (ADR-227). */
@@ -656,6 +659,15 @@ export function createFacade(o: FacadeOptions): Facade {
       version: o.version,
       now: () => new Date(),
       log: o.log,
+    }),
+    workRestore: new WorkRestore({
+      inContainer: o.inContainer,
+      stateDir: o.home,
+      repoPath: (repo) => workspace.repoPath(repo),
+      projectsDir: () => workspace.projectsDir(),
+      planRestore: (dir, bundle, source) => vcs.planRestore(dir, bundle, source),
+      restoreWork: (dir, bundle, source) => vcs.restoreWork(dir, bundle, source),
+      now: () => new Date(),
     }),
     testReports,
     verifications,

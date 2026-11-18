@@ -1,5 +1,6 @@
 import { createReadStream, createWriteStream } from "node:fs";
 import { stat } from "node:fs/promises";
+import { join } from "node:path";
 import { PassThrough, type Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
@@ -15,6 +16,14 @@ const BLOCK = 512;
 const MAX_NAME_BYTES = 100;
 /** A size in the header is 11 octal digits: up to 8 GiB per entry. */
 const MAX_ENTRY_BYTES = 8 * 1024 ** 3 - 1;
+
+/**
+ * Where an entry of the archive (`repos/<n>.bundle`, `state/<n>`) sits as a file in `dir`, while a backup is made or
+ * after one is unpacked: a name made from Trackwall's own entry name, flat in `dir`.
+ */
+export function entryFile(dir: string, entry: string): string {
+  return join(dir, entry.replace("/", "-"));
+}
 
 /** One file of the archive: its name in it, and either the bytes or a file on disk to copy. */
 export type ArchiveEntry = { name: string; data: Buffer } | { name: string; file: string };

@@ -28,7 +28,7 @@ const OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const OBJECT_FORMATS = ["sha1", "sha256"] as const;
 type ObjectFormat = (typeof OBJECT_FORMATS)[number];
 /** The refs of the bundle that are not branches, so that a restore can tell them apart. */
-const WORK_REF_PREFIX = "refs/trackwall";
+export const WORK_REF_PREFIX = "refs/trackwall";
 
 /** A remote of the repo with an address to clone from, without a password or token in it. */
 interface BundledRemote {

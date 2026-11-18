@@ -79,6 +79,7 @@ import { syncRepo } from "./sync.ts";
 import { mergeIntoRepo, trialMergeConflicts, trialMergeInput } from "./trial-merge.ts";
 import { type RepoUnpushed, readUnpushed } from "./unpushed.ts";
 import { bundleWork, type WorkBundle } from "./work-bundle.ts";
+import { planRestore, type RestorePlan, type RestoreSource, restoreWork } from "./work-restore.ts";
 import { addCheckout, addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { type ChangesScratch, changedPaths, workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
 import { discardFingerprint, worktreeFingerprint } from "./worktree-fingerprint.ts";
@@ -184,6 +185,16 @@ export class Vcs {
   /** The work of `dir` on no remote as a verified bundle in `out` (ADR-275); `null` when there is none. */
   async bundleWork(dir: string, out: string): Promise<WorkBundle | null> {
     return bundleWork(dir, out, await this.scratch(), this.indexPlaces);
+  }
+
+  /** What restoring a work backup's bundle into `dir` would do, read without writing into the repo (ADR-275). */
+  async planRestore(dir: string, bundle: string, source: RestoreSource): Promise<RestorePlan> {
+    return planRestore(dir, bundle, source, await this.scratch());
+  }
+
+  /** Restores a work backup's bundle into `dir`; in the sync queue, since a fetch writes refs of the same `.git`. */
+  async restoreWork(dir: string, bundle: string, source: RestoreSource): Promise<RestorePlan> {
+    return this.syncing.run(await this.commonDir(dir), () => restoreWork(dir, bundle, source));
   }
 
   /**
