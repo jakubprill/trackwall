@@ -12,9 +12,11 @@ import { isInside } from "../../infra/path-inside.ts";
 
 /**
  * Copilot CLI writes `config.json` with `//` comment lines before the object (seen on 1.0.103 and 1.0.105, pinned by a
- * contract test). A JSON string cannot hold a line break, so a line that starts with `//` is always a comment.
+ * contract test). A JSON string cannot hold a raw line feed or carriage return, so a line that starts with `//` after
+ * one of them, or at the start of the file, is always a comment. Only those two end a line here: U+2028 and U+2029 may
+ * stand raw inside a JSON string, so the pattern does not use `^`, `$` or `.`, which take them for line ends too.
  */
-export const COMMENT_LINE = /^\s*\/\/.*$/gm;
+export const COMMENT_LINE = /(?<![^\r\n])[ \t]*\/\/[^\r\n]*/g;
 
 /** Any object: the keys other than `trustedFolders` are Copilot CLI's own. */
 const ConfigObject = z.record(z.string(), z.unknown());

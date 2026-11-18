@@ -779,6 +779,12 @@ describe("withTrustedFolder: Copilot CLI's config.json with one more trusted fol
     });
   });
 
+  test("a string value with a line separator followed by slashes is no comment line and stays whole", () => {
+    const banner = "first\u2028// second";
+    const edit = withTrustedFolder(JSON.stringify({ banner }), "/projects");
+    expect(edit).toEqual({ kind: "edit", text: `${JSON.stringify({ banner, trustedFolders: ["/projects"] }, null, 2)}\n` });
+  });
+
   test("a folder inside a trusted folder is covered by it", () => {
     const projects = join(tmpdir(), "dev", "projects");
     expect(withTrustedFolder(JSON.stringify({ trustedFolders: [join(tmpdir(), "dev")] }), projects)).toEqual({
