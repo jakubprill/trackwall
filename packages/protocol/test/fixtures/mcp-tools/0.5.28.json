@@ -1,0 +1,235 @@
+{
+  "list_repos": {
+    "tags": "optional"
+  },
+  "get_repo": {
+    "repo": "required"
+  },
+  "get_repo_card": {
+    "repo": "required"
+  },
+  "tail": {
+    "repo": "required",
+    "task": "optional",
+    "miseTask": "required",
+    "sinceSeq": "optional",
+    "limit": "required",
+    "contains": "optional",
+    "minLevel": "optional"
+  },
+  "get_errors": {
+    "repo": "optional",
+    "task": "optional",
+    "miseTask": "optional",
+    "minLevel": "optional",
+    "contains": "optional",
+    "sinceSeq": "optional",
+    "limit": "optional"
+  },
+  "get_test_results": {
+    "repo": "required",
+    "task": "optional",
+    "since": "optional"
+  },
+  "get_app_config": {
+    "repo": "required",
+    "task": "optional",
+    "profile": "optional",
+    "key": "optional"
+  },
+  "who_calls": {
+    "repo": "required"
+  },
+  "subgraph_for": {
+    "repo": "required",
+    "depth": "optional"
+  },
+  "find_endpoint": {
+    "query": "required",
+    "method": "optional"
+  },
+  "search_code": {
+    "pattern": "required",
+    "regex": "optional",
+    "ignoreCase": "optional",
+    "repos": "optional",
+    "tags": "optional",
+    "paths": "optional",
+    "output": "optional",
+    "context": "optional",
+    "limit": "optional"
+  },
+  "search_commits": {
+    "text": "optional",
+    "message": "optional",
+    "author": "optional",
+    "regex": "optional",
+    "ignoreCase": "optional",
+    "repos": "optional",
+    "tags": "optional",
+    "paths": "optional",
+    "since": "optional",
+    "limit": "optional"
+  },
+  "search_task_history": {
+    "text": "optional",
+    "repos": "optional",
+    "since": "optional",
+    "limit": "optional"
+  },
+  "list_sessions": {
+    "repo": "optional"
+  },
+  "get_session": {
+    "session": "required",
+    "withPrompt": "optional"
+  },
+  "get_day_report": {},
+  "get_task_changes": {
+    "task": "required",
+    "paths": "optional",
+    "maxPatchBytes": "optional"
+  },
+  "get_changed_endpoints": {
+    "task": "required"
+  },
+  "propose_task": {
+    "repo": "required",
+    "title": "required",
+    "prompt": "required",
+    "model": "optional",
+    "approvals": "optional",
+    "item": "optional"
+  },
+  "propose_change": {
+    "title": "required",
+    "prompt": "required",
+    "parts": "required",
+    "model": "optional",
+    "approvals": "optional",
+    "item": "optional"
+  },
+  "propose_folder_action": {
+    "action": "required",
+    "repo": "required",
+    "reason": "required"
+  },
+  "propose_routine": {
+    "name": "required",
+    "title": "required",
+    "repo": "required",
+    "prompt": "required",
+    "model": "optional",
+    "approvals": "optional"
+  },
+  "list_knowledge": {
+    "repo": "optional",
+    "kind": "optional"
+  },
+  "propose_knowledge": {
+    "name": "required",
+    "kind": "required",
+    "repos": "required",
+    "text": "required",
+    "evidence": "required"
+  },
+  "list_items": {
+    "kind": "optional",
+    "parent": "optional",
+    "inbox": "optional",
+    "column": "optional",
+    "repo": "optional",
+    "query": "optional"
+  },
+  "get_item": {
+    "item": "required"
+  },
+  "create_item": {
+    "title": "required",
+    "body": "optional",
+    "parent": "optional",
+    "repos": "optional",
+    "link": "optional"
+  },
+  "update_item": {
+    "item": "required",
+    "title": "optional",
+    "body": "optional",
+    "repos": "optional",
+    "link": "optional",
+    "column": "optional"
+  },
+  "report_result": {
+    "summary": "required",
+    "checkSteps": "optional",
+    "reproTest": "optional"
+  },
+  "get_review_comments": {},
+  "send_message": {
+    "task": "required",
+    "text": "required"
+  },
+  "ask_proposer": {
+    "question": "required"
+  },
+  "copy_to_clipboard": {
+    "text": "required"
+  },
+  "resume_task": {
+    "task": "required"
+  },
+  "get_messages": {},
+  "get_handoff": {},
+  "get_updates": {},
+  "wait_for_session": {
+    "session": "optional",
+    "task": "optional",
+    "timeoutSeconds": "optional"
+  },
+  "run_mise_task": {
+    "repo": "required",
+    "task": "optional",
+    "miseTask": "required",
+    "arguments": "optional"
+  },
+  "stop_mise_task": {
+    "repo": "required",
+    "task": "optional",
+    "miseTask": "required"
+  },
+  "wait_for_mise_task": {
+    "repo": "required",
+    "task": "optional",
+    "miseTask": "required",
+    "timeoutSeconds": "optional"
+  },
+  "list_running_mise_tasks": {},
+  "verify_task": {
+    "repo": "required",
+    "task": "required",
+    "runId": "optional",
+    "timeoutSeconds": "optional"
+  },
+  "start_service": {
+    "repo": "required",
+    "task": "optional",
+    "lease": "optional",
+    "dependencies": "optional",
+    "timeoutSeconds": "optional"
+  },
+  "stop_service": {
+    "repo": "required",
+    "task": "optional",
+    "dependencies": "optional"
+  },
+  "list_services": {},
+  "call_endpoint": {
+    "repo": "required",
+    "method": "optional",
+    "task": "optional",
+    "path": "required",
+    "headers": "optional",
+    "body": "optional",
+    "timeoutSeconds": "optional"
+  }
+}
