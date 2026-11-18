@@ -33,7 +33,7 @@ export async function syncRepo(dir: string): Promise<SyncResult> {
   return { ...outcome, workingTree: await workingTree(dir) };
 }
 
-async function syncDefaultBranch(dir: string): Promise<SyncBranchOutcome> {
+export async function syncDefaultBranch(dir: string): Promise<SyncBranchOutcome> {
   const config = await readConfig(dir);
   const remote = mainRemote(config);
   if (!remote) return skipped("no-remote", "the repo has neither an origin remote nor a single other remote");
@@ -42,7 +42,11 @@ async function syncDefaultBranch(dir: string): Promise<SyncBranchOutcome> {
   const branch = await defaultBranch(dir, remote.name, network);
   if (branch === undefined)
     return skipped("no-default-branch", `${remote.name} does not point to a default branch (git remote set-head ${remote.name} --auto)`);
-  return fastForward(dir, branch, remote.name, network);
+  return fastForward(
+    dir,
+    { branch, remoteRef: `refs/remotes/${remote.name}/${branch}`, remoteBranch: `${remote.name}/${branch}` },
+    network,
+  );
 }
 
 /** `git fetch` of one remote; also a task's refresh from its base branch (ADR-245). */
@@ -71,10 +75,20 @@ async function defaultBranch(dir: string, remote: string, network: GitNetwork): 
   return read();
 }
 
-async function fastForward(dir: string, branch: string, remote: string, network: GitNetwork): Promise<SyncBranchOutcome> {
+/** A local branch and the remote-tracking ref it is fast-forwarded to, with the short name the result shows. */
+export interface FastForwardTarget {
+  branch: string;
+  remoteRef: string;
+  remoteBranch: string;
+}
+
+/**
+ * A fast-forward of a local branch to a remote-tracking ref under the rules of ADR-21: never a merge, never over changes in
+ * the working directory, never a branch checked out in another worktree. Also the checked-out branch of a pull (ADR-268).
+ */
+export async function fastForward(dir: string, target: FastForwardTarget, network: GitNetwork): Promise<SyncBranchOutcome> {
+  const { branch, remoteRef, remoteBranch } = target;
   const localRef = `refs/heads/${branch}`;
-  const remoteRef = `refs/remotes/${remote}/${branch}`;
-  const remoteBranch = `${remote}/${branch}`;
   if ((await revParse(dir, localRef)) === undefined)
     return skipped("no-local-branch", `branch ${branch} does not exist locally; only fetched the changes`);
   const { ahead, behind } = await divergence(dir, localRef, remoteRef);
@@ -123,7 +137,7 @@ async function checkedOutInWorktree(dir: string, localRef: string): Promise<bool
  * `null`, not an exception: after a moved branch (an antivirus on Windows scans new files) `git status` can
  * exceed the limit, and the sync succeeded anyway.
  */
-async function workingTree(dir: string): Promise<SyncWorkingTree | null> {
+export async function workingTree(dir: string): Promise<SyncWorkingTree | null> {
   try {
     const status = parseStatus((await git(dir, ["status", "--porcelain=v2", "--branch", "-z"])).stdout.toString("utf8"));
     return { branch: status.branch, changed: trackedChanges(status), untracked: status.untracked };

@@ -6,6 +6,7 @@ import type {
   Commit,
   FileContent,
   HostedProject,
+  PullResult,
   RepoHost,
   RepoStatusOk,
   StatusRead,
@@ -56,6 +57,7 @@ import {
   wholeCharacters,
 } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
+import { pullRepo } from "./pull.ts";
 import { remoteAddress } from "./remote.ts";
 import { networkRemote, reachRemote } from "./remote-reach.ts";
 import {
@@ -235,6 +237,14 @@ export class Vcs {
    */
   async sync(dir: string): Promise<SyncResult> {
     return this.syncing.run(await this.commonDir(dir), () => syncRepo(dir));
+  }
+
+  /**
+   * The sync of the default branch, then a fast-forward of the checked-out branch to the branch it tracks (ADR-268), in the
+   * same queue as sync: both fetch into the same remote-tracking refs.
+   */
+  async pull(dir: string): Promise<PullResult> {
+    return this.syncing.run(await this.commonDir(dir), () => pullRepo(dir));
   }
 
   /** A task branch against the main remote's branch of the same name, from refs only (ADR-77); `null` without a main remote. */

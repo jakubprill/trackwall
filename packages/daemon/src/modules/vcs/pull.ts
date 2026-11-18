@@ -1,0 +1,55 @@
+import type { PullBranchOutcome, PullResult, PullSkipReason } from "@trackwall/protocol";
+import { git, knownDefaultBranch, revParse, symbolicRef } from "./git.ts";
+import { mainRemote, readConfig } from "./git-config.ts";
+import { fastForward, fetchRemote, syncDefaultBranch, workingTree } from "./sync.ts";
+
+/**
+ * A pull of one repo from its header (§4.5, ADR-268): the sync of the default branch exactly as "Sync all" does it
+ * (ADR-21), then a fast-forward of the checked-out branch to the branch it tracks, under the same rules. "Sync all"
+ * leaves the checked-out branch alone when it is not the default one, and its fetch is what makes the header show
+ * commits to pull, so this is the one place that moves it, and only on the user's click. Nothing here merges, rebases,
+ * pushes or touches changes in the working directory; each such case is a skip with a reason, and a git error an exception.
+ */
+
+const HEADS = "refs/heads/";
+
+export async function pullRepo(dir: string): Promise<PullResult> {
+  const defaultBranch = await syncDefaultBranch(dir);
+  const checkedOut = await pullCheckedOut(dir);
+  return { defaultBranch, checkedOut, workingTree: await workingTree(dir) };
+}
+
+/** `null` when the checked-out branch is the default branch, which the sync has just handled. */
+async function pullCheckedOut(dir: string): Promise<PullBranchOutcome | null> {
+  const head = await symbolicRef(dir, "HEAD");
+  if (!head?.startsWith(HEADS)) return skipped("detached", "no branch is checked out, so there is nothing to pull into");
+  const branch = head.slice(HEADS.length);
+  const config = await readConfig(dir);
+  const main = mainRemote(config);
+  if (main && branch === (await knownDefaultBranch(dir, main.name))) return null;
+
+  const upstream = await trackedBranch(dir, head);
+  if (upstream === undefined) return skipped("no-upstream", `${branch} tracks no branch`);
+  const network = { sshCommand: config.sshCommand };
+  // The sync fetched the main remote; a branch that tracks another one (a fork's `upstream`) needs its own fetch, and one
+  // that tracks a local branch (remote `.`) none.
+  if (upstream.remote !== "." && upstream.remote !== main?.name) await fetchRemote(dir, upstream.remote, network);
+  if ((await revParse(dir, upstream.ref)) === undefined)
+    return skipped("no-upstream", `${upstream.short}, which ${branch} tracks, is gone`);
+  return fastForward(dir, { branch, remoteRef: upstream.ref, remoteBranch: upstream.short }, network);
+}
+
+/**
+ * The branch `head` tracks: its full ref, short name and remote (`.` for a local branch), read from the branch's
+ * configuration, so also when the ref is gone, which `@{upstream}` would only report as an error.
+ */
+async function trackedBranch(dir: string, head: string): Promise<{ ref: string; short: string; remote: string } | undefined> {
+  const { stdout } = await git(dir, ["for-each-ref", "--format=%(upstream)%00%(upstream:short)%00%(upstream:remotename)", "--", head]);
+  const [ref = "", short = "", remote = ""] = stdout.toString("utf8").replace(/\n$/, "").split("\0");
+  if (ref === "") return undefined;
+  return { ref, short, remote: remote === "" ? "." : remote };
+}
+
+function skipped(reason: PullSkipReason, message: string): PullBranchOutcome {
+  return { state: "skipped", reason, message };
+}

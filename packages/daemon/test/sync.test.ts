@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SyncRun } from "@trackwall/protocol";
@@ -362,6 +362,158 @@ describe("sync of all repos", () => {
         ["api", "gitlab.example.com/shop/Orders-API"],
         ["no-remote-repo", null],
       ]);
+    },
+    GIT_HEAVY_MS,
+  );
+});
+
+/** A commit on `branch` of a remote repo, which then goes back to `main`, so that a clone's default branch stays `main`. */
+function commitOnBranch(upstream: string, branch: string, files: Record<string, string>, message: string): void {
+  gitIn(upstream, "checkout", "-q", branch);
+  commitFiles(upstream, files, message);
+  gitIn(upstream, "checkout", "-q", "main");
+}
+
+/** A remote repo with the branches `main` and `develop`, and its clone in the projects folder with `develop` checked out. */
+function clonedOnDevelop(projects: string, remotes: string, name: string): { upstream: string; clone: string } {
+  const upstream = makeRepo({ "README.md": `# ${name}\n` }, name, remotes);
+  gitIn(upstream, "branch", "develop");
+  gitIn(projects, "clone", "-q", upstream, name);
+  const clone = join(projects, name);
+  gitIn(clone, "checkout", "-q", "develop");
+  return { upstream, clone };
+}
+
+const behind = (dir: string) => gitIn(dir, "rev-list", "--count", "HEAD..@{upstream}").trim();
+
+describe("pull of one repo from its header", () => {
+  test(
+    "a clean checked-out develop moves to origin/develop with its files, and main is synced as in Sync all",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const api = clonedOnDevelop(projects, remotes, "api");
+      commitOnBranch(api.upstream, "develop", { "feature.txt": "1" }, "first on develop");
+      commitOnBranch(api.upstream, "develop", { "feature.txt": "2" }, "second on develop");
+      commitFiles(api.upstream, { "hotfix.txt": "1" }, "on main");
+
+      const result = await workspace.pullRepo("api");
+
+      expect(result).toEqual({
+        defaultBranch: { state: "updated", branch: "main", remoteBranch: "origin/main", commits: 1 },
+        checkedOut: { state: "updated", branch: "develop", remoteBranch: "origin/develop", commits: 2 },
+        workingTree: { branch: "develop", changed: 0, untracked: 0 },
+      });
+      expect(readFileSync(join(api.clone, "feature.txt"), "utf8")).toBe("2");
+      expect(behind(api.clone)).toBe("0");
+      expect(head(api.clone, "main")).toBe(head(api.upstream, "main"));
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
+    "Sync all leaves a checked-out develop behind its upstream, which the pull then moves",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const api = clonedOnDevelop(projects, remotes, "api");
+      commitOnBranch(api.upstream, "develop", { "feature.txt": "1" }, "on develop");
+
+      await workspace.sync();
+      await finished(workspace);
+      expect(behind(api.clone)).toBe("1");
+
+      await workspace.pullRepo("api");
+      expect(behind(api.clone)).toBe("0");
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
+    "with the default branch checked out the pull is the sync of that branch, and checkedOut is null",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const api = cloned(projects, remotes, "api");
+      commitFiles(api.upstream, { "new.txt": "1" }, "on main");
+
+      const result = await workspace.pullRepo("api");
+
+      expect(result.defaultBranch).toEqual({ state: "updated", branch: "main", remoteBranch: "origin/main", commits: 1 });
+      expect(result.checkedOut).toBeNull();
+      expect(existsSync(join(api.clone, "new.txt"))).toBe(true);
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
+    "changes in the working directory and a diverged branch leave develop where it was, with a reason",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const dirty = clonedOnDevelop(projects, remotes, "dirty");
+      const diverged = clonedOnDevelop(projects, remotes, "diverged");
+      for (const r of [dirty, diverged]) commitOnBranch(r.upstream, "develop", { "feature.txt": "remote" }, "remote");
+      writeFileSync(join(dirty.clone, "README.md"), "local change\n");
+      commitFiles(diverged.clone, { "local.txt": "1" }, "local");
+      const before = { dirty: head(dirty.clone), diverged: head(diverged.clone) };
+
+      const dirtyResult = await workspace.pullRepo("dirty");
+      const divergedResult = await workspace.pullRepo("diverged");
+
+      expect(dirtyResult.checkedOut).toEqual({
+        state: "skipped",
+        reason: "dirty",
+        message: "develop is checked out and has uncommitted changes",
+      });
+      expect(readFileSync(join(dirty.clone, "README.md"), "utf8")).toBe("local change\n");
+      expect(divergedResult.checkedOut).toEqual({
+        state: "skipped",
+        reason: "diverged",
+        message: "develop has diverged from the remote (1 local, 1 remote); merge by hand",
+      });
+      expect({ dirty: head(dirty.clone), diverged: head(diverged.clone) }).toEqual(before);
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
+    "a detached HEAD, a branch that tracks nothing and one whose upstream is gone are skipped with a reason",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const detached = cloned(projects, remotes, "detached");
+      gitIn(detached.clone, "checkout", "-q", "--detach");
+      const local = cloned(projects, remotes, "local");
+      gitIn(local.clone, "checkout", "-q", "-b", "spike");
+      const gone = clonedOnDevelop(projects, remotes, "gone");
+      gitIn(gone.upstream, "branch", "-D", "develop");
+      gitIn(gone.clone, "update-ref", "-d", "refs/remotes/origin/develop");
+
+      expect((await workspace.pullRepo("detached")).checkedOut).toEqual({
+        state: "skipped",
+        reason: "detached",
+        message: "no branch is checked out, so there is nothing to pull into",
+      });
+      expect((await workspace.pullRepo("local")).checkedOut).toEqual({
+        state: "skipped",
+        reason: "no-upstream",
+        message: "spike tracks no branch",
+      });
+      expect((await workspace.pullRepo("gone")).checkedOut).toEqual({
+        state: "skipped",
+        reason: "no-upstream",
+        message: "origin/develop, which develop tracks, is gone",
+      });
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
+    "a fetch that fails is an error and moves nothing",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const api = clonedOnDevelop(projects, remotes, "api");
+      gitIn(api.clone, "remote", "set-url", "origin", join(remotes, "missing"));
+      const before = head(api.clone);
+
+      await expect(workspace.pullRepo("api")).rejects.toThrow();
+      expect(head(api.clone)).toBe(before);
     },
     GIT_HEAVY_MS,
   );

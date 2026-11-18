@@ -15,6 +15,7 @@ import {
   type JavaNavigationSettings,
   MAX_ALWAYS_ALLOWED_TOOLS,
   PATCH_MAX_BYTES,
+  type PullResult,
   type RemoteRepoList,
   type RemoteRepoMore,
   type RemoteRepoSearch,
@@ -106,6 +107,7 @@ interface WorkspaceVcs extends CodeSearchVcs, CommitSearchVcs {
   status(dir: string, how: StatusRead): Promise<RepoStatusOk>;
   remote(dir: string): Promise<string | null>;
   sync(dir: string): Promise<SyncResult>;
+  pull(dir: string): Promise<PullResult>;
   log(dir: string, limit: number): Promise<Commit[]>;
   tree(dir: string, path: string): Promise<TreeEntry[] | undefined>;
   file(dir: string, path: string, maxBytes: number): Promise<FileContent | undefined>;
@@ -410,6 +412,13 @@ export class Workspace {
     const entry = await this.entry(id);
     if (this.clones.runningInto(entry.path)) throw new DomainError("bad_request", `${id}: this repo is being cloned`);
     return this.deps.vcs.sync(entry.path);
+  }
+
+  /** A pull of one repo from its header (ADR-268); a repo that is being cloned is an error, as for `syncRepo`. */
+  async pullRepo(id: string): Promise<PullResult> {
+    const entry = await this.entry(id);
+    if (this.clones.runningInto(entry.path)) throw new DomainError("bad_request", `${id}: this repo is being cloned`);
+    return this.deps.vcs.pull(entry.path);
   }
 
   /** The last sync of the current projects folder; one from before a settings change says nothing about it. */

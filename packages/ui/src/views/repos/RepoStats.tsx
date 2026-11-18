@@ -1,15 +1,30 @@
 import type { RepoStatusOk } from "@trackwall/protocol";
-import { ArrowDown, ArrowUp } from "lucide-react";
 import { StatTile } from "@/components/StatTile";
 import { StatusLabel } from "@/components/StatusLabel";
+import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
 import { branchLabel, repoStatusTone } from "@/lib/repo-status";
+import { UpstreamTile } from "./UpstreamTile.tsx";
 
 /**
  * State tiles in the repo header: branch, tracking branch, working directory and last commit (§4.5). Working directory
- * changes lead to the "Changes" tab (ADR-34), so that the number alone is not a dead end.
+ * changes lead to the "Changes" tab (ADR-34), and commits to pull to a pull (ADR-268), so that a number alone is not a dead end.
  */
-export function RepoStats({ status, onShowChanges }: { status: RepoStatusOk; onShowChanges: () => void }) {
+export function RepoStats({
+  conn,
+  repo,
+  status,
+  workInFolder,
+  onShowChanges,
+  onOpenShell,
+}: {
+  conn: Connection;
+  repo: string;
+  status: RepoStatusOk;
+  workInFolder: readonly string[];
+  onShowChanges: () => void;
+  onOpenShell: () => void;
+}) {
   const state = repoStatusTone(status);
   return (
     <dl className="grid grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2">
@@ -18,23 +33,14 @@ export function RepoStats({ status, onShowChanges }: { status: RepoStatusOk; onS
           {branchLabel(status)}
         </span>
       </StatTile>
-      <StatTile label="Upstream">
-        {status.upstream ? (
-          <span className="flex items-center gap-2 font-mono" title={`compared with ${status.upstream.name}`}>
-            <span className="flex items-center gap-0.5">
-              <ArrowUp className="text-muted-foreground size-3.5" />
-              {status.upstream.ahead}
-            </span>
-            <span className="flex items-center gap-0.5">
-              <ArrowDown className="text-muted-foreground size-3.5" />
-              {status.upstream.behind}
-            </span>
-            <span className="text-muted-foreground min-w-0 truncate text-xs">{status.upstream.name}</span>
-          </span>
-        ) : (
-          <span className="text-muted-foreground">none</span>
-        )}
-      </StatTile>
+      <UpstreamTile
+        conn={conn}
+        repo={repo}
+        status={status}
+        workInFolder={workInFolder}
+        onShowChanges={onShowChanges}
+        onOpenShell={onOpenShell}
+      />
       <StatTile label="Working tree">
         {status.changes > 0 ? (
           <button type="button" className="hover:underline" onClick={onShowChanges} title="Show the changes">

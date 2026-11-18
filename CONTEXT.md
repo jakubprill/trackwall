@@ -185,6 +185,10 @@ _Avoid_: repo URL (a URL has a protocol and may carry a token), remote without q
 A fetch of every repo from the projects folder and a fast-forward of its default branch, in the background, with a result per repo: moved, up to date, skipped with a reason (`SyncSkipReason`) or an error; without an error also with the state of the working directory after the sync (`SyncWorkingTree`, ADR-34). It never merges or overwrites local changes (ADR-21). Kept only in daemon memory.
 _Avoid_: pull, update (without qualification)
 
+**Pull** (`PullResult`, `workspaceApi.pull`, "Pull <n>" in the repo header's Upstream tile):
+The user's fetch of one repo from its header: the sync of its default branch, then a fast-forward of the checked-out branch to the branch it tracks, under the same rules (ADR-268). It never merges, rebases, pushes or overwrites local changes; a skip has a reason (`PullSkipReason`). Only from the UI.
+_Avoid_: sync (that moves the default branch of every repo), update, `git pull` (which can merge or rebase)
+
 **Batch command** (`BatchRun`, step `BatchStep`, repo result `BatchRepo`):
 Selected steps on selected repos with one button: sync (`sync`), tools from the repo's mise configuration (`tools`, `mise install`), dependencies (`setup`, the mise task `setup`) and build (`build`, the mise task `build`), in a repo always in this order, several repos at once, with the result of every step in every repo (ADR-27). A step error ends the repo, the others go on. Kept only in daemon memory.
 _Avoid_: bulk operation, workflow
