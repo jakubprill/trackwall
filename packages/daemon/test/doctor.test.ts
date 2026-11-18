@@ -289,7 +289,8 @@ describe("doctor", () => {
 
     const written = await facade.doctor.trustProjectsFolder();
 
-    const backup = join(realpathSync(copilotHome), COPILOT_CONFIG_BACKUP);
+    // The native call, as the daemon resolves the file: on Windows it also expands a short name of the temporary folder.
+    const backup = join(realpathSync.native(copilotHome), COPILOT_CONFIG_BACKUP);
     expect(written).toEqual({ file, folder: projects, added: true, backup });
     expect(readFileSync(file, "utf8")).toBe(
       `// User settings belong in settings.json.\n${JSON.stringify({ banner: "never", trustedFolders: ["/somewhere/else", projects] }, null, 2)}\n`,
