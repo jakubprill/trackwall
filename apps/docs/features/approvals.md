@@ -1,6 +1,7 @@
 ---
 title: Approvals outside the terminal
 description: Approve or stop an agent's command from the tray panel or the Home dashboard, and let safe commands through without asking at all.
+status: stable
 ---
 
 # Approvals outside the terminal

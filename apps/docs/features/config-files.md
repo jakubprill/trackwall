@@ -1,6 +1,7 @@
 ---
 title: Config files
 description: See every file and folder Trackwall reads or writes on your computer, what each is for, where it is and whether it is in order.
+status: stable
 ---
 
 # Config files

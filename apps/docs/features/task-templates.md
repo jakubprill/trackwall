@@ -1,6 +1,7 @@
 ---
 title: Task templates
 description: Start a new task from a ready prompt, such as "Fix a failing test" or "Bump a dependency", or from one of your own, with one click.
+status: stable
 ---
 
 # Task templates

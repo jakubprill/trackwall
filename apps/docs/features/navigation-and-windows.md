@@ -1,6 +1,7 @@
 ---
 title: Navigation and windows
 description: Move between views with the keyboard, and spread Trackwall over several windows and monitors.
+status: stable
 ---
 
 # Navigation and windows

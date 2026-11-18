@@ -1,6 +1,7 @@
 ---
 title: MCP calls
 description: See every call an agent made to Trackwall's tools, which agent made it, what it named and how it ended, for all agents or for one task.
+status: stable
 ---
 
 # MCP calls

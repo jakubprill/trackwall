@@ -1,6 +1,7 @@
 ---
 title: Impact of a task
 description: See which repos a task's API or library change reaches, get a task proposed for each repo that uses what changed, and hand off work in one click.
+status: stable
 ---
 
 # Impact of a task

@@ -1,6 +1,7 @@
 ---
 title: Agent tasks
 description: Give an agent a task on its own branch and worktree, and review its changes before anything lands.
+status: stable
 ---
 
 # Agent tasks

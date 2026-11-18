@@ -1,6 +1,7 @@
 ---
 title: Environment from mise
 description: Give every agent session the variables and tokens from your mise config, with secrets encrypted on disk and kept from the agent's tools.
+status: stable
 ---
 
 # Environment from mise
