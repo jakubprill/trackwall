@@ -4,7 +4,9 @@ import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import { download, post } from "@/lib/api";
+import { inDesktopShell } from "@/lib/app-window";
 import type { Connection } from "@/lib/connection";
+import { desktopWorkBackups, desktopWorkBackupsText, showDesktopWorkBackups } from "@/lib/desktop-work-backups";
 import { saveFile } from "@/lib/folder-files";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
@@ -54,6 +56,7 @@ export function WorkBackupSurface({ conn }: { conn: Connection }) {
       </div>
       {create.error && <p className="text-destructive text-xs">{create.error}</p>}
       {save.error && <p className="text-destructive text-xs">{save.error}</p>}
+      {inDesktopShell() && <DesktopBackups />}
       <WorkRestorePanel conn={conn} />
     </div>
   );
@@ -69,6 +72,22 @@ function LastBackup({ info }: { info: WorkBackupInfo }) {
           Not in the backup: {s.repo}, {s.message}
         </p>
       ))}
+    </div>
+  );
+}
+
+/** The backups this desktop app downloads by itself (ADR-281), with a button to their folder. */
+function DesktopBackups() {
+  const state = useRemote(desktopWorkBackups, { pollMs: 60_000 });
+  const show = useAction(showDesktopWorkBackups, () => {});
+  if (!state.data) return state.error ? <p className="text-destructive text-xs">{state.error}</p> : null;
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <p className="text-muted-foreground text-xs break-words">{desktopWorkBackupsText(state.data, new Date())}</p>
+      <Button variant="outline" size="sm" disabled={show.pending} onClick={() => show.run()}>
+        Show backups folder
+      </Button>
+      {show.error && <p className="text-destructive text-xs">{show.error}</p>}
     </div>
   );
 }

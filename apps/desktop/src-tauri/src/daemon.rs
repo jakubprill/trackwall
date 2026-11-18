@@ -387,19 +387,12 @@ fn io_no_answer(error: std::io::Error) -> HttpError {
 /// or until the connection closes, the whole request within the limit of `location`, however slowly the answer trickles in.
 /// Reading stops at the declared end because a port forward may keep the connection open after the daemon closed its side.
 fn http(port: u16, location: DaemonLocation, method: &str, path: &str, token: Option<&str>) -> Result<(u16, String), HttpError> {
-    let deadline = Instant::now() + location.timeout();
-    let left = || {
-        deadline
-            .checked_duration_since(Instant::now())
-            .filter(|d| !d.is_zero())
-            .ok_or_else(|| HttpError::NoAnswer(NO_ANSWER_IN_TIME.to_owned()))
-    };
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let mut stream = TcpStream::connect_timeout(&addr, location.timeout()).map_err(|e| HttpError::Unreachable(e.to_string()))?;
-    stream.set_write_timeout(Some(left()?)).map_err(io_no_answer)?;
-    let auth = token.map(|t| format!("Authorization: Bearer {t}\r\n")).unwrap_or_default();
-    let req = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{auth}Content-Length: 0\r\nConnection: close\r\n\r\n");
-    stream.write_all(req.as_bytes()).map_err(io_no_answer)?;
+    http_within(port, location.timeout(), method, path, token)
+}
+
+/// `http` with the whole request within `timeout`, for an action that takes its time (making a work backup).
+fn http_within(port: u16, timeout: Duration, method: &str, path: &str, token: Option<&str>) -> Result<(u16, String), HttpError> {
+    let (mut stream, left) = send_request(port, timeout, method, path, token)?;
     let mut raw = Vec::new();
     let mut chunk = [0u8; 8192];
     while raw.len() < MAX_RESPONSE_BYTES && !is_complete(&raw) {
@@ -411,6 +404,80 @@ fn http(port: u16, location: DaemonLocation, method: &str, path: &str, token: Op
     }
     parse_response(&raw).map_err(|why| HttpError::NoAnswer(why.to_owned()))
 }
+
+/// Opens the connection and sends a request without a body; the answer is to be read with the time `left` gives.
+fn send_request(
+    port: u16,
+    timeout: Duration,
+    method: &str,
+    path: &str,
+    token: Option<&str>,
+) -> Result<(TcpStream, impl Fn() -> Result<Duration, HttpError>), HttpError> {
+    let deadline = Instant::now() + timeout;
+    let left = move || {
+        deadline
+            .checked_duration_since(Instant::now())
+            .filter(|d| !d.is_zero())
+            .ok_or_else(|| HttpError::NoAnswer(NO_ANSWER_IN_TIME.to_owned()))
+    };
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream = TcpStream::connect_timeout(&addr, timeout).map_err(|e| HttpError::Unreachable(e.to_string()))?;
+    stream.set_write_timeout(Some(left()?)).map_err(io_no_answer)?;
+    let auth = token.map(|t| format!("Authorization: Bearer {t}\r\n")).unwrap_or_default();
+    let req = format!("{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{auth}Content-Length: 0\r\nConnection: close\r\n\r\n");
+    stream.write_all(req.as_bytes()).map_err(io_no_answer)?;
+    Ok((stream, left))
+}
+
+/// `POST path` to the daemon with the whole answer within `timeout`: its status and body.
+pub fn post_within(conn: &Connection, path: &str, timeout: Duration) -> Result<(u16, String), String> {
+    Ok(http_within(conn.port, timeout, "POST", path, Some(&conn.token))?)
+}
+
+/// `POST path` whose answer is a file's bytes (ADR-188): the body goes into `out` as it comes, and the answer counts only
+/// when exactly the `Content-Length` it announced came, since a daemon that fails after the headers cuts it short.
+pub fn post_download(conn: &Connection, path: &str, timeout: Duration, out: &mut impl Write) -> Result<u64, String> {
+    let (mut stream, left) = send_request(conn.port, timeout, "POST", path, Some(&conn.token))?;
+    let mut raw = Vec::new();
+    let mut chunk = [0u8; 64 * 1024];
+    let (head, first) = loop {
+        if let Some((head, body)) = split_response(&raw) {
+            break (head, body.to_vec());
+        }
+        if raw.len() > MAX_HEAD_BYTES {
+            return Err("the daemon's answer has no end of its headers".into());
+        }
+        stream.set_read_timeout(Some(left()?)).map_err(io_no_answer)?;
+        match stream.read(&mut chunk).map_err(io_no_answer)? {
+            0 => return Err("the daemon closed the connection before answering".into()),
+            n => raw.extend_from_slice(&chunk[..n]),
+        }
+    };
+    let status = head.split_whitespace().nth(1).and_then(|s| s.parse::<u16>().ok()).ok_or("missing status code")?;
+    if status != 200 {
+        return Err(format!("the daemon answered {status}: {}", String::from_utf8_lossy(&first)));
+    }
+    let length = header(&head, "content-length").and_then(|v| v.parse::<u64>().ok()).ok_or("the download has no Content-Length")?;
+    let mut written = first.len() as u64;
+    if written > length {
+        return Err("the download is longer than it announced".into());
+    }
+    out.write_all(&first).map_err(|e| format!("writing the download: {e}"))?;
+    while written < length {
+        stream.set_read_timeout(Some(left()?)).map_err(io_no_answer)?;
+        let n = stream.read(&mut chunk).map_err(io_no_answer)?;
+        if n == 0 {
+            return Err(format!("the download ended after {written} of {length} bytes"));
+        }
+        let take = n.min(usize::try_from(length - written).unwrap_or(usize::MAX));
+        out.write_all(&chunk[..take]).map_err(|e| format!("writing the download: {e}"))?;
+        written += take as u64;
+    }
+    Ok(written)
+}
+
+/// Headers longer than this are not the daemon's.
+const MAX_HEAD_BYTES: usize = 64 * 1024;
 
 /// The daemon's answers to the shell are small; more is not read.
 const MAX_RESPONSE_BYTES: usize = 1 << 20;
