@@ -14,11 +14,12 @@ import type { BatchRunHandle } from "@/lib/use-batch-run";
  * is the repo list after the tag filter (ADR-25), so the filter picks a group of repos, and it can be narrowed by hand here.
  */
 export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: readonly Repo[] }) {
-  const [steps, setSteps] = useState<ReadonlySet<BatchStep>>(() => new Set(BATCH_STEPS));
-  // All repos by default; a repo that appears in the list later is not ticked by itself.
-  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set(repos.map((r) => r.id)));
+  // Nothing is ticked at the start: the user picks what runs, so a build of every repo never starts on a click by habit.
+  const [steps, setSteps] = useState<ReadonlySet<BatchStep>>(() => new Set());
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const chosen = repos.filter((r) => selected.has(r.id));
   const { run } = batch;
+  const ready = chosen.length > 0 && steps.size > 0;
 
   return (
     <div className="flex flex-col gap-4 p-6">
@@ -27,11 +28,11 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
         <h1 className="text-xl font-semibold tracking-tight">The same steps on many repos at once</h1>
         <p className="text-muted-foreground max-w-prose text-sm">
           Steps run one after another in each repo, three repos at a time. A failed step ends that repo; the others carry on. A mise task
-          with
-          <code>sources</code> and <code>outputs</code> is skipped when nothing changed, so a rerun is fast.
+          with <code>sources</code> and <code>outputs</code> is skipped when nothing changed, so a rerun is fast.
         </p>
       </header>
       <Surface label="Steps" meta={`${steps.size}/${BATCH_STEPS.length}`}>
+        <AllOrNone onAll={() => setSteps(new Set(BATCH_STEPS))} onNone={() => setSteps(new Set())} />
         <ul className="grid sm:grid-cols-2">
           {BATCH_STEPS.map((step) => (
             <Choice key={step} checked={steps.has(step)} onChange={() => setSteps(toggle(steps, step))}>
@@ -42,14 +43,7 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
         </ul>
       </Surface>
       <Surface label="Repos" meta={`${chosen.length}/${repos.length}`}>
-        <div className="flex gap-2 border-b px-3 py-2">
-          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set(repos.map((r) => r.id)))}>
-            All
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-            None
-          </Button>
-        </div>
+        <AllOrNone onAll={() => setSelected(new Set(repos.map((r) => r.id)))} onNone={() => setSelected(new Set())} />
         {/* Columns instead of one list: with a few dozen repos the results stay close to the start button. */}
         <ul className="grid grid-cols-2 lg:grid-cols-3">
           {repos.map((repo) => (
@@ -63,11 +57,12 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
         <Button
           variant="outline"
           size="sm"
-          disabled={batch.running || chosen.length === 0 || steps.size === 0}
+          disabled={batch.running || !ready}
           onClick={() => batch.start({ repos: chosen.map((r) => r.id), steps: BATCH_STEPS.filter((s) => steps.has(s)) })}
         >
           <Play /> Run on {countLabel(chosen.length, { one: "repo", other: "repos" })}
         </Button>
+        {!ready && <span className="text-muted-foreground text-xs">Choose at least one step and one repo.</span>}
         {run?.finishedAt === null && (
           <Button variant="outline" size="sm" disabled={run.cancelled} onClick={batch.cancel}>
             <Square /> {run.cancelled ? "Cancelling…" : "Cancel"}
@@ -142,6 +137,19 @@ function ResultRow({ repo }: { repo: BatchRepo }) {
         ) : null,
       )}
     </li>
+  );
+}
+
+function AllOrNone({ onAll, onNone }: { onAll: () => void; onNone: () => void }) {
+  return (
+    <div className="flex gap-2 border-b px-3 py-2">
+      <Button variant="ghost" size="sm" onClick={onAll}>
+        All
+      </Button>
+      <Button variant="ghost" size="sm" onClick={onNone}>
+        None
+      </Button>
+    </div>
   );
 }
 
