@@ -1,16 +1,14 @@
-import { type ContainerHealth, containerHealthApi } from "@trackwall/protocol";
+import type { ContainerHealth } from "@trackwall/protocol";
 import { AlertTriangle } from "lucide-react";
-import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Skeleton, Skeletons } from "@/components/Skeleton";
 import { Steady } from "@/components/Steady";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
-import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { type HealthTile, healthEvents, healthTiles, healthUptime, memoryBars } from "@/lib/container-health";
 import { formatBytes } from "@/lib/format";
-import { useRemote } from "@/lib/use-remote";
+import { useContainerHealth } from "@/lib/use-container-health";
 import { cn } from "@/lib/utils";
 
 /**
@@ -19,8 +17,7 @@ import { cn } from "@/lib/utils";
  * no reason" gets one. Only where Trackwall runs in a container.
  */
 export function ContainerHealthSurface({ conn }: { conn: Connection }) {
-  const load = useCallback(() => post(conn, containerHealthApi.state, {}), [conn]);
-  const health = useRemote(load);
+  const health = useContainerHealth(conn);
   const loading = !health.data && !health.error;
   return (
     <Surface

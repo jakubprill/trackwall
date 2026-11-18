@@ -63,6 +63,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `get_handoff` | For a task another task handed its work: where that task's branch is now and which files its new commits change since the agent last looked; see [Main session and task proposals](/features/main-session). |
 | `resume_task` | Continue a task whose session no longer runs, in its own worktree and conversation, the same as "Resume". The supervisor resumes any task, another session only the tasks it proposed. |
 | `get_day_report` | The report of your last [day start](/features/start-my-day): new commits on each repo's main branch since the one before, repos the sync could not update, and open tasks with how far behind they are. |
+| `get_container_health` | How your [dev container](/features/container-health) is doing: memory, processors, processes and disk against its limits, processes killed for lack of memory and daemon restarts in the last day, and its warnings. An agent whose build died without a reason reads it before looking for a bug. |
 | `get_updates` | What happened to the tasks a session proposed since it last asked: a finished turn, a reported result, a verification verdict, an error or end, a rejected proposal, or a question from the task's agent. |
 
 ## Good to know

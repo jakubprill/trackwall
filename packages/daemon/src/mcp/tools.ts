@@ -3,6 +3,7 @@ import {
   type AgentRepo,
   type AgentSession,
   ancestorsOf,
+  ContainerHealthBrief,
   childrenOf,
   compareSiblings,
   GET_REPO_README_MAX_CHARS,
@@ -263,6 +264,8 @@ const runs: ToolRuns = {
     return { session, task, ...summary, verification, javaNavigation };
   },
   getDayReport: async (facade) => ({ report: facade.dayStart.report() }),
+  // Parsing strips the day's history, which the tool leaves out (ADR-280).
+  getContainerHealth: async (facade) => ContainerHealthBrief.parse(await facade.containerHealth.state()),
   getTaskChanges: (facade, { task, paths, maxPatchBytes }) => facade.agents.agentTaskChanges(task, maxPatchBytes, paths),
   getChangedEndpoints: (facade, { task }) => facade.taskChangedEndpoints(task),
   proposeTask: async (facade, { model, approvals, item, ...proposal }, { caller }) => {
@@ -402,6 +405,7 @@ export const TOOL_REGISTRATIONS: readonly ToolRegistration[] = [
   defineTool(mcpTools.listSessions, runs.listSessions),
   defineTool(mcpTools.getSession, runs.getSession, (result, args) => sessionText(result, args[GET_SESSION_PROMPT_ARG])),
   defineTool(mcpTools.getDayReport, runs.getDayReport),
+  defineTool(mcpTools.getContainerHealth, runs.getContainerHealth),
   defineTool(mcpTools.getTaskChanges, runs.getTaskChanges),
   defineTool(mcpTools.getChangedEndpoints, runs.getChangedEndpoints),
   defineTool(mcpTools.proposeTask, runs.proposeTask),

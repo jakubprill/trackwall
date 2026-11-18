@@ -1,4 +1,4 @@
-import type { Repo, Session, TaskProposal, UnpushedWork } from "@trackwall/protocol";
+import type { HealthWarning, Repo, Session, TaskProposal, UnpushedWork } from "@trackwall/protocol";
 import { homeModel } from "@/lib/home-model";
 import { unpushedRows } from "@/lib/unpushed-work";
 import { NeedsYouPanel } from "@/views/home/NeedsYouPanel";
@@ -27,12 +27,14 @@ function NeedsYouOf({
   sessions = [],
   proposals = [],
   unpushed,
+  containerWarnings = [],
   loading = false,
 }: {
   repos: readonly Repo[];
   sessions?: readonly Session[];
   proposals?: readonly TaskProposal[];
   unpushed?: UnpushedWork;
+  containerWarnings?: readonly HealthWarning[];
   loading?: boolean;
 }) {
   const model = homeModel({ repos, sessions, graph: undefined, running: [], services: [], daemonRunning: true });
@@ -44,10 +46,12 @@ function NeedsYouOf({
       sessions={new Map(sessions.map((s) => [s.id, s]))}
       proposals={proposals}
       unpushed={unpushedRows(unpushed)}
+      containerWarnings={containerWarnings}
       selected={first ? `session:${first.id}` : null}
       onSelect={() => {}}
       onOpen={() => {}}
       onOpenProposal={() => {}}
+      onOpenContainerHealth={() => {}}
     />
   );
 }
@@ -77,6 +81,11 @@ const busy: GalleryState = {
         ],
         unreadable: [{ repo: "billing", message: "not a git repository" }],
       }}
+      containerWarnings={[
+        { id: "oom-kill", text: "The kernel killed 2 processes in the last hour because the container ran out of memory." },
+        { id: "processes-full", text: "3700 of the container's 4096 processes are in use; new ones will fail to start." },
+        { id: "backup-old", text: "2 repos have work on no remote, and the last backup is not made yet." },
+      ]}
     />
   ),
 };
