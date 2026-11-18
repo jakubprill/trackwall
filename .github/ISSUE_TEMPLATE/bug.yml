@@ -42,6 +42,12 @@ body:
     validations:
       required: true
   - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Settings > Diagnostics > "Copy diagnostics" (the version, the system, the doctor's checks and Trackwall's own errors, anonymized). Read it before you paste it.
+      render: markdown
+  - type: textarea
     id: logs
     attributes:
       label: Logs

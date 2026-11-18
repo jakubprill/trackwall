@@ -41,13 +41,21 @@ export async function measureFileWrites(folder: string, files: number): Promise<
     for (let i = 0; i < files; i++) {
       const file = join(dir, `Check${i}.java`);
       // Fresh content each time, so that a scanner's cache of files it has seen cannot skip the scan.
-      await writeFile(file, randomBytes(3072).toString("base64"));
+      await writeCheckFile(file, randomBytes(3072).toString("base64"));
       await readFile(file);
     }
     return (performance.now() - start) / files;
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Writes one file of a measurement only where nothing is yet: the temporary folder lies in folders a task session can
+ * write (the projects folder), so a file or link planted under a check file's name is refused, never written through.
+ */
+export function writeCheckFile(file: string, content: string): Promise<void> {
+  return writeFile(file, content, { flag: "wx" });
 }
 
 /**

@@ -1,8 +1,13 @@
-import { MERGE_REQUEST_THREADS_MAX, type MergeRequestThread, type MergeRequestThreads } from "@trackwall/protocol";
+import {
+  MERGE_REQUEST_THREADS_MAX,
+  type MergeRequestThread,
+  type MergeRequestThreads,
+  type SeenMergeRequestThread,
+} from "@trackwall/protocol";
 
 /**
  * The unresolved threads of a task's merge request in its panel (ADR-256): where each one is, which the user hands to
- * the agent at first, and what the list leaves out, in words.
+ * the agent, and what the list leaves out, in words.
  */
 
 /** Where a thread is: a line (a removed one says so), a whole file, or the merge request as a whole. */
@@ -13,9 +18,20 @@ export function threadPlace(thread: MergeRequestThread): string {
   return thread.line.side === "old" ? `${place} (removed line)` : place;
 }
 
-/** The threads picked at first: all of them, up to the most the agent takes at once. */
-export function firstPicks(threads: readonly MergeRequestThread[]): Set<string> {
-  return new Set(threads.slice(0, MERGE_REQUEST_THREADS_MAX).map((t) => t.id));
+/**
+ * What "Send to agent" hands over: each picked thread with the notes the user sees, in the list's order, so the daemon can
+ * refuse a thread that changed since. Nothing is picked at first: a thread's words come from other people, and the user
+ * reads each before it goes.
+ */
+export function pickedThreads(threads: readonly MergeRequestThread[], picked: ReadonlySet<string>): SeenMergeRequestThread[] {
+  return threads.filter((t) => picked.has(t.id)).map(({ id, notes }) => ({ id, notes }));
+}
+
+/** What a thread says under its notes: the replies on the repo host that Trackwall neither shows nor sends. */
+export function notesLeftOut(thread: MergeRequestThread): string | null {
+  if (thread.moreNotes === 0) return null;
+  const replies = thread.moreNotes === 1 ? "1 later reply" : `${thread.moreNotes} later replies`;
+  return `${replies} only on the repo host, not sent to the agent`;
 }
 
 /** Why "Send to agent" cannot go now, or `null` when it can. */

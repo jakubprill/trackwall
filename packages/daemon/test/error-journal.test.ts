@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { apiResult, ErrorJournal, errorJournalApi, workspaceApi } from "@trackwall/protocol";
+import { apiResult, Diagnostics, ErrorJournal, errorJournalApi, workspaceApi } from "@trackwall/protocol";
 import { EventHub } from "../src/api/event-hub.ts";
 import { type ApiServer, startApi } from "../src/api/server.ts";
 import { createFacade, type Facade, HOSTING_CLIS } from "../src/facade.ts";
@@ -36,6 +36,10 @@ function newFacade(): Facade {
     hostingClis: HOSTING_CLIS,
     userEnv: async () => process.env,
     uiDir,
+    tlsProbe: async () => ({ kind: "ok" }),
+    connectionProbe: async () => ({ kind: "ok" }),
+    diskSpace: async () => ({ disk: 1, free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
+    measureFileWrites: async () => 0.1,
     log: () => {},
   });
 }
@@ -124,6 +128,32 @@ describe("error journal", () => {
     expect(error?.frames.length).toBeGreaterThan(0);
     for (const frame of error?.frames ?? []) expect(frame).toMatch(/^packages\/daemon\/src\/.+:\d+$/);
   });
+
+  test(
+    "the diagnostics for a bug report hold the version, the system, every doctor check and the errors, with the user's paths and names replaced",
+    async () => {
+      await emptyJournal();
+      const restore = breakRepoList();
+      try {
+        expect((await post(workspaceApi.list.path)).status).toBe(500);
+      } finally {
+        restore();
+      }
+
+      const res = await post(errorJournalApi.diagnostics.path);
+      const parsed = apiResult(Diagnostics).parse(JSON.parse(res.body));
+      if (!parsed.ok) throw new Error(parsed.error.message);
+      const text = parsed.data.text;
+
+      expect(text).toStartWith("# Trackwall diagnostics\n\nTrackwall 0.0.0-test, daemon on ");
+      expect(text).toContain("\n## Doctor\n\n- ok · projects-folder: <projects>");
+      expect(text).toContain("\n## Trackwall errors (1)\n\n- daemon api:/api/workspace/list · TypeError · 1 time");
+      expect(text).toContain("cannot read <repo>/… on <host>");
+      expect(text).toContain("at packages/daemon/src/");
+      for (const own of [projects, home, hostname(), "orders-bff"]) expect(text).not.toContain(own);
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
 
   test("a request whose address the daemon cannot parse is one entry under a fixed area, and the daemon keeps answering", async () => {
     await emptyJournal();

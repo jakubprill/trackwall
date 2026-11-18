@@ -12,7 +12,7 @@ The doctor in Settings checks what Trackwall needs on your computer and says wha
 - One list of what Trackwall relies on: your projects folder, free disk space, folders an antivirus slows down, your workspace settings file, Git, Copilot CLI, the network your sessions use, the model provider of your session profile, mise, Java navigation once you set it up, and gh or glab for your repo hosts.
 - For each problem, the step that fixes it, such as the folder to add to Copilot CLI's trusted folders or the login command.
 - Behind a company proxy, the exact problem between your sessions and GitHub: a proxy that wants a login, or a company certificate Copilot CLI does not trust, with the value that fixes it.
-- A warning when your Copilot CLI is older than the version Trackwall is tested with.
+- A warning when your Copilot CLI is older or newer than the version Trackwall is tested with, also in a strip at the top of the window.
 - A fresh check whenever you open "Settings > Diagnostics" or click "Check again".
 
 ## How it works
@@ -31,7 +31,7 @@ The checks are:
 | Workspace settings file | every key of `workspace.yaml` can be read; one that cannot is named with its line, and [Config files](/features/config-files) shows them all |
 | Git | `git --version` answers; with a "Git program" chosen in Settings the line names the git it runs, and it warns when the "Git program" from Settings did not answer and git from `PATH` is used instead |
 | Git access to repo hosts | git reaches every repo host of your repos, the way a sync does (one repo per host, without asking for a password); a host it cannot reach is named with the reason, such as no SSH key, an unknown host key or no sign-in for HTTPS, and in a dev container the fix points to [Git and SSH](/guide/dev-container#git-and-ssh); shown only when a repo has an HTTPS or SSH remote |
-| Copilot CLI | Trackwall finds it the way it starts sessions, and it is not older than the version Trackwall is tested with |
+| Copilot CLI | Trackwall finds it the way it starts sessions, and it is the version Trackwall is tested with; an older or newer one is a warning |
 | Copilot CLI trusted folder | `trustedFolders` in Copilot CLI's `config.json` covers your projects folder, so Copilot CLI does not ask before working in each repo and task; "Trust folder" in [Get started](/features/get-started) adds it for you |
 | Copilot CLI sandbox for tasks | Copilot CLI's sandbox can run on this computer, so the tasks you put in it in "Settings > Agents > Sandbox" can start; on Linux it needs the `bubblewrap` package, must be able to make its namespaces and needs `/dev/net/tun` for its network; in a container without the sandbox it warns that tasks without approvals then run with the container's full access, until you give the container the sandbox or set `sandbox.tasks: off`; otherwise not shown when no task runs in it ([Approvals](/features/approvals)) |
 | Network for sessions | `github.com` and `api.githubcopilot.com` answer through the proxy your sessions use (`HTTPS_PROXY`, `NO_PROXY`) with a certificate Copilot CLI trusts (its own list plus `NODE_EXTRA_CA_CERTS`); when your company's proxy replaces certificates and this computer already trusts its certificate, the line names the file to put in `NODE_EXTRA_CA_CERTS` |
@@ -56,6 +56,7 @@ The doctor only looks. To time file writes it writes a few dozen small files int
 - The antivirus check compares your folders with each other. When an antivirus scans all of them alike, there is no warning, but the line still shows how long a file takes in each.
 - Your own MCP servers and the certificates of Java builds are not checked.
 - The model provider check tells whether something answers at the provider's address, not whether your key or model name is right; a session started with the profile shows that in its terminal.
+- Copilot CLI updates itself, often before a Trackwall tested with the new version comes out. While its version differs from the tested one, a strip at the top of every window says so, with "Diagnostics" to open this check and "Hide" to put it away until the next version. Sessions usually keep working; if one shows a wrong state, install the tested version again the way you installed Copilot CLI, or update Trackwall once it is tested with your version.
 - Whether Copilot CLI itself is signed in is not checked; a session that cannot sign in says so in its terminal.
 - [Get started](/features/get-started) shows the few checks that stand before a first session as steps.
 - Errors of Trackwall itself are listed under [Trackwall errors](/features/trackwall-errors).

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { AwaySummary } from "@/components/AwaySummary";
 import { CommandPalette } from "@/components/CommandPalette";
+import { CopilotVersionNotice } from "@/components/CopilotVersionNotice";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -249,6 +250,7 @@ export function App() {
               />
               <div className="flex min-w-0 flex-1 flex-col">
                 {appUpdate && <UpdateBanner handle={appUpdate} />}
+                {conn && <CopilotVersionNotice conn={conn} onDiagnostics={() => openSettings("diagnostics")} />}
                 <NotificationOffer />
                 <AwaySummary list={sessions.data} onOpen={openInSessions} />
                 <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />

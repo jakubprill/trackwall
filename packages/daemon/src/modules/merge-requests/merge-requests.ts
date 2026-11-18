@@ -12,6 +12,7 @@ import {
   type MergeRequestForm,
   type MergeRequestLookup,
   type MergeRequestTemplate,
+  type MergeRequestThread,
   type MergeRequestThreads,
   PIPELINE_FIX_LOGS_MAX,
   type Pipeline,
@@ -19,6 +20,7 @@ import {
   type PromptDelivery,
   type RepoHost,
   type ReproductionCheck,
+  type SeenMergeRequestThread,
   type Task,
   type TaskMergeRequest,
 } from "@trackwall/protocol";
@@ -350,14 +352,25 @@ export class MergeRequests {
   }
 
   /**
-   * Hands the threads the user picked to the task's agent (ADR-256): read again, so the agent gets each as the repo host
-   * shows it now, and a thread resolved since the user saw it stays out. Refused when none of them is unresolved now.
+   * Hands the threads the user picked to the task's agent (ADR-256), as the user saw them: read again, so a thread resolved
+   * since then stays out, and refused when a picked thread's notes differ from what the user saw (an edit or a reply since),
+   * since text from other people reaches the agent only once the user has read it. Refused when none is unresolved now.
    */
-  async sendThreads(id: string, picked: readonly string[]): Promise<{ delivery: PromptDelivery; sent: number }> {
+  async sendThreads(id: string, picked: readonly SeenMergeRequestThread[]): Promise<{ delivery: PromptDelivery; sent: number }> {
     const { project, mergeRequest } = await this.#openMergeRequest(id, "has no open merge request");
-    const wanted = new Set(picked);
     const now = await this.#readThreads(project, mergeRequest);
-    const threads = now.threads.filter((t) => wanted.has(t.id));
+    const current = new Map(now.threads.map((t) => [t.id, t]));
+    const stillOpen = picked.flatMap((seen) => {
+      const thread = current.get(seen.id);
+      return thread ? [{ seen, thread }] : [];
+    });
+    const changed = stillOpen.filter(({ seen, thread }) => !sameNotes(seen, thread)).length;
+    if (changed > 0)
+      throw new DomainError(
+        "bad_request",
+        `${changed} of the threads you picked changed on the repo host since you read them: read them again`,
+      );
+    const threads = stillOpen.map(({ thread }) => thread);
     if (threads.length === 0) throw new DomainError("bad_request", "the threads you picked are resolved or gone on the repo host now");
     const comments = { mergeRequest: now.mergeRequest, threads };
     return { delivery: this.#deps.tasks.askToAddressThreads(id, comments), sent: comments.threads.length };
@@ -443,5 +456,14 @@ function unknownHost(task: Task): DomainError {
 function asRepoUnavailable<T>(task: Task, work: Promise<T>): Promise<T> {
   return work.catch((err: unknown) => {
     throw new DomainError("repo_unavailable", `${task.branch}: ${messageOf(err)}`);
+  });
+}
+
+/** Whether a thread as the repo host has it now carries the very notes the user saw of it. */
+function sameNotes(seen: SeenMergeRequestThread, thread: MergeRequestThread): boolean {
+  if (seen.notes.length !== thread.notes.length) return false;
+  return thread.notes.every((note, i) => {
+    const before = seen.notes[i];
+    return before !== undefined && before.author === note.author && before.text === note.text && before.at === note.at;
   });
 }
