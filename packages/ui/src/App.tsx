@@ -21,6 +21,7 @@ import { DaemonPlaceContext, useDaemonPlace } from "@/lib/desktop";
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
 import { FolderTerminalsLive } from "@/lib/folder-terminals";
+import { readOpenSteps } from "@/lib/get-started-memory";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { IS_MAC } from "@/lib/platform";
 import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection } from "@/lib/session-entries";
@@ -361,7 +362,13 @@ export function App() {
                         <div className="p-6">
                           <SettingsView
                             conn={conn}
-                            initialCategory={settingsCategory ?? firstSettingsCategory(sessions.data?.sessions.length)}
+                            initialCategory={
+                              settingsCategory ??
+                              firstSettingsCategory(
+                                sessions.data?.sessions.length,
+                                readOpenSteps(() => window.localStorage),
+                              )
+                            }
                             update={appUpdate}
                             warmupLive={warmupLive}
                             mcpCallsLive={mcpCallsLive}
