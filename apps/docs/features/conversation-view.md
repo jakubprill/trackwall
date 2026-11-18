@@ -1,11 +1,16 @@
 ---
 title: Conversation view
 description: Follow an agent as a conversation you can scroll, select and copy, with its commands, file changes and approvals as rows you can open.
+status: preview
 ---
 
 # Conversation view
 
 Follow an agent as a conversation you can scroll, select and copy, with its commands, file changes and approvals as rows you can open.
+
+::: warning Preview
+The conversation view runs on Copilot CLI's Agent Client Protocol, which Copilot CLI itself still marks as preview, so what it shows and how it answers approvals can change in a 1.x version.
+:::
 
 ## What you get
 

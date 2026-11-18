@@ -1,6 +1,7 @@
 ---
 title: App updates
 description: Trackwall tells you when a new version is out and installs it with one click, checked against the release signature.
+status: stable
 ---
 
 # App updates

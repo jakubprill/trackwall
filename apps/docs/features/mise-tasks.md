@@ -1,6 +1,7 @@
 ---
 title: mise tasks
 description: Run, stop and follow the mise tasks of any repo, with live logs and the errors picked out.
+status: stable
 ---
 
 # mise tasks

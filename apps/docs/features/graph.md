@@ -1,6 +1,7 @@
 ---
 title: Connection graph
 description: See which repo uses which, through shared packages and HTTP calls, with the line that proves it.
+status: stable
 ---
 
 # Connection graph

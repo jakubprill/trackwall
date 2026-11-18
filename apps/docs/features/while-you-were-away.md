@@ -1,6 +1,7 @@
 ---
 title: While you were away
 description: Come back from a meeting to one line that says which agents finished, which wait for you and which may be stuck, each a click away.
+status: stable
 ---
 
 # While you were away

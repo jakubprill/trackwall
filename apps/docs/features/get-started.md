@@ -1,6 +1,7 @@
 ---
 title: Get started
 description: One list in Settings shows what is left before your first session and says when Trackwall is ready.
+status: stable
 ---
 
 # Get started

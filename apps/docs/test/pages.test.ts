@@ -80,6 +80,19 @@ test("a feature page has the sections of the template in its order, with only re
   }
 });
 
+test("every feature page says whether it is stable or a preview, and a preview page says so under its lede", () => {
+  for (const file of featurePages) {
+    const { fields, body } = frontmatter(`features/${file}`);
+    const [, , , , notice] = body.split("\n");
+    expect({ file, status: fields.status, notice }).toEqual({
+      file,
+      status: fields.status === "preview" ? "preview" : "stable",
+      notice: fields.status === "preview" ? "::: warning Preview" : notice,
+    });
+    if (fields.status !== "preview") expect({ file, notice: body.includes("::: warning Preview") }).toEqual({ file, notice: false });
+  }
+});
+
 test("'What you get' lists three to five things", () => {
   for (const file of featurePages) {
     const whatYouGet = sections(featurePage(file).body).find((section) => section.heading === "What you get");

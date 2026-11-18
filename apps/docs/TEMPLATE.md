@@ -15,17 +15,26 @@ The page is done when a colleague who has never opened Trackwall can read it alo
 
 The pages in `guide/` (what Trackwall is, installing it, connecting Copilot CLI, and the "How it works" pages that explain how several features fit together, such as where agents work) are not features and keep their own shape: the same frontmatter and lede, then the steps the reader follows or, on a "How it works" page, the sections that explain the idea. A fact of one feature stays on its page; a "How it works" page shows how the facts connect and links to the pages. The "How Trackwall works" page is the exception to leaving out how Trackwall is built: it is for the developer who wants to know what talks to what, so it names the protocols and processes, still in plain words. A diagram goes in a ```` ```mermaid ```` code block, which the site draws in the reader's theme; keep its labels in the words of the app, as in the text. The same rules of writing apply to them.
 
+## Stable or preview
+
+Every feature page says in its frontmatter whether the feature is `stable` or a `preview`. A stable feature keeps what it does, its settings and its agent tools through every 1.x version: a change that breaks one is announced a version ahead, in the release note and on the page. A preview can still change or go away in a 1.x version, for example because it stands on something Copilot CLI itself calls a preview or on files Copilot CLI writes for itself. A preview page has a "Preview" box right under its lede that says what can change, and "All features" marks it. A new feature starts as a preview when its shape is not settled yet; it becomes stable by changing the field and removing the box.
+
 ## The page
 
 ```md
 ---
 title: <Feature name, as in the sidebar>
 description: <One sentence, under 160 characters: what the reader can do with it. Shown in "All features", in search results and in llms.txt.>
+status: <stable or preview, see "Stable or preview" above>
 ---
 
 # <Feature name>
 
 <The description sentence again, as the lede.>
+
+::: warning Preview
+<Only on a preview page: one or two sentences on what can still change and why.>
+:::
 
 ![<What the picture shows, as a sentence.>](/screenshots/<name>.png)
 

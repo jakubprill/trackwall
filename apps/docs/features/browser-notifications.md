@@ -1,6 +1,7 @@
 ---
 title: Notifications in the browser
 description: See in the tab's title how many agents wait for you, and get a browser notification when one needs you while you work elsewhere.
+status: stable
 ---
 
 # Notifications in the browser
