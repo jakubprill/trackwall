@@ -44,9 +44,13 @@ describe("text in the UI", () => {
 
     const found: string[] = [];
     const views = page.getByRole("navigation", { name: "Views" }).getByRole("button");
-    for (const name of await views.allInnerTexts()) {
-      const view = name.split("\n")[0] ?? name;
-      await views.filter({ hasText: view }).click();
+    // By position, named by the label: a view's text can be only a number (a shortcut, a waiting count), which another
+    // view's text holds too, such as Home's "1" and the "1" waiting in Sessions.
+    for (let i = 0; i < (await views.count()); i++) {
+      const button = views.nth(i);
+      const view = await button.getAttribute("aria-label");
+      if (view === null) throw new Error(`view button ${i} has no aria-label`);
+      await button.click();
       // A view loads its data after it shows; the network quiets down once it has.
       await page.waitForLoadState("networkidle");
       found.push(...(await outside(page, view)));
