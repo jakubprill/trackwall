@@ -101,7 +101,8 @@ describe("restoring a work backup (ADR-275)", () => {
       const { backup, remote } = await containerWithWork();
       const { facade, projects } = await facadeWith(true);
       const api = join(projects, "api");
-      gitIn(projects, "clone", "-q", "-b", "main", remote, api);
+      // Without CRLF on checkout (Windows' core.autocrlf), so the restored file reads as it was committed.
+      gitIn(projects, "clone", "-q", "-c", "core.autocrlf=false", "-b", "main", remote, api);
       const before = { refs: gitIn(api, "for-each-ref"), objects: gitIn(api, "count-objects", "-v") };
 
       const plan = await facade.workRestore.upload(bytesOf(backup));

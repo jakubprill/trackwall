@@ -38,6 +38,7 @@ mod theme;
 mod updates;
 mod window_effect;
 mod windows;
+mod work_backups;
 mod zoom;
 
 use badge::TrayIcons;
@@ -147,6 +148,7 @@ fn main() {
         .manage(theme::Themes::default())
         .manage(keep_screen_on::ScreenOn::default())
         .manage(dropped_files::DroppedFiles::default())
+        .manage(work_backups::WorkBackups::default())
         .invoke_handler(tauri::generate_handler![
             daemon_connection,
             retry_daemon,
@@ -179,7 +181,9 @@ fn main() {
             keep_screen_on::keep_screen_on,
             keep_screen_on::set_keep_screen_on,
             zoom::zoom_window,
-            theme::set_theme
+            theme::set_theme,
+            work_backups::work_backups,
+            work_backups::show_work_backups
         ])
         .setup(move |app| {
             if let Some(remote) = remote_daemon::load(app.handle()) {
@@ -210,6 +214,7 @@ fn main() {
             notification::init(app.handle());
             global_shortcut::register(app.handle());
             attention::watch(app.handle().clone(), Arc::clone(&state), TRAY_ID, tray_icons);
+            work_backups::watch(app.handle().clone(), Arc::clone(&state));
             link::listen(app.handle());
             Ok(())
         })
