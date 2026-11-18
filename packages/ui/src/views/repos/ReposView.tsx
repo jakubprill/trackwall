@@ -1,8 +1,9 @@
 import { NO_MISE_TAG, type Repo, type RepoList, type RepoTag, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
-import { FolderOpen, Plus, RefreshCw, SquareTerminal, Star } from "lucide-react";
+import { FolderOpen, ListChecks, Plus, RefreshCw, SquareTerminal, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
+import { MoreMenu } from "@/components/MoreMenu";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
@@ -15,11 +16,11 @@ import type { SettingsCategory } from "@/lib/settings-categories";
 import { starredFirst } from "@/lib/starred-repos";
 import { statusTextClass } from "@/lib/status-tone";
 import { listSyncBadge, type SyncBadge, syncedByPath } from "@/lib/sync-state";
-import { type BatchRunHandle, useBatchRun } from "@/lib/use-batch-run";
+import { useBatchRun } from "@/lib/use-batch-run";
 import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { type StarredReposHandle, useStarredRepos } from "@/lib/use-starred-repos";
-import { type SyncRunHandle, useSyncRun } from "@/lib/use-sync-run";
+import { useSyncRun } from "@/lib/use-sync-run";
 import { useTagFilter } from "@/lib/use-tag-filter";
 import { cn } from "@/lib/utils";
 import { BatchBar, BatchPanel } from "./BatchView.tsx";
@@ -98,17 +99,16 @@ export function ReposView({
             <Button variant="ghost" size="icon" onClick={() => setPanel("clone")} aria-label="Add a repo from GitLab or GitHub">
               <Plus />
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => onOpenSettings("workspace")} aria-label="Change the projects folder">
-              <FolderOpen />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={list.reload} aria-label="Refresh the repo list">
-              <RefreshCw />
-            </Button>
+            <FolderMenu
+              projectsDir={actionsDir}
+              onShow={setPanel}
+              onChangeFolder={() => onOpenSettings("workspace")}
+              onRefresh={list.reload}
+            />
           </span>
         </div>
-        {actionsDir !== null && (
-          <FolderActions projectsDir={actionsDir} sync={sync} batch={batch} shellShown={shown === "shell"} onShow={setPanel} />
-        )}
+        {actionsDir !== null && <SyncBar sync={sync} onShow={() => setPanel("sync")} />}
+        <BatchBar batch={batch} onShow={() => setPanel("batch")} />
         <TagFilter counts={filter.counts} selected={filter.selected} onToggle={filter.toggle} onClear={filter.clear} />
         <nav aria-label="Repo list" className="flex-1 overflow-y-auto px-2 pb-4">
           {list.error && (
@@ -206,39 +206,64 @@ function repoCount(shown: number, all: number): string {
   return shown === all ? twoDigits(all) : `${twoDigits(shown)}/${twoDigits(all)}`;
 }
 
-/** Under the list header: the projects folder path with its shell, and actions on all its repos at once. */
-function FolderActions({
+/**
+ * What the list's header does less often than adding a repo and "Sync all" (ADR-273), in its "More" menu: the projects
+ * folder's path, its shell and the batch command, which need the folder, then another folder and a refresh of the list.
+ */
+function FolderMenu({
   projectsDir,
-  sync,
-  batch,
-  shellShown,
   onShow,
+  onChangeFolder,
+  onRefresh,
 }: {
-  projectsDir: string;
-  sync: SyncRunHandle;
-  batch: BatchRunHandle;
-  shellShown: boolean;
-  onShow: (panel: Extract<Panel, "sync" | "batch" | "shell">) => void;
+  /** The folder the actions on all repos work in; none while it is not set or not readable. */
+  projectsDir: string | null;
+  onShow: (panel: Extract<Panel, "batch" | "shell">) => void;
+  onChangeFolder: () => void;
+  onRefresh: () => void;
 }) {
   return (
-    <>
-      <div className="flex items-center gap-1 pr-2 pb-2 pl-4">
-        <p className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs" title={projectsDir}>
-          {projectsDir}
-        </p>
-        <Button
-          variant={shellShown ? "secondary" : "ghost"}
-          size="sm"
-          onClick={() => onShow("shell")}
-          aria-pressed={shellShown}
-          title="A shell in the projects folder, with all its repos"
-        >
-          <SquareTerminal /> Shell
-        </Button>
-      </div>
-      <SyncBar sync={sync} onShow={() => onShow("sync")} />
-      <BatchBar batch={batch} onShow={() => onShow("batch")} />
-    </>
+    <MoreMenu label="More actions on the projects folder" iconOnly>
+      {(close) => {
+        const item = (action: () => void) => () => {
+          close();
+          action();
+        };
+        return (
+          <>
+            {projectsDir !== null && (
+              <>
+                <p className="text-muted-foreground truncate px-2 py-1 font-mono text-xs" title={projectsDir}>
+                  {projectsDir}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={item(() => onShow("shell"))}
+                  title="A shell in the projects folder, with all its repos"
+                >
+                  <SquareTerminal /> Shell
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={item(() => onShow("batch"))}
+                  title="The same steps (sync, tools, dependencies, build) on many repos at once"
+                >
+                  <ListChecks /> Batch command
+                </Button>
+              </>
+            )}
+            <Button variant="ghost" size="sm" onClick={item(onChangeFolder)}>
+              <FolderOpen /> Change the projects folder
+            </Button>
+            <Button variant="ghost" size="sm" onClick={item(onRefresh)}>
+              <RefreshCw /> Refresh the repo list
+            </Button>
+          </>
+        );
+      }}
+    </MoreMenu>
   );
 }
 

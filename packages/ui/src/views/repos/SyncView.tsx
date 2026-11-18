@@ -49,7 +49,7 @@ export function SyncView({ sync, canSync }: { sync: SyncRunHandle; canSync: bool
   );
 }
 
-/** Under the folder path in the repo list: starting the sync and the way to its results; a start shows them at once. */
+/** Under the header of the repo list: starting the sync and the way to its results; a start shows them at once. */
 export function SyncBar({ sync, onShow }: { sync: SyncRunHandle; onShow: () => void }) {
   return (
     <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
