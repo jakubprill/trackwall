@@ -3,7 +3,7 @@ import { alwaysAllowable } from "./always-allow.ts";
 import { apiEndpoints, Done } from "./api.ts";
 import { WorkingTreeChanges } from "./changes.ts";
 import { CloneJob, CloneRequest, HostRepos, RemoteRepoSearch, RepoHosts } from "./repo-hosts.ts";
-import { SyncRun } from "./sync.ts";
+import { PullResult, SyncRun } from "./sync.ts";
 import { TaskModel } from "./task-model.ts";
 
 /**
@@ -590,4 +590,10 @@ export const workspaceApi = {
   sync: endpoint("sync", z.object({}).strict(), SyncRun),
   /** The last sync of the current projects folder since the daemon started; `null` when there was none. */
   syncRun: endpoint("sync-run", z.object({}).strict(), SyncRun.nullable()),
+  /**
+   * Pulls one repo from its header (ADR-269): the sync of its default branch, then a fast-forward of the checked-out branch
+   * to the branch it tracks, never a merge, rebase or overwrite; answers when both are done. No MCP tool does it: an agent
+   * does not move the user's branches.
+   */
+  pull: endpoint("pull", RepoRequest, PullResult),
 };

@@ -14,7 +14,7 @@ Browse, clone and sync every git repo in your projects folder from one list.
 - Every repo of your projects folder in one list, with its branch, its uncommitted changes and how far it is ahead of or behind its remote, and the repos you starred at the top.
 - The card, files, commits, uncommitted changes (file by file, with the diff) and README of each repo without leaving Trackwall, and VS Code one click away.
 - A search across your GitLab and GitHub hosts that clones the repo you pick in one click.
-- "Sync all": every repo fetched, and every default branch moved forward where that is safe.
+- "Sync all": every repo fetched, and every default branch moved forward where that is safe; "Pull" in a repo's header does the same for the branch you have checked out.
 - What is going on in a repo at a glance: its sessions, tasks, task proposals and running mise tasks, one click from each.
 
 ## How it works
@@ -31,6 +31,8 @@ The list and the repo header count your uncommitted work as "3 changed, 1 new". 
 
 "Sync all" fetches every repo and moves its default branch to the remote one when that is a clean fast-forward. A repo with changes on its default branch, or with a branch that has diverged, stays untouched. When the sync is done, a panel says in one sentence per repo what happened: whether the default branch moved, whether your files changed, and how many uncommitted files are left. The same sentence is in the tooltip on the list.
 
+"Sync all" moves only the default branch. When you have another branch checked out, such as `develop`, its fetch is what makes the "Upstream" tile in the repo header show commits to pull, for example "↓ 320 origin/develop". The "Pull 320" button under that number fetches the repo, moves the default branch as "Sync all" does, and moves your checked-out branch to the branch it tracks when that is a clean fast-forward. It never merges, rebases, pushes or touches your uncommitted changes. When it cannot pull, the tile says why and where to go instead: "Show changes" when changed files are in the way, "Open Shell" when your branch and the remote one have diverged. When a session or a mise task works in the repo folder itself, the button asks first, because pulling changes files under it; tasks work in their own folders and are not affected. When it is done, the tile says how many commits came, also the ones the fetch found after the number was shown.
+
 The "+" button above the list searches the GitLab and GitHub hosts you added in "Settings > Repo hosts" and clones the repo you pick into the projects folder. The search matches the repo's name, group and description. On GitLab, "My projects" covers the projects you are a member of, also through a group, and "All I can see" adds every project you can open, such as other teams' internal ones. You can narrow the list to one topic, one language (`Java`, `TypeScript`) or the repos you starred on the host, and each repo shows its topics. GitLab gives the results 100 at a time, most recently changed first; "Show more" adds the next 100. If the [local config backup](/features/local-config) has files for that repo, such as `mise.local.toml`, they are put back before the clone shows as done.
 
 ## Use it
@@ -39,7 +41,8 @@ The "+" button above the list searches the GitLab and GitHub hosts you added in 
 2. Open "Repos" (Ctrl+2, ⌘2 on macOS) and select a repo.
 3. Star the repos you open most, so they stay at the top.
 4. Press "Sync all" to bring every repo up to date.
-5. To clone, press "+", search for the repo (or pick a topic or language) and press "Clone" next to it.
+5. When a repo's "Upstream" tile shows commits to pull, press "Pull" under the number.
+6. To clone, press "+", search for the repo (or pick a topic or language) and press "Clone" next to it.
 
 ## Good to know
 
