@@ -117,6 +117,28 @@ describe.skipIf(process.versions.bun === undefined)("a folder terminal (real PTY
     expect(await connect(terminal.id).closed).toBe(PTY_CLOSE_NOT_FOUND);
   }, 60_000);
 
+  test("opening a place again right after a close gives a new shell at once, while the old one ends in the background", async () => {
+    const old = await daemon.post(terminalsApi.start, { repo: "shop", task: null });
+    const oldWindow = connect(old.id);
+    await oldWindow.opened;
+    let closed = false;
+    const closing = daemon.post(terminalsApi.close, { terminal: old.id }).then(() => {
+      closed = true;
+    });
+    await until(async () => (await daemon.post(terminalsApi.list, {})).length === 0, "the closed shell off the list");
+
+    const fresh = await daemon.post(terminalsApi.start, { repo: "shop", task: null });
+
+    expect(fresh).toMatchObject({ repo: "shop", task: null, run: { kind: "running" } });
+    expect(fresh.id).not.toBe(old.id);
+    expect(await oldWindow.closed).toBe(PTY_CLOSE_NOT_FOUND);
+    // A login shell ignores the gentle stop, so the old one ends only after the grace period: the new one did not wait.
+    if (process.platform !== "win32") expect(closed).toBe(false);
+    await closing;
+    expect((await daemon.post(terminalsApi.list, {})).map((t) => t.id)).toEqual([fresh.id]);
+    await daemon.post(terminalsApi.close, { terminal: fresh.id });
+  }, 60_000);
+
   test("a shell that ends by itself stays listed as ended, and opening the place again starts a new shell in it", async () => {
     const terminal = await daemon.post(terminalsApi.start, { repo: "shop", task: null });
     const window = connect(terminal.id);

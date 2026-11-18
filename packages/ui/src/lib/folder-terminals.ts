@@ -21,3 +21,16 @@ export function terminalAt(list: readonly FolderTerminal[], place: TerminalPlace
 export function reopensOnOpen(state: { loaded: boolean; hasLiveShell: boolean; alreadyAsked: boolean }): boolean {
   return state.loaded && state.hasLiveShell && !state.alreadyAsked;
 }
+
+/**
+ * The terminal a Shell tab shows: the list's, or until the list has it the start's own answer, but never one the tab
+ * asked to close. A close hides the shell at once and the daemon ends it in the background, so the tab offers a new
+ * shell while the old one is still ending, also while the list still names the old one for a moment.
+ */
+export function shownTerminal(state: {
+  listed: FolderTerminal | undefined;
+  started: FolderTerminal | undefined;
+  closing: ReadonlySet<string>;
+}): FolderTerminal | undefined {
+  return [state.listed, state.started].find((terminal) => terminal !== undefined && !state.closing.has(terminal.id));
+}
