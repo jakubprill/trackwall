@@ -384,6 +384,9 @@ function clonedOnDevelop(projects: string, remotes: string, name: string): { ups
   return { upstream, clone };
 }
 
+/** A pull that leaves changes where they are, as the Pull button does. */
+const PLAIN = { putAside: false };
+
 const behind = (dir: string) => gitIn(dir, "rev-list", "--count", "HEAD..@{upstream}").trim();
 
 describe("pull of one repo from its header", () => {
@@ -396,12 +399,13 @@ describe("pull of one repo from its header", () => {
       commitOnBranch(api.upstream, "develop", { "feature.txt": "2" }, "second on develop");
       commitFiles(api.upstream, { "hotfix.txt": "1" }, "on main");
 
-      const result = await workspace.pullRepo("api");
+      const result = await workspace.pullRepo("api", PLAIN);
 
       expect(result).toEqual({
         defaultBranch: { state: "updated", branch: "main", remoteBranch: "origin/main", commits: 1 },
         checkedOut: { state: "updated", branch: "develop", remoteBranch: "origin/develop", commits: 2 },
         workingTree: { branch: "develop", changed: 0, untracked: 0 },
+        putAside: null,
       });
       expect(readFileSync(join(api.clone, "feature.txt"), "utf8")).toBe("2");
       expect(behind(api.clone)).toBe("0");
@@ -421,7 +425,7 @@ describe("pull of one repo from its header", () => {
       await finished(workspace);
       expect(behind(api.clone)).toBe("1");
 
-      await workspace.pullRepo("api");
+      await workspace.pullRepo("api", PLAIN);
       expect(behind(api.clone)).toBe("0");
     },
     GIT_HEAVY_MS,
@@ -434,7 +438,7 @@ describe("pull of one repo from its header", () => {
       const api = cloned(projects, remotes, "api");
       commitFiles(api.upstream, { "new.txt": "1" }, "on main");
 
-      const result = await workspace.pullRepo("api");
+      const result = await workspace.pullRepo("api", PLAIN);
 
       expect(result.defaultBranch).toEqual({ state: "updated", branch: "main", remoteBranch: "origin/main", commits: 1 });
       expect(result.checkedOut).toBeNull();
@@ -454,8 +458,8 @@ describe("pull of one repo from its header", () => {
       commitFiles(diverged.clone, { "local.txt": "1" }, "local");
       const before = { dirty: head(dirty.clone), diverged: head(diverged.clone) };
 
-      const dirtyResult = await workspace.pullRepo("dirty");
-      const divergedResult = await workspace.pullRepo("diverged");
+      const dirtyResult = await workspace.pullRepo("dirty", PLAIN);
+      const divergedResult = await workspace.pullRepo("diverged", PLAIN);
 
       expect(dirtyResult.checkedOut).toEqual({
         state: "skipped",
@@ -485,17 +489,17 @@ describe("pull of one repo from its header", () => {
       gitIn(gone.upstream, "branch", "-D", "develop");
       gitIn(gone.clone, "update-ref", "-d", "refs/remotes/origin/develop");
 
-      expect((await workspace.pullRepo("detached")).checkedOut).toEqual({
+      expect((await workspace.pullRepo("detached", PLAIN)).checkedOut).toEqual({
         state: "skipped",
         reason: "detached",
         message: "no branch is checked out, so there is nothing to pull into",
       });
-      expect((await workspace.pullRepo("local")).checkedOut).toEqual({
+      expect((await workspace.pullRepo("local", PLAIN)).checkedOut).toEqual({
         state: "skipped",
         reason: "no-upstream",
         message: "spike tracks no branch",
       });
-      expect((await workspace.pullRepo("gone")).checkedOut).toEqual({
+      expect((await workspace.pullRepo("gone", PLAIN)).checkedOut).toEqual({
         state: "skipped",
         reason: "no-upstream",
         message: "origin/develop, which develop tracks, is gone",
@@ -512,8 +516,130 @@ describe("pull of one repo from its header", () => {
       gitIn(api.clone, "remote", "set-url", "origin", join(remotes, "missing"));
       const before = head(api.clone);
 
-      await expect(workspace.pullRepo("api")).rejects.toThrow();
+      await expect(workspace.pullRepo("api", PLAIN)).rejects.toThrow();
       expect(head(api.clone)).toBe(before);
+    },
+    GIT_HEAVY_MS,
+  );
+});
+
+describe("putting changes aside to pull", () => {
+  const PUT_ASIDE = { putAside: true };
+
+  test(
+    "changed tracked files go into a Trackwall stash, the branch moves, untracked files stay, and restoring brings the changes back",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const api = clonedOnDevelop(projects, remotes, "api");
+      commitOnBranch(api.upstream, "develop", { "feature.txt": "remote" }, "on develop");
+      writeFileSync(join(api.clone, "README.md"), "a test edit\n");
+      writeFileSync(join(api.clone, "notes.txt"), "untracked\n");
+
+      expect(await workspace.putAsideFiles("api")).toEqual([{ path: "README.md", change: "modified" }]);
+      const result = await workspace.pullRepo("api", PUT_ASIDE);
+
+      expect(result.checkedOut).toEqual({ state: "updated", branch: "develop", remoteBranch: "origin/develop", commits: 1 });
+      expect(result.putAside).toMatchObject({ branch: "develop", files: ["README.md"] });
+      expect(readFileSync(join(api.clone, "README.md"), "utf8")).toBe("# api\n");
+      expect(readFileSync(join(api.clone, "notes.txt"), "utf8")).toBe("untracked\n");
+      const put = result.putAside;
+      if (put === null) throw new Error("the pull put nothing aside");
+      expect(await workspace.putAsides("api")).toEqual([put]);
+
+      const id = put.id;
+      expect(await workspace.restorePutAside("api", id)).toEqual([]);
+      expect(readFileSync(join(api.clone, "README.md"), "utf8")).toBe("a test edit\n");
+      expect(behind(api.clone)).toBe("0");
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
+    "a pull that still cannot move the branch brings the changes back at once and puts nothing aside",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const api = clonedOnDevelop(projects, remotes, "api");
+      commitOnBranch(api.upstream, "develop", { "feature.txt": "remote" }, "on develop");
+      commitFiles(api.clone, { "local.txt": "1" }, "local");
+      writeFileSync(join(api.clone, "README.md"), "a test edit\n");
+
+      const result = await workspace.pullRepo("api", PUT_ASIDE);
+
+      expect(result.checkedOut).toMatchObject({ state: "skipped", reason: "diverged" });
+      expect(result.putAside).toBeNull();
+      expect(readFileSync(join(api.clone, "README.md"), "utf8")).toBe("a test edit\n");
+      expect(gitIn(api.clone, "stash", "list")).toBe("");
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
+    "a pull that finds the branch already up to date brings the changes back and puts nothing aside",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const api = clonedOnDevelop(projects, remotes, "api");
+      writeFileSync(join(api.clone, "README.md"), "a test edit\n");
+
+      const result = await workspace.pullRepo("api", PUT_ASIDE);
+
+      expect(result.checkedOut).toMatchObject({ state: "up-to-date", branch: "develop" });
+      expect(result.putAside).toBeNull();
+      expect(readFileSync(join(api.clone, "README.md"), "utf8")).toBe("a test edit\n");
+      expect(gitIn(api.clone, "stash", "list")).toBe("");
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
+    "a failing fetch brings the changes back and is an error",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const api = clonedOnDevelop(projects, remotes, "api");
+      gitIn(api.clone, "remote", "set-url", "origin", join(remotes, "missing"));
+      writeFileSync(join(api.clone, "README.md"), "a test edit\n");
+
+      await expect(workspace.pullRepo("api", PUT_ASIDE)).rejects.toThrow();
+      expect(readFileSync(join(api.clone, "README.md"), "utf8")).toBe("a test edit\n");
+      expect(gitIn(api.clone, "stash", "list")).toBe("");
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
+    "the user's own stashes are not listed, and deleting a put-aside leaves them alone",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const api = cloned(projects, remotes, "api");
+      writeFileSync(join(api.clone, "README.md"), "mine\n");
+      gitIn(api.clone, "stash", "push", "-q", "-m", "my own work");
+      commitFiles(api.upstream, { "new.txt": "1" }, "on main");
+      writeFileSync(join(api.clone, "README.md"), "a test edit\n");
+
+      const result = await workspace.pullRepo("api", PUT_ASIDE);
+      expect(result.defaultBranch).toMatchObject({ state: "updated", commits: 1 });
+      const id = result.putAside?.id ?? "";
+      expect((await workspace.putAsides("api")).map((p) => p.id)).toEqual([id]);
+
+      expect(await workspace.deletePutAside("api", id)).toEqual([]);
+      expect(gitIn(api.clone, "stash", "list", "--format=%gs").trim()).toBe("On main: my own work");
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
+    "restoring over files that changed meanwhile is refused, and the put-aside stays",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      const api = cloned(projects, remotes, "api");
+      commitFiles(api.upstream, { "new.txt": "1" }, "on main");
+      writeFileSync(join(api.clone, "README.md"), "a test edit\n");
+      const result = await workspace.pullRepo("api", PUT_ASIDE);
+      writeFileSync(join(api.clone, "README.md"), "another edit\n");
+      const id = result.putAside?.id ?? "";
+
+      await expect(workspace.restorePutAside("api", id)).rejects.toMatchObject({ code: "bad_request" });
+      expect((await workspace.putAsides("api")).map((p) => p.id)).toEqual([id]);
+      expect(readFileSync(join(api.clone, "README.md"), "utf8")).toBe("another edit\n");
     },
     GIT_HEAVY_MS,
   );

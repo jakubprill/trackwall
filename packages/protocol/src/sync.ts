@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PutAside } from "./put-aside.ts";
 
 /**
  * Sync of all repos in the projects folder (§4.5, §7 "Sync", ADR-21): fetch and fast-forward of the default branch,
@@ -119,5 +120,10 @@ export const PullResult = z.object({
   defaultBranch: SyncBranchOutcome,
   checkedOut: PullBranchOutcome.nullable(),
   workingTree: SyncWorkingTree.nullable(),
+  /**
+   * The changes put aside before the pull when the user asked for it (ADR-271); `null` when nothing was put aside, also
+   * when the pull could not move the branch and the changes were brought back.
+   */
+  putAside: PutAside.nullable(),
 });
 export type PullResult = z.infer<typeof PullResult>;

@@ -9,7 +9,7 @@ describe("batch command in the UI", () => {
       { step: "sync", state: "running" },
       { step: "sync", state: "done", detail: "main +2" },
       { step: "build", state: "done", detail: null },
-      { step: "setup", state: "skipped", message: "the repo has no setup mise task" },
+      { step: "setup", state: "skipped", message: "the repo has no setup mise task", syncReason: null },
       { step: "build", state: "failed", message: "exited with code 1", lastLines: [] },
       { step: "tools", state: "cancelled" },
     ];
@@ -65,7 +65,7 @@ describe("batch command in the UI", () => {
           ...repo,
           steps: [
             { step: "sync", state: "failed", message: "Permission denied (publickey).", lastLines: [] },
-            { step: "build", state: "skipped", message: "skipped after step sync failed" },
+            { step: "build", state: "skipped", message: "skipped after step sync failed", syncReason: null },
           ],
         },
       ],

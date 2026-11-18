@@ -36,7 +36,7 @@ export function upstreamOffer(status: RepoStatusOk): UpstreamOffer {
   if (changed > 0)
     return {
       kind: "blocked",
-      message: `${countLabel(changed, { one: "changed file", other: "changed files" })} on ${branch}. Commit or stash ${changed === 1 ? "it" : "them"} first.`,
+      message: `${countLabel(changed, { one: "changed file", other: "changed files" })} on ${branch} ${changed === 1 ? "is" : "are"} in the way.`,
       way: "changes",
     };
   return { kind: "pull", behind: upstream.behind };

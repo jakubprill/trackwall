@@ -22,7 +22,7 @@ import { type StarredReposHandle, useStarredRepos } from "@/lib/use-starred-repo
 import { type SyncRunHandle, useSyncRun } from "@/lib/use-sync-run";
 import { useTagFilter } from "@/lib/use-tag-filter";
 import { cn } from "@/lib/utils";
-import { BatchBar, BatchView } from "./BatchView.tsx";
+import { BatchBar, BatchPanel } from "./BatchView.tsx";
 import { CloneView } from "./CloneView.tsx";
 import { ProjectsFolderShell } from "./ProjectsFolderShell.tsx";
 import { RepoDetail } from "./RepoDetail.tsx";
@@ -150,7 +150,16 @@ export function ReposView({
         {shown === "clone" && <CloneView conn={conn} onCloned={list.reload} onOpenSettings={onOpenSettings} />}
         {shown === "sync" && <SyncView sync={sync} canSync={canSync} />}
         {/* A new tag filter is a new group of repos: the panel starts with all of them ticked. */}
-        {shown === "batch" && <BatchView key={filter.selected.join(",")} batch={batch} repos={repos} />}
+        {shown === "batch" && (
+          <BatchPanel
+            key={filter.selected.join(",")}
+            conn={conn}
+            batch={batch}
+            repos={repos}
+            sessions={sessions}
+            runningLive={runningLive}
+          />
+        )}
         {shown === "shell" && actionsDir !== null && <ProjectsFolderShell conn={conn} projectsDir={actionsDir} />}
         {shown === "repo" && current && (
           <RepoDetail

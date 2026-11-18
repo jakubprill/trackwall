@@ -20,11 +20,11 @@ describe("what the Upstream tile offers", () => {
     expect(offer).toEqual({ kind: "pull", behind: 3 });
   });
 
-  test("changed tracked files stop the pull and lead to the Changes tab", () => {
+  test("changed tracked files stop the pull and lead to putting them aside or to the Changes tab", () => {
     const offer = upstreamOffer(status({ changes: 4, upstream: { name: "origin/develop", ahead: 0, behind: 320 } }));
     expect(offer).toEqual({
       kind: "blocked",
-      message: "4 changed files on develop. Commit or stash them first.",
+      message: "4 changed files on develop are in the way.",
       way: "changes",
     });
   });
@@ -53,12 +53,13 @@ describe("the line after a pull", () => {
       defaultBranch: main,
       checkedOut: { state: "updated", branch: "develop", remoteBranch: "origin/develop", commits: 334 },
       workingTree: null,
+      putAside: null,
     };
     expect(pullResultLine(result)).toEqual({ tone: "ok", label: "Pulled 334 commits into develop · main +12" });
   });
 
   test("with the default branch checked out its outcome is the only part", () => {
-    const result: PullResult = { defaultBranch: { ...main, commits: 1 }, checkedOut: null, workingTree: null };
+    const result: PullResult = { defaultBranch: { ...main, commits: 1 }, checkedOut: null, workingTree: null, putAside: null };
     expect(pullResultLine(result)).toEqual({ tone: "ok", label: "Pulled 1 commit into main" });
   });
 
@@ -71,6 +72,7 @@ describe("the line after a pull", () => {
         message: "develop has diverged from the remote (1 local, 4 remote); merge by hand",
       },
       workingTree: null,
+      putAside: null,
     };
     expect(pullResultLine(result)).toEqual({
       tone: "warning",
@@ -83,6 +85,7 @@ describe("the line after a pull", () => {
       defaultBranch: { state: "skipped", reason: "ahead", message: "main has 1 unpushed commit" },
       checkedOut: { state: "up-to-date", branch: "develop", remoteBranch: "origin/develop" },
       workingTree: null,
+      putAside: null,
     };
     expect(pullResultLine(result)).toEqual({
       tone: "warning",
