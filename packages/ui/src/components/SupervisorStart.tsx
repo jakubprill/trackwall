@@ -14,22 +14,30 @@ import { cn } from "@/lib/utils";
 /**
  * The start card of the supervisor panel while no supervisor runs (ADR-126): each way to start it with one sentence on
  * what it does, the main one first and highlighted, and the view the start opens in. While a day start runs, its steps.
+ * Before a projects folder is set it asks for one instead, since the supervisor runs in it (ADR-58) and every start
+ * would fail.
  */
 export function SupervisorStart({
   conn,
   supervisor,
   day,
   lastStart,
+  projectsDir,
   onStart,
   onChanged,
+  onOpenGetStarted,
 }: {
   conn: Connection;
   supervisor: SupervisorSummary;
   day: DayStartHandle;
   /** The kind of start the user pressed last, whose error the card shows. */
   lastStart: StartButton;
+  /** The projects folder; `null` while none is set, `undefined` while the settings are on their way, which keeps the starts. */
+  projectsDir: string | null | undefined;
   onStart: (button: StartButton) => void;
   onChanged: () => void;
+  /** Opens Settings › Get started, where the projects folder is set. */
+  onOpenGetStarted: () => void;
 }) {
   const [view, setView] = useState(() => readSupervisorView(() => window.localStorage));
   const chooseView = (next: SessionView) => {
@@ -70,21 +78,54 @@ export function SupervisorStart({
           nothing starts without your approval in Sessions.
         </p>
       )}
-      {main && <Choice choice={main} main disabled={pending} onRun={() => run(main)} />}
-      {compact ? (
-        <div className="flex flex-wrap gap-2">
-          {others.map((choice) => (
-            <Button key={choice.kind} variant="outline" size="sm" title={choice.description} disabled={pending} onClick={() => run(choice)}>
-              {choice.button}
-            </Button>
-          ))}
-        </div>
+      {projectsDir === null ? (
+        <ProjectsFolderFirst onOpenGetStarted={onOpenGetStarted} />
       ) : (
-        others.map((choice) => <Choice key={choice.kind} choice={choice} disabled={pending} onRun={() => run(choice)} />)
+        <>
+          {main && <Choice choice={main} main disabled={pending} onRun={() => run(main)} />}
+          {compact ? (
+            <div className="flex flex-wrap gap-2">
+              {others.map((choice) => (
+                <Button
+                  key={choice.kind}
+                  variant="outline"
+                  size="sm"
+                  title={choice.description}
+                  disabled={pending}
+                  onClick={() => run(choice)}
+                >
+                  {choice.button}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            others.map((choice) => <Choice key={choice.kind} choice={choice} disabled={pending} onRun={() => run(choice)} />)
+          )}
+          <ViewChoice view={view} onView={chooseView} />
+        </>
       )}
-      <ViewChoice view={view} onView={chooseView} />
       {error && <p className="text-destructive text-xs">{error}</p>}
     </section>
+  );
+}
+
+/**
+ * In place of the starts while no projects folder is set: where to set it. Not highlighted, so that the next step of
+ * the view next to the panel, such as Home's "Get started", stays the one bright button.
+ */
+function ProjectsFolderFirst({ onOpenGetStarted }: { onOpenGetStarted: () => void }) {
+  return (
+    <div className="flex items-center gap-3 rounded-md border p-3">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-sm font-medium">Set your projects folder first</span>
+        <span className="text-muted-foreground text-xs">
+          The supervisor works in the folder with your repos, so it starts once that folder is set.
+        </span>
+      </div>
+      <Button size="sm" variant="outline" onClick={onOpenGetStarted}>
+        Get started
+      </Button>
+    </div>
   );
 }
 
