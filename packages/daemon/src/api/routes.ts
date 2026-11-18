@@ -116,6 +116,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.clones, (f) => f.workspace.cloneJobs()),
   route(workspaceApi.sync, (f) => f.workspace.sync()),
   route(workspaceApi.syncRun, (f) => f.workspace.syncRun()),
+  route(workspaceApi.pull, (f, b) => f.workspace.pullRepo(b.repo)),
   route(cardsApi.card, (f, b) => f.cards.card(b.repo)),
   route(cardsApi.tags, (f) => f.cards.tags()),
   route(cardsApi.warmup, (f) => f.cards.warmupProgress()),

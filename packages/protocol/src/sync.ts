@@ -42,15 +42,20 @@ export const SyncWorkingTree = z.object({
 });
 export type SyncWorkingTree = z.infer<typeof SyncWorkingTree>;
 
+/** What a fast-forward did with one branch, with the reasons it can be skipped for. */
+function branchOutcome<Reason extends z.ZodType>(reason: Reason) {
+  return z.discriminatedUnion("state", [
+    /** The branch moved to the remote one (`remoteBranch`, for example `origin/main`) by `commits` commits. */
+    z.object({ state: z.literal("updated"), branch: z.string(), remoteBranch: z.string(), commits: z.number().int().positive() }),
+    /** The fetch succeeded, and the branch already equalled the remote one. */
+    z.object({ state: z.literal("up-to-date"), branch: z.string(), remoteBranch: z.string() }),
+    /** `message` is a sentence for the user, with the branch name when it is known. */
+    z.object({ state: z.literal("skipped"), reason, message: z.string() }),
+  ]);
+}
+
 /** What the sync did with the default branch. */
-export const SyncBranchOutcome = z.discriminatedUnion("state", [
-  /** The default branch moved to the remote one (`remoteBranch`, for example `origin/main`) by `commits` commits. */
-  z.object({ state: z.literal("updated"), branch: z.string(), remoteBranch: z.string(), commits: z.number().int().positive() }),
-  /** The fetch succeeded, and the default branch already equalled the remote one. */
-  z.object({ state: z.literal("up-to-date"), branch: z.string(), remoteBranch: z.string() }),
-  /** `message` is a sentence for the user, with the branch name when it is known. */
-  z.object({ state: z.literal("skipped"), reason: SyncSkipReason, message: z.string() }),
-]);
+export const SyncBranchOutcome = branchOutcome(SyncSkipReason);
 export type SyncBranchOutcome = z.infer<typeof SyncBranchOutcome>;
 
 /**
@@ -87,3 +92,32 @@ export const SyncRun = z.object({
   repos: z.array(SyncRepo),
 });
 export type SyncRun = z.infer<typeof SyncRun>;
+
+/**
+ * Why a pull from the repo header (ADR-269) did not move the checked-out branch: the reasons of the sync, which applies
+ * the same rules to it, and two of its own. Every reason leaves the branch untouched.
+ */
+export const PullSkipReason = z.enum([
+  ...SyncSkipReason.options,
+  /** No branch is checked out (a detached HEAD, also during a rebase), so there is nothing to pull into. */
+  "detached",
+  /** The checked-out branch tracks no branch, or the one it tracks is gone from the remote. */
+  "no-upstream",
+]);
+export type PullSkipReason = z.infer<typeof PullSkipReason>;
+
+/** What the pull did with the checked-out branch, against the branch it tracks (`remoteBranch`, for example `origin/develop`). */
+export const PullBranchOutcome = branchOutcome(PullSkipReason);
+export type PullBranchOutcome = z.infer<typeof PullBranchOutcome>;
+
+/**
+ * The result of a pull of one repo from its header (ADR-269): the sync of the default branch, exactly as "Sync all" does
+ * it, and the fast-forward of the checked-out branch to the branch it tracks. `checkedOut` is `null` when the checked-out
+ * branch is the default branch, whose outcome is then `defaultBranch`. `workingTree` as in the sync result.
+ */
+export const PullResult = z.object({
+  defaultBranch: SyncBranchOutcome,
+  checkedOut: PullBranchOutcome.nullable(),
+  workingTree: SyncWorkingTree.nullable(),
+});
+export type PullResult = z.infer<typeof PullResult>;
