@@ -30,7 +30,7 @@ The line under "Get started" in the list of categories says what is left: how ma
 
 ## Use it
 
-1. Start Trackwall. On Home, click "Get started", or open "Settings" (Ctrl+, or ⌘, on macOS).
+1. Start Trackwall. On Home or in "Sessions", click "Get started", or open "Settings" (Ctrl+, or ⌘, on macOS).
 2. In "Projects folder", click "Use this folder" when Trackwall found yours, or type its path and click "Save".
 3. Do what each numbered step says, from the top. In "Copilot CLI trusts your projects folder", click "Trust folder".
 4. Click "Check again" after installing a program or changing the network settings.
