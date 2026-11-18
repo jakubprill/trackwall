@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { apiEndpoints } from "./api.ts";
+import { SyncSkipReason } from "./sync.ts";
 import { RepoId } from "./workspace.ts";
 
 /**
@@ -27,7 +28,12 @@ export const BatchStepState = z.discriminatedUnion("state", [
    * The step had nothing to do or could not run: sync skipped with a reason (the repo carries on anyway), a repo without
    * the mise task, or an earlier step of this repo ended with an error.
    */
-  z.object({ state: z.literal("skipped"), message: z.string() }),
+  z.object({
+    state: z.literal("skipped"),
+    message: z.string(),
+    /** Why the sync skipped the repo, so the UI can offer the way out (ADR-270); `null` for every other skip. */
+    syncReason: SyncSkipReason.nullable(),
+  }),
   /** `lastLines`: the end of the process output when the step was a process; a git or mise message has only `message`. */
   z.object({ state: z.literal("failed"), message: z.string(), lastLines: z.array(z.string()) }),
   /** Cancelled by the user (cancelling the command, stopping the mise task in the repo details, or the daemon exiting). */

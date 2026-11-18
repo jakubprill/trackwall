@@ -135,7 +135,7 @@ export class Batch {
       repo.steps[i] = { step, state: "running" };
       const outcome = await this.runStep(repo, step, signal);
       repo.steps[i] = { step, ...outcome };
-      if (outcome.state === "failed") stopped = { state: "skipped", message: `skipped after step ${step} failed` };
+      if (outcome.state === "failed") stopped = { state: "skipped", message: `skipped after step ${step} failed`, syncReason: null };
       if (outcome.state === "cancelled") stopped = outcome;
     }
   }
@@ -154,7 +154,7 @@ export class Batch {
         case "setup":
         case "build": {
           const run = await this.deps.mise.runToEnd(repo, MISE_TASK[step], signal);
-          return run ? runOutcome(run) : { state: "skipped", message: `the repo has no mise task ${MISE_TASK[step]}` };
+          return run ? runOutcome(run) : { state: "skipped", message: `the repo has no mise task ${MISE_TASK[step]}`, syncReason: null };
         }
       }
     } catch (err) {

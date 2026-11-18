@@ -1,6 +1,7 @@
 import type { PullBranchOutcome, PullResult, PullSkipReason } from "@trackwall/protocol";
 import { git, knownDefaultBranch, revParse, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
+import { bringBack, changedTrackedFiles, describePutAside, putAside } from "./put-aside.ts";
 import { fastForward, fetchRemote, syncDefaultBranch, workingTree } from "./sync.ts";
 
 /**
@@ -13,10 +14,28 @@ import { fastForward, fetchRemote, syncDefaultBranch, workingTree } from "./sync
 
 const HEADS = "refs/heads/";
 
-export async function pullRepo(dir: string): Promise<PullResult> {
+/**
+ * With `putAside`, changes in tracked files are first moved into a stash (ADR-270), and brought back when the pull then
+ * does not move the checked-out branch (skipped or already up to date) or fails, so they are put aside only for a pull that happened.
+ */
+export async function pullRepo(dir: string, options: { putAside: boolean }): Promise<PullResult> {
+  const stash = options.putAside && (await changedTrackedFiles(dir)).length > 0 ? await putAside(dir) : undefined;
+  let outcome: Pick<PullResult, "defaultBranch" | "checkedOut">;
+  try {
+    outcome = await pullBranches(dir);
+  } catch (err) {
+    if (stash) await bringBack(dir, stash);
+    throw err;
+  }
+  const moved = (outcome.checkedOut ?? outcome.defaultBranch).state === "updated";
+  if (stash && !moved) await bringBack(dir, stash);
+  const kept = stash && moved ? await describePutAside(dir, stash) : null;
+  return { ...outcome, workingTree: await workingTree(dir), putAside: kept };
+}
+
+async function pullBranches(dir: string): Promise<Pick<PullResult, "defaultBranch" | "checkedOut">> {
   const defaultBranch = await syncDefaultBranch(dir);
-  const checkedOut = await pullCheckedOut(dir);
-  return { defaultBranch, checkedOut, workingTree: await workingTree(dir) };
+  return { defaultBranch, checkedOut: await pullCheckedOut(dir) };
 }
 
 /** `null` when the checked-out branch is the default branch, which the sync has just handled. */

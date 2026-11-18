@@ -7,6 +7,7 @@ import type {
   FileContent,
   HostedProject,
   PullResult,
+  PutAside,
   RepoHost,
   RepoStatusOk,
   StatusRead,
@@ -58,6 +59,7 @@ import {
 } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
 import { pullRepo } from "./pull.ts";
+import { bringBack, changedTrackedFiles, dropPutAside, listPutAsides } from "./put-aside.ts";
 import { remoteAddress } from "./remote.ts";
 import { networkRemote, reachRemote } from "./remote-reach.ts";
 import {
@@ -243,8 +245,29 @@ export class Vcs {
    * The sync of the default branch, then a fast-forward of the checked-out branch to the branch it tracks (ADR-269), in the
    * same queue as sync: both fetch into the same remote-tracking refs.
    */
-  async pull(dir: string): Promise<PullResult> {
-    return this.syncing.run(await this.commonDir(dir), () => pullRepo(dir));
+  async pull(dir: string, options: { putAside: boolean }): Promise<PullResult> {
+    return this.syncing.run(await this.commonDir(dir), () => pullRepo(dir, options));
+  }
+
+  /** What a pull with `putAside` would move into the stash (ADR-270). */
+  readonly putAsideFiles = changedTrackedFiles;
+
+  /** Trackwall's put-asides in the repo's stash list, newest first (ADR-270). */
+  readonly putAsides = listPutAsides;
+
+  /** Brings a put-aside back and returns the ones left; in the sync queue, since a pull may be putting changes aside. */
+  async restorePutAside(dir: string, id: string): Promise<PutAside[]> {
+    return this.syncing.run(await this.commonDir(dir), async () => {
+      await bringBack(dir, id);
+      return listPutAsides(dir);
+    });
+  }
+
+  async deletePutAside(dir: string, id: string): Promise<PutAside[]> {
+    return this.syncing.run(await this.commonDir(dir), async () => {
+      await dropPutAside(dir, id);
+      return listPutAsides(dir);
+    });
   }
 
   /** A task branch against the main remote's branch of the same name, from refs only (ADR-77); `null` without a main remote. */

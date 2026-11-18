@@ -2,6 +2,7 @@ import { z } from "zod";
 import { alwaysAllowable } from "./always-allow.ts";
 import { apiEndpoints, Done } from "./api.ts";
 import { WorkingTreeChanges } from "./changes.ts";
+import { PutAside, PutAsideFile, PutAsideId } from "./put-aside.ts";
 import { CloneJob, CloneRequest, HostRepos, RemoteRepoSearch, RepoHosts } from "./repo-hosts.ts";
 import { PullResult, SyncRun } from "./sync.ts";
 import { TaskModel } from "./task-model.ts";
@@ -595,5 +596,16 @@ export const workspaceApi = {
    * to the branch it tracks, never a merge, rebase or overwrite; answers when both are done. No MCP tool does it: an agent
    * does not move the user's branches.
    */
-  pull: endpoint("pull", RepoRequest, PullResult),
+  pull: endpoint("pull", z.object({ repo: RepoId, putAside: z.boolean().default(false) }).strict(), PullResult),
+  /** The changed tracked files a pull with `putAside` would move into the stash (ADR-270), for the user to read first. */
+  putAsideFiles: endpoint("put-aside-files", RepoRequest, z.array(PutAsideFile)),
+  /** The changes Trackwall put aside in the repo (ADR-270), newest first. */
+  putAsides: endpoint("put-asides", RepoRequest, z.array(PutAside)),
+  /**
+   * Brings put-aside changes back into the working directory (`git stash pop --index`) and returns the ones left; when
+   * git refuses (the same files changed meanwhile), nothing changes and the put-aside stays.
+   */
+  restorePutAside: endpoint("restore-put-aside", z.object({ repo: RepoId, id: PutAsideId }).strict(), z.array(PutAside)),
+  /** Deletes put-aside changes for good (`git stash drop`) and returns the ones left. */
+  deletePutAside: endpoint("delete-put-aside", z.object({ repo: RepoId, id: PutAsideId }).strict(), z.array(PutAside)),
 };

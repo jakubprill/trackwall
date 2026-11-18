@@ -20,6 +20,8 @@ Sync, install, set up and build many repos with one command, and see the result 
 
 Each repo runs its steps in order, and three repos run at once. The panel fills in as the steps finish. A repo without one of the mise tasks skips that step; an error stops only that repo, and the others carry on.
 
+When a sync is skipped because of changed files, the result says so, and "Put aside and sync…" (one repo, or every such repo at once) puts those changes aside and pulls the repo, as "Put aside and pull…" in the repo header does: you see the files first, and you can bring the changes back from the repo's Changes tab.
+
 "Cancel" stops the mise tasks that are running, including one you had started yourself from the repo before the command took it over, and starts no further ones.
 
 ## Use it
@@ -28,6 +30,7 @@ Each repo runs its steps in order, and three repos run at once. The panel fills 
 2. Press "Batch command".
 3. Tick the steps and repos ("All" ticks a whole list), and start.
 4. Read the result per repo and step; a failed step shows why it failed, and its last lines, under the repo.
+5. If a sync was skipped because of changes you do not need, press "Put aside and sync…", check the files and confirm.
 
 ## Good to know
 
