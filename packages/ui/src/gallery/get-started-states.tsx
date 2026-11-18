@@ -1,15 +1,23 @@
 import type { DoctorCheck } from "@trackwall/protocol";
-import { getStartedPlan } from "@/lib/get-started";
-import { GetStartedSteps } from "@/views/settings/GetStartedSteps";
+import { getStartedPlan, TRUST_FOLDER_STEP } from "@/lib/get-started";
+import { GetStartedSteps, TrustFolderStep } from "@/views/settings/GetStartedSteps";
 import type { GalleryState } from "./gallery-state.ts";
 
 const ok = (id: DoctorCheck["id"], summary: string): DoctorCheck => ({ id, status: "ok", summary, fix: null });
+
+/** A click in the gallery sends nothing: the button stays as it is while it waits. */
+const NEVER_ANSWERS = () => new Promise<never>(() => {});
 
 /** The steps of "Get started" for the doctor's `checks`, in a column as Settings lays them out. */
 function StepsOf({ checks }: { checks: DoctorCheck[] }) {
   return (
     <div className="flex flex-col gap-4">
-      <GetStartedSteps plan={getStartedPlan({ checkedAt: "2026-11-17T16:00:00.000Z", checks })} />
+      <GetStartedSteps
+        plan={getStartedPlan({ checkedAt: "2026-11-17T16:00:00.000Z", checks })}
+        action={(step) =>
+          step.id === TRUST_FOLDER_STEP && step.state === "todo" ? <TrustFolderStep fix={step.fix} trust={NEVER_ANSWERS} /> : null
+        }
+      />
     </div>
   );
 }

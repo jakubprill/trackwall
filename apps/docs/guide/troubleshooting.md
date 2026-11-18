@@ -39,7 +39,7 @@ Copilot CLI also accepts a fine-grained personal access token with the "Copilot 
 
 ## Copilot CLI asks to trust every repo
 
-Each new session or task stops with Copilot CLI's question whether it may work in the folder, because Copilot CLI trusts folders one by one. Add your projects folder to `trustedFolders` in Copilot CLI's `config.json` (`~/.copilot/config.json`, on Windows `%USERPROFILE%\.copilot\config.json`, or the folder `COPILOT_HOME` names), keeping the keys already there:
+Each new session or task stops with Copilot CLI's question whether it may work in the folder, because Copilot CLI trusts folders one by one. Click "Trust folder" in the step "Copilot CLI trusts your projects folder" of [Get started](/features/get-started), and Trackwall adds your projects folder for you. To do it by hand, add your projects folder to `trustedFolders` in Copilot CLI's `config.json` (`~/.copilot/config.json`, on Windows `%USERPROFILE%\.copilot\config.json`, or the folder `COPILOT_HOME` names), keeping the keys already there:
 
 ```json
 {

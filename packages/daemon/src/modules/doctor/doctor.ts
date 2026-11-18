@@ -11,14 +11,17 @@ import {
   type RepoHostKind,
   type SandboxState,
   TESTED_COPILOT_CLI_VERSION,
+  type TrustedProjectsFolder,
   type UnpushedWork,
   unpushedSummary,
   unpushedTotal,
   type WorkspaceKeysRead,
   workspaceKeysSummary,
 } from "@trackwall/protocol";
+import { DomainError } from "../../infra/errors.ts";
 import { isInside } from "../../infra/path-inside.ts";
 import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
+import { trustFolder } from "./copilot-trust-write.ts";
 import { type DiskSpace, gigabytes, LOW_DISK_BYTES, VERY_LOW_DISK_BYTES } from "./disk-space.ts";
 import { fileScanningOutcome, folderCosts, type ScanFolder } from "./file-scanning.ts";
 import { firstLine } from "./first-line.ts";
@@ -171,6 +174,16 @@ export class Doctor {
       }),
     );
     return { checks: outcomes.filter((c) => c !== null), checkedAt: this.deps.now().toISOString() };
+  }
+
+  /**
+   * Makes Copilot CLI trust the projects folder without asking, the fix of `copilot-trusted-folder` (ADR-270): the one
+   * thing the doctor changes, and only when the user asks. The folder is the one of the workspace settings.
+   */
+  async trustProjectsFolder(): Promise<TrustedProjectsFolder> {
+    const dir = await this.deps.projectsDir();
+    if (dir === null) throw new DomainError("bad_request", "No projects folder is set, so there is no folder to trust yet.");
+    return trustFolder(await this.deps.env(), dir);
   }
 
   private async projectsFolder({ projectsDir }: CheckContext): Promise<Outcome> {

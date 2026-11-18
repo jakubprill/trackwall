@@ -676,6 +676,31 @@ describe("a session of the real Copilot CLI", () => {
     }
   });
 
+  test("a projects folder the daemon adds to trustedFolders, in a config.json Copilot CLI wrote with its comment lines, starts a session without the folder trust dialog", async () => {
+    const { agents, doctor } = daemon.facade;
+    // The first session's start makes Copilot CLI rewrite config.json in its own format.
+    const first = await startSession();
+    await agents.stop(first.id);
+    const configFile = join(daemon.home, "copilot-home", "config.json");
+    const config = readFileSync(configFile, "utf8");
+    try {
+      // Copilot CLI's own file, with only the state folder trusted: the repo in the projects folder is not.
+      writeFileSync(configFile, config.replace(JSON.stringify(daemon.projects), JSON.stringify(daemon.home)));
+      expect((await doctor.run()).checks.find((c) => c.id === "copilot-trusted-folder")?.status).toBe("warn");
+
+      const written = await doctor.trustProjectsFolder();
+
+      expect(written).toMatchObject({ file: configFile, folder: daemon.projects, added: true });
+      expect(readFileSync(configFile, "utf8")).toStartWith("//");
+      // With the dialog on the screen the session would never load: no hook runs before the answer.
+      const { id } = await startSession();
+      expect(agents.session(id).dialog).toBeNull();
+      await agents.stop(id);
+    } finally {
+      writeFileSync(configFile, config);
+    }
+  });
+
   test("/exit ends the session with sessionEnd, and the session is Done", async () => {
     const { agents } = daemon.facade;
     const { id, window } = await startSession();

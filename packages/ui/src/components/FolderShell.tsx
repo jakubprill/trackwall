@@ -6,8 +6,9 @@ import { type PtyKind, PtyTerminal } from "@/components/PtyTerminal";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { reopensOnOpen } from "@/lib/folder-terminals";
+import { reopensOnOpen, shownTerminal } from "@/lib/folder-terminals";
 import { useAction } from "@/lib/use-action";
+import { useBackgroundClose } from "@/lib/use-background-close";
 import { useFolderTerminal } from "@/lib/use-folder-terminal";
 
 const SHELL: PtyKind = {
@@ -20,7 +21,8 @@ const SHELL: PtyKind = {
  * The Shell tab of a repo or a task (ADR-185): the user's own shell in the repo root or the task's worktree, in the
  * daemon, so it runs where the daemon runs (in a container, in the container). The tab shows the shell already open
  * there, or "Open a shell": a shell starts only when the user asks (ADR-211), since Ctrl+PageDown passes through the
- * tab on the way to the next one. It keeps running when the tab closes, until the user closes it.
+ * tab on the way to the next one. It keeps running when the tab closes, until the user closes it. Close hides it at
+ * once while the daemon ends it in the background, so "Open a shell" right after gives a new one.
  */
 export function FolderShell({ conn, place, folder }: { conn: Connection; place: TerminalPlace; folder: string }) {
   const listed = useFolderTerminal(conn, place);
@@ -33,24 +35,22 @@ export function FolderShell({ conn, place, folder }: { conn: Connection; place: 
       listed.reload();
     },
   );
-  const close = useAction(
-    (id: string) => post(conn, terminalsApi.close, { terminal: id }),
-    () => {
-      setStarted(undefined);
-      listed.reload();
-    },
-  );
-  const terminal = listed.terminal ?? started;
+  const close = useBackgroundClose(conn, () => {
+    setStarted(undefined);
+    listed.reload();
+  });
+  const terminal = shownTerminal({ listed: listed.terminal, started, closing: close.closing });
+  const shownFromList = terminal !== undefined && terminal === listed.terminal;
   // Closed in every new tab, like the diff panel: the terminal is what the tab is for.
   const [filesOpen, setFilesOpen] = useState(false);
   // Once the list has the shell, it alone says what happens to it (an end, a close in another window).
   useEffect(() => {
-    if (listed.terminal) setStarted(undefined);
-  }, [listed.terminal]);
+    if (shownFromList) setStarted(undefined);
+  }, [shownFromList]);
   const asked = useRef(false);
   const openRef = useRef(open.run);
   openRef.current = open.run;
-  const hasLiveShell = listed.terminal !== undefined && listed.terminal.run.kind !== "exited";
+  const hasLiveShell = shownFromList && terminal.run.kind !== "exited";
   useEffect(() => {
     if (!reopensOnOpen({ loaded: listed.loaded, hasLiveShell, alreadyAsked: asked.current })) return;
     asked.current = true;
@@ -95,7 +95,11 @@ export function FolderShell({ conn, place, folder }: { conn: Connection; place: 
         <span className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs" title={folder}>
           {folder}
         </span>
-        {actionError && <span className="text-destructive max-w-xs truncate text-xs">{actionError}</span>}
+        {actionError && (
+          <span className="text-destructive max-w-xs truncate text-xs" title={actionError}>
+            {actionError}
+          </span>
+        )}
         <Button
           variant={filesOpen ? "secondary" : "outline"}
           size="sm"
@@ -110,13 +114,7 @@ export function FolderShell({ conn, place, folder }: { conn: Connection; place: 
             <RotateCcw /> Start again
           </Button>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => close.run(terminal.id)}
-          disabled={close.pending}
-          title="End the shell and everything it runs"
-        >
+        <Button variant="outline" size="sm" onClick={() => close.run(terminal.id)} title="End the shell and everything it runs">
           <X /> Close
         </Button>
       </div>

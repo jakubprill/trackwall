@@ -5,9 +5,10 @@ import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { DaemonPlaceContext } from "@/lib/desktop";
-import { getStartedHeadline, getStartedPlace, getStartedPlan } from "@/lib/get-started";
+import { getStartedHeadline, getStartedPlace, getStartedPlan, TRUST_FOLDER_STEP } from "@/lib/get-started";
+import { trustProjectsFolder } from "@/lib/trust-folder";
 import type { RemoteHandle } from "@/lib/use-remote";
-import { GetStartedSteps } from "./GetStartedSteps.tsx";
+import { GetStartedSteps, TrustFolderStep } from "./GetStartedSteps.tsx";
 import { ProjectsFolderForm } from "./ProjectsFolderForm.tsx";
 
 /**
@@ -58,11 +59,14 @@ export function GetStartedSurface({
           </div>
           <GetStartedSteps
             plan={plan}
-            action={(step) =>
-              step.id === "projects-folder" && step.state === "todo" ? (
-                <ProjectsFolderForm conn={conn} settings={settings} onRetry={onRetry} onSaved={report.reload} />
-              ) : null
-            }
+            action={(step) => {
+              if (step.state !== "todo") return null;
+              if (step.id === "projects-folder")
+                return <ProjectsFolderForm conn={conn} settings={settings} onRetry={onRetry} onSaved={report.reload} />;
+              if (step.id === TRUST_FOLDER_STEP)
+                return <TrustFolderStep fix={step.fix} trust={() => trustProjectsFolder(conn)} onTrusted={report.reload} />;
+              return null;
+            }}
           />
           {plan.otherProblems > 0 && (
             <p className="text-muted-foreground text-xs">

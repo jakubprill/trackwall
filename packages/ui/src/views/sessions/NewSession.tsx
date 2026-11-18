@@ -18,6 +18,7 @@ import { GitBranch, Play } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { FoldButton } from "@/components/FoldButton";
+import { TrustFolderButton } from "@/components/TrustFolderButton";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
@@ -45,6 +46,7 @@ import { readStartChoice, type StartChoice, saveStartChoice } from "@/lib/start-
 import { secondAttemptModel, startTwoAttempts } from "@/lib/task-comparison";
 import { typedModel } from "@/lib/task-model";
 import { type PlanFirstOffer, planFirstOffer, planFirstToSend } from "@/lib/task-plan";
+import { trustProjectsFolder } from "@/lib/trust-folder";
 import { useAction } from "@/lib/use-action";
 import { useProviderModels } from "@/lib/use-provider-models";
 import { useRemote } from "@/lib/use-remote";
@@ -214,7 +216,7 @@ export function NewSession({
               </Button>
             )}
           </div>
-          <TrustedFolderNote projectsDir={repos.data.projectsDir} />
+          <TrustedFolderNote conn={conn} projectsDir={repos.data.projectsDir} />
         </>
       )}
       {error && <p className="text-destructive text-sm whitespace-pre-wrap">{error}</p>}
@@ -263,7 +265,7 @@ function planFirstPill(offer: PlanFirstOffer | null, value: boolean, onChange: (
 }
 
 /** How to stop Copilot CLI's trust prompt, folded: it matters once, before the first start (ADR-266). */
-function TrustedFolderNote({ projectsDir }: { projectsDir: string | null }) {
+function TrustedFolderNote({ conn, projectsDir }: { conn: Connection; projectsDir: string | null }) {
   const [open, setOpen] = useState(false);
   if (projectsDir === null) return null;
   return (
@@ -272,11 +274,13 @@ function TrustedFolderNote({ projectsDir }: { projectsDir: string | null }) {
         Copilot CLI asks to trust the folder?
       </FoldButton>
       {open && (
-        <p className="text-muted-foreground max-w-prose text-xs">
-          Copilot CLI asks you to trust a folder before it works there. To skip that prompt for every repo and task, add{" "}
-          <span className="text-foreground font-mono">{projectsDir}</span> to <span className="font-mono">trustedFolders</span> in{" "}
-          <span className="font-mono">~/.copilot/config.json</span>; trust covers its repos and their task worktrees.
-        </p>
+        <>
+          <p className="text-muted-foreground max-w-prose text-xs">
+            Copilot CLI asks you to trust a folder before it works there. To skip that prompt for every repo and task, trust{" "}
+            <span className="text-foreground font-mono">{projectsDir}</span>: that covers its repos and their task worktrees.
+          </p>
+          <TrustFolderButton trust={() => trustProjectsFolder(conn)} />
+        </>
       )}
     </div>
   );
