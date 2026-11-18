@@ -130,7 +130,9 @@ describe("what works in the repo folder itself", () => {
       sessions: [
         session("s1", "orders"),
         session("s2", "orders", { task: "t1" }),
-        session("s3", "orders", { run: { kind: "exited", runId: "s3", startedAt: AT, endedAt: AT, exitCode: 0 } }),
+        session("s3", "orders", {
+          run: { kind: "exited", runId: "s3", startedAt: AT, endedAt: AT, exitCode: 0, signal: null, stoppedByUser: false, lastLines: [] },
+        }),
         session("s4", "billing"),
       ],
       tasks: [],
