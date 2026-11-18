@@ -79,9 +79,9 @@ function RestorePlan(props: {
       {plan.repos.map((repo) => (
         <div key={repo.repo} className="flex flex-col gap-0.5">
           <p className="text-sm font-medium break-words">{repo.repo}</p>
-          {restoreRepoLines(repo).map((line) => (
-            <p key={line} className="text-muted-foreground text-xs break-words">
-              {line}
+          {restoreRepoLines(repo).map((l) => (
+            <p key={l.key} className="text-muted-foreground text-xs break-words">
+              {l.text}
             </p>
           ))}
         </div>

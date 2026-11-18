@@ -1,8 +1,10 @@
 import {
   countLabel,
   type RestoredBranch,
+  type RestoredChanges,
   type RestoredFile,
   type RestoredRepo,
+  type RestoredStash,
   type WorkBackupInfo,
   type WorkBackupRestore,
 } from "@trackwall/protocol";
@@ -32,28 +34,37 @@ export function workBackupContents(info: WorkBackupInfo): string {
   return parts.filter((part) => part !== null).join(", ");
 }
 
+/** One line of a repo's restore, with a key that stays the same while the plan is read again. */
+export interface RestoreLine {
+  key: string;
+  text: string;
+}
+
 /** What restoring does to one repo, one line per change; the backup's parts the repo has already are left out. */
-export function restoreRepoLines(repo: RestoredRepo): string[] {
-  if (repo.state === "not-cloned") return [`Not in the projects folder: clone ${repo.path} first, then look again.`];
-  if (repo.state === "cannot-restore") return [`Git cannot take it: ${repo.message ?? "no reason given"}`];
+export function restoreRepoLines(repo: RestoredRepo): RestoreLine[] {
+  if (repo.state === "not-cloned")
+    return [{ key: "state", text: `Not in the projects folder: clone ${repo.path} first, then look again.` }];
+  if (repo.state === "cannot-restore") return [{ key: "state", text: `Git cannot take it: ${repo.message ?? "no reason given"}` }];
   const lines = [
-    ...repo.branches.map(branchLine),
-    ...repo.stashes.map((s) =>
-      s.action === "add"
-        ? `Stash "${s.message}": added to the stash list`
-        : s.action === "missing"
-          ? `Stash "${s.message}": not in the file`
-          : null,
-    ),
-    ...repo.changes.map((c) =>
-      c.action === "create"
-        ? `Uncommitted changes of ${c.worktree}: on branch ${c.target}`
-        : c.action === "missing"
-          ? `Uncommitted changes of ${c.worktree}: not in the file`
-          : null,
-    ),
-  ].filter((line) => line !== null);
-  return lines.length > 0 ? lines : ["Nothing to restore: the repo has all of it."];
+    ...repo.branches.map((b) => line(`branch:${b.name}`, branchLine(b))),
+    ...repo.stashes.map((s, i) => line(`stash:${i}`, stashLine(s))),
+    ...repo.changes.map((c) => line(`changes:${c.worktree}`, changesLine(c))),
+  ].filter((l) => l !== null);
+  return lines.length > 0 ? lines : [{ key: "state", text: "Nothing to restore: the repo has all of it." }];
+}
+
+function line(key: string, text: string | null): RestoreLine | null {
+  return text === null ? null : { key, text };
+}
+
+function stashLine(s: RestoredStash): string | null {
+  if (s.action === "add") return `Stash "${s.message}": added to the stash list`;
+  return s.action === "missing" ? `Stash "${s.message}": not in the file` : null;
+}
+
+function changesLine(c: RestoredChanges): string | null {
+  if (c.action === "create") return `Uncommitted changes of ${c.worktree}: on branch ${c.target}`;
+  return c.action === "missing" ? `Uncommitted changes of ${c.worktree}: not in the file` : null;
 }
 
 function branchLine(b: RestoredBranch): string | null {

@@ -62,7 +62,7 @@ export async function planRestore(dir: string, bundle: string, source: RestoreSo
     await borrowingGitDir(scratch, join(common, "objects"), source.objectFormat);
     const place = { cwd: scratch, args: [`--git-dir=${scratch}`] };
     await fetchBundle(place, bundle);
-    return await planIn(dir, place, source);
+    return (await planIn(dir, place, source)).plan;
   } finally {
     await removeFolder(scratch, removeIfPresent).catch(() => undefined);
   }
@@ -74,8 +74,8 @@ export async function restoreWork(dir: string, bundle: string, source: RestoreSo
   const place = { cwd: dir, args: [] };
   try {
     await fetchBundle(place, bundle);
-    const plan = await planIn(dir, place, source);
-    await applyRefs(dir, plan);
+    const { plan, local } = await planIn(dir, place, source);
+    await applyRefs(dir, plan, local);
     for (const stash of plan.stashes.toReversed()) {
       if (stash.action === "add" && stash.commit !== null)
         await git(dir, ["stash", "store", "-m", stash.message, stash.commit], { config: [NO_HOOKS] });
@@ -123,7 +123,8 @@ interface Facts {
   landed: Map<string, string>;
 }
 
-async function planIn(dir: string, place: Place, source: RestoreSource): Promise<RestorePlan> {
+/** The plan, with the repo's branches as it read them, which a restore's transaction checks against. */
+async function planIn(dir: string, place: Place, source: RestoreSource): Promise<{ plan: RestorePlan; local: Map<string, string> }> {
   const facts = await factsOf(dir, place);
   const taken = new Set(facts.local.keys());
   const branches: RestoredBranch[] = [];
@@ -134,7 +135,7 @@ async function planIn(dir: string, place: Place, source: RestoreSource): Promise
     const planned = await planChanges(facts, w, taken);
     if (planned) changes.push(planned);
   }
-  return { branches, stashes, changes };
+  return { plan: { branches, stashes, changes }, local: facts.local };
 }
 
 async function factsOf(dir: string, place: Place): Promise<Facts> {
@@ -209,16 +210,15 @@ async function planChanges(facts: Facts, w: RestoreSource["worktrees"][number], 
   return { worktree: w.path, commit, action: planned.action === "unchanged" ? "unchanged" : "create", target: planned.target };
 }
 
-/** Every new branch and forward move in one transaction, each checked against what the plan read. */
-async function applyRefs(dir: string, plan: RestorePlan): Promise<void> {
+/** Every new branch and forward move in one transaction, each checked against what the plan read (`local`). */
+async function applyRefs(dir: string, plan: RestorePlan, local: ReadonlyMap<string, string>): Promise<void> {
   const lines: string[] = [];
   for (const b of plan.branches) {
     if ((b.action === "create" || b.action === "side-branch") && b.target) lines.push(`create ${HEADS}${b.target} ${b.commit}\n`);
     // A checked-out branch moves with its worktree's files, by a fast-forward merge after the transaction.
-    if (b.action === "fast-forward" && b.worktree === null) {
-      const mine = (await git(dir, ["rev-parse", "--verify", `${HEADS}${b.name}^{commit}`])).stdout.toString("utf8").trim();
-      lines.push(`update ${HEADS}${b.name} ${b.commit} ${mine}\n`);
-    }
+    const from = local.get(b.name);
+    if (b.action === "fast-forward" && b.worktree === null && from !== undefined)
+      lines.push(`update ${HEADS}${b.name} ${b.commit} ${from}\n`);
   }
   for (const c of plan.changes) if (c.action === "create" && c.target && c.commit) lines.push(`create ${HEADS}${c.target} ${c.commit}\n`);
   if (lines.length === 0) return;

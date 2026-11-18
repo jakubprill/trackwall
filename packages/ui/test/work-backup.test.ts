@@ -45,7 +45,7 @@ const API: RestoredRepo = {
 
 describe("restoring a work backup in Settings", () => {
   test("names each change a restore makes to a repo and leaves out what the repo has", () => {
-    expect(restoreRepoLines(API)).toEqual([
+    expect(restoreRepoLines(API).map((l) => l.text)).toEqual([
       "main: moves forward to the backup's commit",
       "feature: new branch",
       "spike: yours went another way and stays; the backup's commit goes to restored/spike",
@@ -55,10 +55,14 @@ describe("restoring a work backup in Settings", () => {
   });
 
   test("a repo that is not cloned or that git refuses says what to do instead", () => {
-    expect(restoreRepoLines({ ...API, state: "not-cloned" })).toEqual(["Not in the projects folder: clone api first, then look again."]);
-    expect(restoreRepoLines({ ...API, state: "cannot-restore", message: "fatal: Repository lacks these prerequisite commits" })).toEqual([
-      "Git cannot take it: fatal: Repository lacks these prerequisite commits",
+    expect(restoreRepoLines({ ...API, state: "not-cloned" }).map((l) => l.text)).toEqual([
+      "Not in the projects folder: clone api first, then look again.",
     ]);
+    expect(
+      restoreRepoLines({ ...API, state: "cannot-restore", message: "fatal: Repository lacks these prerequisite commits" }).map(
+        (l) => l.text,
+      ),
+    ).toEqual(["Git cannot take it: fatal: Repository lacks these prerequisite commits"]);
   });
 
   test("counts what the Restore button would do, without repos it cannot reach", () => {

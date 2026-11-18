@@ -161,14 +161,8 @@ export class WorkRestore {
     const current = join(this.#root(), CURRENT);
     const files: RestoredFile[] = [];
     for (const entry of manifest.state) {
-      if (entry.place !== "projects") continue;
-      const target = await safeTarget(projectsDir, entry.path);
-      const mine = await lstat(target).catch(() => undefined);
-      if (mine === undefined) files.push({ path: entry.path, action: "create" });
-      else {
-        const same = mine.isFile() && (await readFile(target)).equals(await readFile(entryFile(current, entry.entry)));
-        files.push({ path: entry.path, action: same ? "unchanged" : "kept-yours" });
-      }
+      if (entry.place === "projects")
+        files.push({ path: entry.path, action: await fileAction(projectsDir, entry.path, entryFile(current, entry.entry)) });
     }
     return files;
   }
@@ -183,6 +177,19 @@ export class WorkRestore {
     await safeTarget(projectsDir, path);
     await copyFile(entryFile(join(this.#root(), CURRENT), entry.entry), target, constants.COPYFILE_EXCL);
   }
+}
+
+/**
+ * Whether a `.trackwall` file of the backup is made, is there already, or stays the user's: a different file, or a
+ * folder on its way that is a link (the user's own setup, which a restore does not write through).
+ */
+async function fileAction(projectsDir: string, path: string, backedUp: string): Promise<RestoredFile["action"]> {
+  const target = await safeTarget(projectsDir, path).catch(() => null);
+  if (target === null) return "kept-yours";
+  const mine = await lstat(target).catch(() => undefined);
+  if (mine === undefined) return "create";
+  if (!mine.isFile() || mine.size !== (await lstat(backedUp)).size) return "kept-yours";
+  return (await readFile(target)).equals(await readFile(backedUp)) ? "unchanged" : "kept-yours";
 }
 
 function summary(manifest: BackupManifest, repos: RestoredRepo[], files: RestoredFile[]): WorkBackupRestore {
