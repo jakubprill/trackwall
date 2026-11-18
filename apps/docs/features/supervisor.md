@@ -66,4 +66,4 @@ The panel can be folded to a narrow strip at the right edge, which keeps a bell 
   copilot config banner never
   ```
 - **Conversation view (preview).** Pick "Chat (preview)" under "Show as" before you start the supervisor, and it opens as a conversation instead of a terminal: its answers as text you can scroll and copy, each command or file change as a row you can open, and its approval request with buttons right below. Trackwall remembers your choice, also for "Start my day", and "Continue" goes on with the same conversation in either view. See [Conversation view](/features/conversation-view).
-- It needs Copilot CLI, like any [session](/features/sessions), and the projects folder to be set.
+- It needs Copilot CLI, like any [session](/features/sessions), and the projects folder to be set. Until the folder is set, the panel says "Set your projects folder first" in place of the ways to start, with a button to "Get started".
