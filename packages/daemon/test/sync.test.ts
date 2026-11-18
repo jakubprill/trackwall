@@ -381,6 +381,9 @@ function clonedOnDevelop(projects: string, remotes: string, name: string): { ups
   gitIn(projects, "clone", "-q", upstream, name);
   const clone = join(projects, name);
   gitIn(clone, "checkout", "-q", "develop");
+  // Git on Windows checks files out with CRLF by default, and putting changes aside and back makes git write them
+  // again, so the files the tests read back hold the line ends they wrote only when the clone turns that off.
+  gitIn(clone, "config", "core.autocrlf", "false");
   return { upstream, clone };
 }
 
