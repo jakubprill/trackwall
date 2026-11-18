@@ -64,6 +64,8 @@ interface Setup {
   /** The fake mise of the session tests instead of one that prints `mise`'s version (`fake-mise.json` in the projects folder). */
   fakeMise?: boolean;
   connectionProbe?: TlsProbe;
+  /** What the fake Copilot CLI says as its version instead of the tested one (`FAKE_COPILOT_VERSION`). */
+  copilotVersion?: string;
 }
 
 /** A facade on a fresh state directory, with the fake Copilot CLI and a mise that prints its version, or none of them. */
@@ -93,7 +95,12 @@ function doctorFacade(o: Setup) {
     sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
     hostingClis: fakeHostingClis({ authErrors: o.authErrors }).clis,
     // With the sandbox programs in PATH, so that the sandbox check is ok also on a Linux runner without them (ADR-181).
-    userEnv: async () => ({ ...process.env, COPILOT_HOME: copilotHome, PATH: `${sandboxPrograms}${delimiter}${process.env.PATH ?? ""}` }),
+    userEnv: async () => ({
+      ...process.env,
+      COPILOT_HOME: copilotHome,
+      PATH: `${sandboxPrograms}${delimiter}${process.env.PATH ?? ""}`,
+      FAKE_COPILOT_VERSION: o.copilotVersion ?? "",
+    }),
     tlsProbe: async () => ({ kind: "ok" }),
     connectionProbe: o.connectionProbe,
     diskSpace: async () => ({ disk: 1, free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
@@ -503,15 +510,46 @@ describe("program versions", () => {
     expect(compareVersions("1.0.103", "1.0.103")).toBe(0);
   });
 
-  test("a Copilot CLI older than the tested version is a warning; the tested or a newer one is ok", () => {
-    expect(copilotVersionOutcome("1.0.90").status).toBe("warn");
-    expect(copilotVersionOutcome(TESTED_COPILOT_CLI_VERSION).summary).toBe(`Copilot CLI ${TESTED_COPILOT_CLI_VERSION}`);
-    expect(copilotVersionOutcome("9.0.0")).toEqual({
+  test("a Copilot CLI older or newer than the tested version is a warning; only the tested one is ok", () => {
+    expect(copilotVersionOutcome("1.0.90")).toEqual({
+      status: "warn",
+      summary: `Copilot CLI 1.0.90 is older than ${TESTED_COPILOT_CLI_VERSION}, the version Trackwall is tested with.`,
+      fix: "Update Copilot CLI the way you installed it (npm, Homebrew or WinGet).",
+    });
+    expect(copilotVersionOutcome(TESTED_COPILOT_CLI_VERSION)).toEqual({
       status: "ok",
-      summary: `Copilot CLI 9.0.0 (Trackwall is tested with ${TESTED_COPILOT_CLI_VERSION})`,
+      summary: `Copilot CLI ${TESTED_COPILOT_CLI_VERSION}`,
       fix: null,
     });
+    expect(copilotVersionOutcome("9.0.0")).toEqual({
+      status: "warn",
+      summary: `Copilot CLI 9.0.0 is newer than ${TESTED_COPILOT_CLI_VERSION}, the version Trackwall is tested with.`,
+      fix: `Sessions usually work, but a change in Copilot CLI can make Trackwall show a session's state wrong. If one does, install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} again the way you installed it, and update Trackwall when a version tested with 9.0.0 comes out.`,
+    });
     expect(copilotVersionOutcome(null).status).toBe("warn");
+  });
+
+  test("the version alone says where the Copilot CLI of sessions stands against the tested one", async () => {
+    const newer = doctorFacade({ copilot: true, mise: null, copilotConfig: null, copilotVersion: "9.0.0" });
+    expect(await newer.facade.doctor.copilotCliVersion()).toEqual({
+      version: "9.0.0",
+      tested: TESTED_COPILOT_CLI_VERSION,
+      relation: "newer",
+    });
+    const older = doctorFacade({ copilot: true, mise: null, copilotConfig: null, copilotVersion: "1.0.1" });
+    expect((await older.facade.doctor.copilotCliVersion()).relation).toBe("older");
+    const same = doctorFacade({ copilot: true, mise: null, copilotConfig: null });
+    expect(await same.facade.doctor.copilotCliVersion()).toEqual({
+      version: TESTED_COPILOT_CLI_VERSION,
+      tested: TESTED_COPILOT_CLI_VERSION,
+      relation: "tested",
+    });
+    const missing = doctorFacade({ copilot: false, mise: null, copilotConfig: null });
+    expect(await missing.facade.doctor.copilotCliVersion()).toEqual({
+      version: null,
+      tested: TESTED_COPILOT_CLI_VERSION,
+      relation: "unknown",
+    });
   });
 });
 
