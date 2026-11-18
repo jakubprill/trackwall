@@ -19,6 +19,7 @@ import { FILE_MANAGER } from "@/lib/platform";
 import { type RepoActivityTarget, repoActivity } from "@/lib/repo-activity";
 import { REPO_TABS, type RepoTab } from "@/lib/repo-tabs";
 import type { SessionSelection } from "@/lib/session-entries";
+import { workInRepoFolder } from "@/lib/upstream-pull";
 import { useHostFolder } from "@/lib/use-host-folder";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
@@ -50,7 +51,7 @@ export function RepoDetail({
   onOpenInSessions: (selection: SessionSelection) => void;
 }) {
   const [tab, setTab] = useState<RepoTab>(REPO_TABS[0].id);
-  const running = useRunningMiseTasks(conn, runningLive);
+  const running = useRunningMiseTasks(conn, runningLive).data ?? [];
   const openActivity = (target: RepoActivityTarget) => {
     if (target.view === "mise") setTab("mise");
     else onOpenInSessions(target.selection);
@@ -79,8 +80,15 @@ export function RepoDetail({
       )}
       {status.kind === "ok" && (
         <>
-          <RepoStats status={status} onShowChanges={() => setTab("changes")} />
-          <RepoActivityBar items={repoActivity(repo.id, sessions, running.data ?? [])} onOpen={openActivity} />
+          <RepoStats
+            conn={conn}
+            repo={repo.id}
+            status={status}
+            workInFolder={workInRepoFolder(repo.id, sessions, running)}
+            onShowChanges={() => setTab("changes")}
+            onOpenShell={() => setTab("shell")}
+          />
+          <RepoActivityBar items={repoActivity(repo.id, sessions, running)} onOpen={openActivity} />
           <TabBar tabs={REPO_TABS} active={tab} onSelect={setTab} />
           {tab === "card" && (
             <RepoCardView
