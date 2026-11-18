@@ -80,6 +80,10 @@ export const ContainerHealth = z.object({
 });
 export type ContainerHealth = z.infer<typeof ContainerHealth>;
 
+/** What the MCP tool answers (ADR-280): the same state without the day's history, which an agent does not read point by point. */
+export const ContainerHealthBrief = ContainerHealth.omit({ history: true });
+export type ContainerHealthBrief = z.infer<typeof ContainerHealthBrief>;
+
 const endpoint = apiEndpoints("container-health");
 
 export const containerHealthApi = {

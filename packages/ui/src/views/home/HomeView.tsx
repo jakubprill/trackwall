@@ -15,6 +15,7 @@ import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
 import { DARK_ISLAND } from "@/lib/theme";
 import { unpushedRows } from "@/lib/unpushed-work";
+import { useContainerHealth } from "@/lib/use-container-health";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
@@ -34,6 +35,9 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
  * view bar. Outside the canvas the view takes only `@trackwall/scene/model` from the scene (keys and snapshot types), so
  * that three.js and Pawn stay in the lazily loaded chunk.
  */
+
+/** The daemon reads the container every 30 s (ADR-279), so Home asks no more often. */
+const CONTAINER_HEALTH_PACE = 30_000;
 
 /** The scene's own messages are for people developing Trackwall, so a failure shows a general text, as in `HomeCanvas`. */
 const CANVAS_FAILED = "the 3D view failed to load";
@@ -74,6 +78,7 @@ export function HomeView({
   const services = useServices(conn);
   const unpushed = useUnpushedWork(conn, repoWatch.options(REPO_LIST_PACE));
   const unpushedList = useMemo(() => unpushedRows(unpushed.data), [unpushed.data]);
+  const health = useContainerHealth(conn, { pollMs: CONTAINER_HEALTH_PACE });
   const [selected, setSelected] = useState<HomeKey | null>(null);
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();
@@ -141,10 +146,12 @@ export function HomeView({
         sessions={lookup.sessions}
         proposals={sessions.data?.proposals ?? []}
         unpushed={unpushedList}
+        containerWarnings={health.data?.warnings ?? []}
         selected={current}
         onSelect={setSelected}
         onOpen={open}
         onOpenProposal={(id) => onOpenInSessions({ kind: "proposal", id })}
+        onOpenContainerHealth={() => onOpenSettings("diagnostics")}
       />
       {/* A dark island in the light theme (ADR-235): the scene's glow adds light, which vanishes on a light background. */}
       <div {...DARK_ISLAND} className="relative min-h-0 min-w-0">

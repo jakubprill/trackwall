@@ -107,6 +107,7 @@ describe("MCP server over Streamable HTTP", () => {
       "list_sessions",
       "get_session",
       "get_day_report",
+      "get_container_health",
       "get_task_changes",
       "get_changed_endpoints",
       "propose_task",

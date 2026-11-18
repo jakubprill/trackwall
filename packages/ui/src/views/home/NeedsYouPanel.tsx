@@ -1,11 +1,12 @@
-import type { Session, TaskProposal } from "@trackwall/protocol";
+import type { HealthWarning, Session, TaskProposal } from "@trackwall/protocol";
 import { type HomeKey, type HomeModel, repoKey, repoNeedsYou, sessionKey } from "@trackwall/scene/model";
-import { HardDrive, Lightbulb } from "lucide-react";
+import { Activity, HardDrive, Lightbulb } from "lucide-react";
 import type { ReactNode } from "react";
 import { Loading } from "@/components/Loading";
 import { QueueItem } from "@/components/QueueItem";
 import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { StatusLabel } from "@/components/StatusLabel";
+import { HEALTH_WARNING_ROWS } from "@/lib/container-health";
 import { twoDigits } from "@/lib/format";
 import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
 import { proposalName } from "@/lib/session-entries";
@@ -14,7 +15,8 @@ import { UNPUSHED_NOTE, type UnpushedRow } from "@/lib/unpushed-work";
 
 /**
  * The queue on the left of the dashboard: first sessions that are waiting for you or ended with an error, then task
- * proposals (ADR-39), in a container the repos whose work is only there (ADR-162), then repos that are not clean.
+ * proposals (ADR-39), in a container what its health warns of (ADR-280) and the repos whose work is only there (ADR-162),
+ * then repos that are not clean.
  * Sessions and repos are the same objects as the labels on the scene, so the dashboard also works without WebGL.
  * Proposals are not on the scene, and the decision (with an edited prompt) is made in the Sessions view, so a click on a
  * proposal opens it there right away. Until the lists arrive it says it is loading, rather than counts of zero.
@@ -25,10 +27,12 @@ export function NeedsYouPanel({
   sessions,
   proposals,
   unpushed,
+  containerWarnings,
   selected,
   onSelect,
   onOpen,
   onOpenProposal,
+  onOpenContainerHealth,
 }: {
   /** The repo or session list has not arrived yet. */
   loading: boolean;
@@ -37,10 +41,14 @@ export function NeedsYouPanel({
   proposals: readonly TaskProposal[];
   /** Empty outside a container and when everything is pushed. */
   unpushed: readonly UnpushedRow[];
+  /** The container health's warnings; empty outside a container and when nothing needs the user. */
+  containerWarnings: readonly HealthWarning[];
   selected: HomeKey | null;
   onSelect: (key: HomeKey) => void;
   onOpen: (key: HomeKey) => void;
   onOpenProposal: (id: string) => void;
+  /** Settings › Diagnostics, where the container's health is. */
+  onOpenContainerHealth: () => void;
 }) {
   const urgent = model.sessions.filter((s) => s.state === "attention" || s.state === "error");
   const repos = model.repos.filter((r) => repoNeedsYou(r.state));
@@ -85,6 +93,23 @@ export function NeedsYouPanel({
             {proposals.map((p) => (
               <QueueItem key={p.id} title={proposalName(p)} active={false} onClick={() => onOpenProposal(p.id)}>
                 <StatusLabel {...PROPOSAL_STATUS} />
+              </QueueItem>
+            ))}
+          </ul>
+        </>
+      )}
+      {containerWarnings.length > 0 && (
+        <>
+          <h2 className="hud-label flex items-center gap-1.5 px-4 pt-4 pb-2">
+            <Activity className="text-warning size-3" aria-hidden />
+            Container <span className="text-primary">{`// ${twoDigits(containerWarnings.length)}`}</span>
+          </h2>
+          <ul aria-label="What the container's health warns of" className="px-2">
+            {containerWarnings.map((w) => (
+              <QueueItem key={w.id} title={HEALTH_WARNING_ROWS[w.id].title} active={false} onClick={onOpenContainerHealth}>
+                <span title={w.text}>
+                  <StatusLabel tone="warning" label={HEALTH_WARNING_ROWS[w.id].status} />
+                </span>
               </QueueItem>
             ))}
           </ul>

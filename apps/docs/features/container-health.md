@@ -15,10 +15,10 @@ The panel is new, so what it measures and when it warns can still change.
 ## What you get
 
 - Memory, processors, processes and free disk against the limits of the container, at a glance.
-- A process the kernel killed for lack of memory shows up, with when, instead of a build that just stopped.
-- A crash of Trackwall's daemon, and its restart, shows up too.
+- A process the kernel killed for lack of memory, or a crash and restart of Trackwall's daemon, shows up with when, instead of a build that just stopped.
 - The day's memory as a chart, so you see when it filled up.
-- A warning when something lasts: memory nearly full, processors held back, a low disk, or work on no remote with no fresh [backup](/features/work-backup).
+- A warning when something lasts: memory nearly full, processors held back, a low disk, or work on no remote with no fresh [backup](/features/work-backup), also on [Home](/features/home).
+- Agents check it themselves when a build dies without a reason, instead of hunting for a bug that is not there.
 
 ## How it works
 
@@ -26,13 +26,21 @@ In a [dev container](/guide/dev-container), builds, tests and agents share the m
 
 Each tile shows one resource: how much is in use, the container's limit, and a bar. Without a limit of its own, a tile names what the machine Docker runs on has, which the container shares. Trackwall reads the counts every 30 seconds and keeps a day of them, so the chart and the list under "Today" still show the morning after Trackwall restarts.
 
-Above the tiles, warnings name what needs you and what to do. A short peak does not raise one: memory has to stay above 90% of the limit for five minutes, and the processors held back for more than a fifth of the time for ten. A kill for memory or a crash of the daemon warns for an hour.
+Above the tiles, warnings name what needs you and what to do. A short peak does not raise one: memory has to stay above 90% of the limit for five minutes, and the processors held back for more than a fifth of the time for ten. A kill for memory or a crash of the daemon warns for an hour. The same warnings stand under "Container" in "Needs you" on [Home](/features/home), and a click there brings you here.
+
+Agents read the same state with the `get_container_health` tool of the [MCP server](/features/mcp). When a build or a test of theirs ends with exit code 137 or a Java process vanishes, they check it first, and a kill for memory near that time tells them the fix is more memory, not a change to the code.
 
 ## Use it
 
 1. Run Trackwall in a [dev container](/guide/dev-container).
 2. Open Settings › Diagnostics › Container health.
 3. When a build or a test ends without a reason, look under "Today" for a process killed for memory, and give the container more memory or run fewer builds at once.
+
+## Tools
+
+| Tool | What it gives the agent |
+|---|---|
+| `get_container_health` | Memory, processors, processes and disk against the container's limits, processes killed for memory and daemon restarts in the last day, and the warnings. |
 
 ## Good to know
 

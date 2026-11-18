@@ -27,6 +27,7 @@ const {
   listSessions,
   getSession,
   getDayReport,
+  getContainerHealth,
   getTaskChanges,
   getChangedEndpoints,
   proposeChange,
@@ -141,6 +142,8 @@ export const MCP_INSTRUCTIONS = [
   `- Catch up after a break: ${getDayReport.name} says what changed since the user's previous day start (new commits ` +
     "on each repo's default branch, repos the sync could not update, open tasks and how far behind they are), computed " +
     "once when the user started their day; read it instead of walking every repo.",
+  `- In a dev container, when a build, test or server dies without a clear reason (exit code 137, a vanished JVM), ` +
+    `${getContainerHealth.name} says whether the kernel killed it for lack of memory before you look for a bug in the code.`,
   `- ${listSessions.name} shows the Copilot CLI sessions and tasks Trackwall runs (caller is your own session); a session ` +
     `that runs a task ends its work with ${reportResult.name}. When the user sends a review of its changes, Trackwall asks ` +
     `it to call ${getReviewComments.name}, which returns the comments to address; when the session that proposed the task ` +

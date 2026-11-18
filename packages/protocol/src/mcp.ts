@@ -57,6 +57,7 @@ import {
   SearchCodeResult,
 } from "./code-search.ts";
 import { COMMIT_SEARCH_MAX_COMMITS, COMMIT_SEARCH_MAX_FILES, CommitQuery, SearchCommitsResult } from "./commit-search.ts";
+import { ContainerHealthBrief } from "./container-health.ts";
 import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import {
   FindEndpointResult,
@@ -862,6 +863,21 @@ export const mcpTools = {
       "so call it once. report: null before the first day start.",
     args: z.object({}).strict(),
     result: GetDayReportResult,
+  },
+  getContainerHealth: {
+    name: "get_container_health",
+    readOnly: true,
+    auditArgs: [] as const,
+    description:
+      "How the dev container Trackwall runs in is doing now, as its own control group counts it: memory, processors and " +
+      "processes against the container's limits (limit null: none of its own, it shares the machine's), free disk, " +
+      "oomKills (processes the kernel killed for lack of memory in the last day, each with when and how many), restarts " +
+      "of Trackwall's daemon after a crash, and warnings (id and text) for what needs the user. Call it when a build, a " +
+      "test or a server ended without a clear reason (exit code 137, a JVM that vanished, a killed process): a kill for " +
+      "memory near that time is the reason, and the fix is more memory for the container or fewer builds at once, not a " +
+      "change to the code. inContainer false: Trackwall runs on the user's computer and there is nothing to read.",
+    args: z.object({}).strict(),
+    result: ContainerHealthBrief,
   },
   getTaskChanges: {
     name: GET_TASK_CHANGES,

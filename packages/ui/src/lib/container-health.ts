@@ -1,4 +1,4 @@
-import type { ContainerHealth, HealthSample } from "@trackwall/protocol";
+import type { ContainerHealth, HealthSample, HealthWarning } from "@trackwall/protocol";
 import { formatBytes, relativeTime } from "./format.ts";
 
 /**
@@ -130,3 +130,14 @@ export function healthUptime(health: ContainerHealth, now: Date): string {
 function clock(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
+
+/** A warning as a row of Home's "Needs you" (ADR-280): a short title and status; the whole text is the row's tooltip. */
+export const HEALTH_WARNING_ROWS: Record<HealthWarning["id"], { title: string; status: string }> = {
+  "memory-full": { title: "Memory nearly full", status: "above 90% for 5 min" },
+  "oom-kill": { title: "Process killed for memory", status: "in the last hour" },
+  "cpu-throttled": { title: "Processors held back", status: "for 10 min" },
+  "disk-low": { title: "Disk almost full", status: "builds may fail" },
+  "processes-full": { title: "Processes near their limit", status: "new ones may fail" },
+  "daemon-restarted": { title: "Daemon restarted", status: "after a crash" },
+  "backup-old": { title: "No recent work backup", status: "work on no remote" },
+};

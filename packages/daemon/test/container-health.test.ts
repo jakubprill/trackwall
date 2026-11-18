@@ -2,8 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ContainerHealthBrief } from "@trackwall/protocol";
+import { EventHub } from "../src/api/event-hub.ts";
+import { startApi } from "../src/api/server.ts";
 import { createFacade } from "../src/facade.ts";
+import { createMcpEndpoint } from "../src/mcp/endpoint.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
+import { connectHttpClient } from "./support/mcp-client.ts";
 
 // The container's health (ADR-279) through the real facade, on a folder of control group files as the kernel writes them
 // inside a container: what the panel shows now, a kill for memory as an event and a warning, and a day of readings
@@ -121,5 +126,38 @@ describe("the container's health (ADR-279)", () => {
     const health = await facade.containerHealth.state();
 
     expect(health).toMatchObject({ inContainer: false, memory: null, disk: null, warnings: [] });
+  });
+
+  test("an agent asks get_container_health and learns that the kernel killed a process for memory, without the day's history", async () => {
+    const root = controlGroup(LIMITED);
+    const { facade } = await facadeWith(true, root);
+    const token = "h".repeat(43);
+    const api = await startApi({
+      token,
+      version: "9.9.9",
+      info: () => {
+        throw new Error("unused");
+      },
+      onShutdown: () => {},
+      facade,
+      mcp: createMcpEndpoint({ facade, version: "9.9.9", log: () => {} }),
+      events: new EventHub({ facade, log: () => {} }),
+    });
+    try {
+      await facade.containerHealth.sample();
+      writeFileSync(join(root, "memory.events"), "low 0\nhigh 0\nmax 40\noom 2\noom_kill 2\noom_group_kill 0\n");
+      await facade.containerHealth.sample();
+      const client = await connectHttpClient(api.port, token);
+
+      const result = await client.callTool({ name: "get_container_health", arguments: {} });
+
+      const health = ContainerHealthBrief.strict().parse(result.structuredContent);
+      expect(health.oomKills).toEqual([{ at: expect.any(String), count: 1 }]);
+      expect(health.warnings.map((w) => w.id)).toEqual(["oom-kill"]);
+      expect(health.memory).toEqual({ used: 3 * GIB, limit: 4 * GIB });
+      await client.close();
+    } finally {
+      await api.close();
+    }
   });
 });
