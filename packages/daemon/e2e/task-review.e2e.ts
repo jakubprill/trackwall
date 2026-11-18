@@ -24,7 +24,7 @@ const trackwall = useTrackwall({
 });
 
 describe("an agent task, verified and reviewed", () => {
-  test("the user creates a task, verifies it, comments on a line of its changes, and the agent gets the comment once its turn ends", async () => {
+  test("the user creates a task, verifies it, sees the verdict in the evidence above the diff, comments on a line of its changes, and the agent gets the comment once its turn ends", async () => {
     const { daemon } = trackwall();
     const page = await trackwall().open();
     await showSessions(page);
@@ -49,6 +49,10 @@ describe("an agent task, verified and reviewed", () => {
     if (task === undefined) throw new Error("the task is not on the list");
     commitFiles(task.worktree, { "README.md": "# shop\n\nRun it with `mise run dev`.\n" }, "Say how to run shop");
     await page.getByRole("tab", { name: "Changes" }).click();
+    // Above the diff, the evidence card says what backs it: here a verification that failed, and no other check yet.
+    const evidence = page.getByRole("region", { name: "Evidence" });
+    await evidence.getByText("failed (mise task test · 1 test · 1 failed)").waitFor();
+    await evidence.getByText("none named by the agent").waitFor();
     await page.getByRole("button", { name: "Comment on line 3 of README.md" }).click();
     await page.getByRole("textbox", { name: "Comment on line 3 of README.md" }).fill("Say which port it listens on.");
     await page.getByRole("button", { name: "Add comment" }).click();

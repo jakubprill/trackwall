@@ -1,4 +1,4 @@
-import type { ReproductionCheck, ReproductionPhase, ReproductionRun, ReproTest } from "@trackwall/protocol";
+import { type ReproductionCheck, type ReproductionPhase, type ReproductionRun, type ReproTest, sameReproTest } from "@trackwall/protocol";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
@@ -57,7 +57,7 @@ export function reproductionFilterNote(check: ReproductionCheck): string | null 
 
 /** Whether the check is about the test the agent names now: a later report may name another one. */
 export function checksTest(check: ReproductionCheck, test: ReproTest): boolean {
-  return check.test.file === test.file && check.test.name === test.name;
+  return sameReproTest(check.test, test);
 }
 
 /**

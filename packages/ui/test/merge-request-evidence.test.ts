@@ -98,8 +98,11 @@ const rulesReview = (fields: Partial<AutoReview> = {}): AutoReview => ({
 });
 
 const evidence = (fields: Partial<MergeRequestEvidence> = {}): MergeRequestEvidence => ({
+  task: "t1",
   template: null,
-  reproduction: reproduction(),
+  planApproved: true,
+  reproduction: { test: reproTest, check: reproduction(), outdated: false },
+  verification,
   rules: { review: rulesReview(), outdated: false },
   usage: {
     modelCalls: 42,
@@ -129,7 +132,13 @@ describe("the evidence from Trackwall in a merge request's draft", () => {
     const [, line] = evidenceLines(
       task(),
       null,
-      evidence({ reproduction: reproduction({ state: "not_reproduced", message: "The test passed on the base commit" }) }),
+      evidence({
+        reproduction: {
+          test: reproTest,
+          check: reproduction({ state: "not_reproduced", message: "The test passed on the base commit" }),
+          outdated: false,
+        },
+      }),
     );
 
     expect(line).toBe(
@@ -139,10 +148,28 @@ describe("the evidence from Trackwall in a merge request's draft", () => {
     );
   });
 
-  test("a check of another test, or one still running, leaves the test as the agent's word", () => {
-    const other = reproduction({ test: { ...reproTest, name: "OrderServiceTest#totalOfOneLine" } });
-    for (const check of [other, reproduction({ state: "running" })])
-      expect(evidenceLines(task(), null, evidence({ reproduction: check }))[1]).toStartWith("- Reproduction test (the agent's word):");
+  test("no check of the test, or one still running, leaves the test as the agent's word", () => {
+    for (const check of [null, reproduction({ state: "running" })])
+      expect(evidenceLines(task(), null, evidence({ reproduction: { test: reproTest, check, outdated: false } }))[1]).toStartWith(
+        "- Reproduction test (the agent's word):",
+      );
+  });
+
+  test("a reproduction check from before the changes moved on says so", () => {
+    const [, line] = evidenceLines(task(), null, evidence({ reproduction: { test: reproTest, check: reproduction(), outdated: true } }));
+
+    expect(line).toBe(
+      "- Reproduction test OrderServiceTest#totalOfEmptyOrder in src/test/java/com/example/shop/OrderServiceTest.java: " +
+        "Trackwall checked on an earlier version of the changes that it fails on the base commit and passes with the change",
+    );
+  });
+
+  test("without the daemon's evidence the lines have what the task panel knows: the plan, the agent's word on its test and the verdict", () => {
+    expect(evidenceLines(task(), verification, null)).toEqual([
+      "- Plan first: the user approved the agent's plan in Trackwall before it changed files",
+      "- Reproduction test (the agent's word): OrderServiceTest#totalOfEmptyOrder in src/test/java/com/example/shop/OrderServiceTest.java, failed before the fix with: NullPointerException at OrderService.java:42",
+      "- Verification: passed (mise task test, 128 tests · 3 skipped)",
+    ]);
   });
 
   test("a rules check lists its findings with their places, and says when the changes moved on after it", () => {
@@ -156,7 +183,12 @@ describe("the evidence from Trackwall in a merge request's draft", () => {
     const lines = evidenceLines(
       task({ plan: null, summary: null }),
       null,
-      evidence({ rules: { review: rulesReview({ findings }), outdated: true } }),
+      evidence({
+        planApproved: false,
+        reproduction: null,
+        verification: null,
+        rules: { review: rulesReview({ findings }), outdated: true },
+      }),
     );
 
     expect(lines[0]).toBe(
@@ -173,6 +205,9 @@ describe("the evidence from Trackwall in a merge request's draft", () => {
       task({ plan: null, summary: null }),
       null,
       evidence({
+        planApproved: false,
+        reproduction: null,
+        verification: null,
         rules: null,
         models: [
           { model: "auto", modelCalls: 30 },
@@ -189,7 +224,13 @@ describe("the evidence from Trackwall in a merge request's draft", () => {
 
   test("a task without a plan, a summary, a verdict or anything from the daemon has no evidence", () => {
     expect(evidenceLines(task({ plan: null, summary: null }), null, null)).toEqual([]);
-    expect(evidenceLines(task({ plan: "planning", summary: null }), null, evidence({ rules: null, usage: null, models: [] }))).toEqual([]);
+    expect(
+      evidenceLines(
+        task({ plan: "planning", summary: null }),
+        null,
+        evidence({ planApproved: false, reproduction: null, verification: null, rules: null, usage: null, models: [] }),
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -210,6 +251,7 @@ describe("the draft with the repo's own template", () => {
       verification,
       evidence: evidence({
         template: { path: ".gitlab/merge_request_templates/Default.md", text: template },
+        planApproved: false,
         rules: null,
         usage: null,
         models: [],

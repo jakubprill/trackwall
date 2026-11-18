@@ -1,13 +1,13 @@
 import {
   type AutoReview,
   countLabel,
-  type MergeRequestEvidence,
-  type ReproTest,
+  type ReproductionEvidence,
   reproTestLine,
   type Task,
+  type TaskEvidence,
   type Verification,
 } from "@trackwall/protocol";
-import { tokenCount, usageLabel } from "./copilot-usage.ts";
+import { usageWithTokens } from "./copilot-usage.ts";
 import { testCountsLabel } from "./verification.ts";
 
 /**
@@ -22,32 +22,54 @@ const RULES_FINDINGS_SHOWN = 5;
 const RULE_FILES_SHOWN = 3;
 const EARLIER = " on an earlier version of the changes";
 
-/** The lines, each a Markdown list item, in the order the work happened; empty when Trackwall has nothing to add. */
-export function evidenceLines(task: Task, verification: Verification | null, evidence: MergeRequestEvidence | null): string[] {
-  const repro = task.summary?.reproTest ?? null;
+/**
+ * The lines, each a Markdown list item, in the order the work happened; empty when Trackwall has nothing to add. They
+ * word the task's evidence (ADR-276), or, when its read failed, what the task panel knows: the task and its verification.
+ */
+export function evidenceLines(task: Task, verification: Verification | null, evidence: TaskEvidence | null): string[] {
+  const facts = evidence ?? panelEvidence(task, verification);
   return [
-    task.plan === "approved" ? "Plan first: the user approved the agent's plan in Trackwall before it changed files" : null,
-    repro && reproductionLine(repro, evidence?.reproduction ?? null),
-    verification && verification.state !== "running" ? verificationLine(verification) : null,
-    evidence?.rules ? rulesLine(evidence.rules.review, evidence.rules.outdated) : null,
-    evidence ? modelLine(task, evidence) : null,
+    facts.planApproved ? "Plan first: the user approved the agent's plan in Trackwall before it changed files" : null,
+    facts.reproduction && reproductionLine(facts.reproduction),
+    facts.verification && facts.verification.state !== "running" ? verificationLine(facts.verification) : null,
+    facts.rules ? rulesLine(facts.rules.review, facts.rules.outdated) : null,
+    modelLine(task, facts),
   ].flatMap((line) => (line ? [`- ${line}`] : []));
 }
 
+/** The evidence the task panel has without the daemon's: the plan, the agent's word on its test and the verification. */
+function panelEvidence(task: Task, verification: Verification | null): TaskEvidence {
+  const test = task.summary?.reproTest ?? null;
+  return {
+    task: task.id,
+    planApproved: task.plan === "approved",
+    reproduction: test && { test, check: null, outdated: false },
+    verification,
+    rules: null,
+    usage: null,
+    models: [],
+  };
+}
+
 /**
- * Trackwall's verdict on the agent's reproduction test (ADR-227) when its check was about that test, else the agent's
- * word (ADR-222): a check of an earlier test, still running or stopped says nothing about this one.
+ * Trackwall's verdict on the agent's reproduction test (ADR-227), else the agent's word (ADR-222): a check still running
+ * or stopped says nothing yet. The evidence holds only a check of the test the agent names now.
  */
-function reproductionLine(test: ReproTest, check: MergeRequestEvidence["reproduction"]): string {
+function reproductionLine({ test, check, outdated }: ReproductionEvidence): string {
   const subject = `Reproduction test ${test.name} in ${test.file}`;
   const reason = check?.message ? ` (${check.message})` : "";
-  if (check && check.test.name === test.name && check.test.file === test.file) {
-    if (check.state === "reproduced") return `${subject}: Trackwall checked that it fails on the base commit and passes with the change`;
-    const claim = `the agent says it failed before the fix with: ${test.failure}`;
-    if (check.state === "not_reproduced") return `${subject}: Trackwall's check did not confirm it${reason}; ${claim}`;
-    if (check.state === "inconclusive") return `${subject}: Trackwall's check could not tell${reason}; ${claim}`;
+  const earlier = outdated ? EARLIER : "";
+  const claim = `the agent says it failed before the fix with: ${test.failure}`;
+  switch (check?.state) {
+    case "reproduced":
+      return `${subject}: Trackwall checked${earlier} that it fails on the base commit and passes with the change`;
+    case "not_reproduced":
+      return `${subject}: Trackwall's check${earlier} did not confirm it${reason}; ${claim}`;
+    case "inconclusive":
+      return `${subject}: Trackwall's check could not tell${reason}; ${claim}`;
+    default:
+      return reproTestLine(test);
   }
-  return reproTestLine(test);
 }
 
 /**
@@ -80,20 +102,13 @@ function rulesLine(review: AutoReview, outdated: boolean): string {
  * The models Copilot CLI ran the task on, the most calls first, and the one asked for when it ran on none of them
  * (ADR-225), then what the conversation used; `null` when Trackwall knows neither.
  */
-function modelLine(task: Task, { models, usage }: MergeRequestEvidence): string | null {
+function modelLine(task: Task, { models, usage }: TaskEvidence): string | null {
   const calls = { one: "call", other: "calls" };
   const ran = models.map((m) => `${m.model} (${countLabel(m.modelCalls, calls)})`).join(", ");
   const asked = task.model !== null && models.length > 0 && !models.some((m) => m.model === task.model) ? `, asked for ${task.model}` : "";
   const label = models.length === 1 ? "Model" : "Models";
-  const used = usage ? `${usedLabel(usage)} in ${countLabel(usage.modelCalls, { one: "model call", other: "model calls" })}` : "";
+  const used = usage ? `${usageWithTokens(usage)} in ${countLabel(usage.modelCalls, { one: "model call", other: "model calls" })}` : "";
   if (ran === "" && used === "") return null;
   if (ran === "") return `Used: ${used}`;
   return `${label}: ${ran}${asked}${used === "" ? "" : `; used ${used}`}`;
-}
-
-/** Credits or premium requests with the tokens beside them; the tokens alone with a model of your own provider. */
-function usedLabel(usage: NonNullable<MergeRequestEvidence["usage"]>): string {
-  const tokens = `${tokenCount(usage.inputTokens + usage.outputTokens)} tokens`;
-  const label = usageLabel(usage);
-  return label === tokens ? tokens : `${label}, ${tokens}`;
 }
