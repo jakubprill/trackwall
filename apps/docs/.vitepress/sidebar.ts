@@ -88,6 +88,7 @@ export const SIDEBAR: DefaultTheme.SidebarItem[] = [
       { text: "Install", link: "/guide/install" },
       { text: "Connect Copilot CLI", link: "/guide/connect-copilot-cli" },
       { text: "Run in a dev container", link: "/guide/dev-container" },
+      { text: "Troubleshooting", link: "/guide/troubleshooting" },
     ],
   },
   {

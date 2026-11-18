@@ -58,6 +58,18 @@ Trackwall offers new versions itself: see [App updates](/features/updates).
 
 To update by hand, for example when a proxy stops the download or on 0.4.0, which cannot update itself: your data lives in `~/.trackwall` (on Windows `%USERPROFILE%\.trackwall`), outside the app folder. Quit Trackwall from the tray ("Quit", which also stops what runs in the background, so its files can be replaced) and install the new version the same way.
 
+## Copilot CLI
+
+Sessions run [GitHub Copilot CLI](https://github.com/github/copilot-cli), which needs a Copilot subscription and, on Windows, PowerShell 6 or later. Install it the way you install other tools, then sign in once:
+
+```sh
+winget install GitHub.Copilot      # Windows
+brew install copilot-cli           # macOS
+npm install -g @github/copilot     # either, with Node.js 22 or later
+```
+
+Run `copilot` in a terminal, type `/login` and follow the steps. Sessions you start in Trackwall use the same sign-in. Install it before you start Trackwall, or restart Trackwall afterwards, so that Trackwall finds it.
+
 ## First start
 
-Home offers [Get started](/features/get-started): a short list in "Settings" that sets your projects folder and checks Git, Copilot CLI and the network, and says when Trackwall is ready. Sessions you start in Trackwall get its tools by themselves; to give them to a Copilot CLI you start in your own terminal, [connect Copilot CLI](/guide/connect-copilot-cli). The [list of all features](/features/) shows what to try next.
+Home offers [Get started](/features/get-started): a short list in "Settings" that sets your projects folder and checks Git, Copilot CLI and the network, and says when Trackwall is ready. Sessions you start in Trackwall get its tools by themselves; to give them to a Copilot CLI you start in your own terminal, [connect Copilot CLI](/guide/connect-copilot-cli). The [list of all features](/features/) shows what to try next, and [Troubleshooting](/guide/troubleshooting) what to do when something in the list does not turn green.
