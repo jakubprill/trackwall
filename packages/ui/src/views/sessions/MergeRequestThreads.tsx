@@ -4,14 +4,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { firstPicks, sendBlocker, threadPlace, threadsSummary } from "@/lib/merge-request-threads";
+import { notesLeftOut, pickedThreads, sendBlocker, threadPlace, threadsSummary } from "@/lib/merge-request-threads";
 import { deliveryMessage } from "@/lib/review-drafts";
 import { useAction } from "@/lib/use-action";
 
 /**
  * The unresolved threads of a task's open merge request (ADR-256), read from the repo host when the user asks: each with
- * where it is and what its reviewers wrote, picked or not, and "Send to agent", which hands the picked ones to the
- * task's agent like a review. Replying and resolving stay on the repo host, a link away.
+ * where it is and every note of it that would reach the agent, in full, none picked at first, and "Send to agent", which
+ * hands the picked ones, as the user saw them, to the task's agent like a review. Replying and resolving stay on the repo
+ * host, a link away.
  */
 export function MergeRequestThreads({ conn, task, open }: { conn: Connection; task: string; open: (url: string) => void }) {
   const [read, setRead] = useState<ThreadsRead>();
@@ -21,12 +22,12 @@ export function MergeRequestThreads({ conn, task, open }: { conn: Connection; ta
     () => post(conn, mergeRequestsApi.threads, { task }),
     (threads) => {
       setRead(threads);
-      setPicked(firstPicks(threads.threads));
+      setPicked(new Set());
       setSent(undefined);
     },
   );
   const send = useAction(
-    () => post(conn, mergeRequestsApi.sendThreads, { task, threads: [...picked] }),
+    () => post(conn, mergeRequestsApi.sendThreads, { task, threads: pickedThreads(read?.threads ?? [], picked) }),
     ({ delivery, sent }) => setSent(deliveryMessage(delivery, sent === 1 ? "the thread" : `the ${sent} threads`)),
   );
   const toggle = (id: string) =>
@@ -79,9 +80,8 @@ function ThreadRow({
   onToggle: () => void;
   open: (url: string) => void;
 }) {
-  const [first, ...replies] = thread.notes;
   const place = threadPlace(thread);
-  const more = replies.length + thread.moreNotes;
+  const leftOut = notesLeftOut(thread);
   return (
     <li className="flex min-w-0 items-start gap-2 text-xs">
       <input
@@ -91,15 +91,16 @@ function ThreadRow({
         checked={picked}
         onChange={onToggle}
       />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-muted-foreground truncate font-mono">{place}</span>
-        {first && (
-          <span className="line-clamp-3 break-words">
-            <span className="text-muted-foreground">{`${first.author}: `}</span>
-            {first.text}
-          </span>
-        )}
-        {more > 0 && <span className="text-muted-foreground">{more === 1 ? "1 reply" : `${more} replies`}</span>}
+        {thread.notes.map((note, i) => (
+          // The notes of one read never move, and two can share an author and a minute.
+          <p key={`${i}:${note.at}`} className="break-words whitespace-pre-wrap">
+            <span className="text-muted-foreground">{`${note.author}: `}</span>
+            {note.text}
+          </p>
+        ))}
+        {leftOut && <span className="text-muted-foreground">{leftOut}</span>}
       </div>
       <Button
         variant="ghost"
