@@ -39,20 +39,21 @@ const ON_ITS_WAY: ReadonlySet<ReadRequestHold> = new Set(["sent", "pending"]);
 
 /**
  * The session's state for the waiter. A stopping session is still working until its group ends, and one that may be
- * stuck (ADR-151) is `stale` like one that does not respond. A session blocked in `Approval` or `Plan` needs someone. A
- * turn that ended (`Input`) or failed (`Error` from the `errorOccurred` hook, after which it is unknown whether Copilot
- * CLI sends an end of turn) needs someone until the user has seen it, and is `idle` after that: what the user saw
- * changes nothing for the agent, which is done with its turn either way, so the wait must not go on.
+ * stuck (ADR-151) is `stale` like one that does not respond. A session blocked in `Approval` or `Plan` needs someone, and
+ * so does one whose turn failed (`Error` from the `errorOccurred` hook, after which it is unknown whether Copilot CLI
+ * sends an end of turn). A turn that ended (`Input`) needs someone until the user has seen it, and is `idle` after that:
+ * what the user saw changes nothing for the agent, which is done with its turn either way, so the wait must not go on.
  */
 export function sessionWaitStatus(session: Session): WaitStatus {
   if (session.run.kind === "exited") return "exited";
   const state = session.state?.state;
-  if (state === "Approval" || state === "Plan") return "needs_attention";
   if (state === "Input" || state === "Error") {
     const hold = session.readRequest?.waitsFor;
     if (hold !== undefined && ON_ITS_WAY.has(hold)) return "working";
     return session.needsAttention || state === "Error" ? "needs_attention" : "idle";
   }
+  // The other states that need someone, `Approval` and `Plan`, do so until the user answers (`SessionAttention`).
+  if (session.needsAttention) return "needs_attention";
   return state === "Stale" || session.stuck !== null ? "stale" : "working";
 }
 

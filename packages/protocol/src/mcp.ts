@@ -313,8 +313,8 @@ export const WaitStatus = z.enum([
   /** The session does not respond (`Stale`) or may be stuck (`Session.stuck`, ADR-151). */
   "stale",
   /**
-   * The session is waiting for the user (`needsAttention`): it finished or failed a turn the user has not seen yet, or
-   * asks for permission or for a plan approval (`session.state.state`: `Input`, `Error`, `Approval`, `Plan`).
+   * The session needs someone: it finished a turn the user has not seen yet, failed a turn, or asks for permission or
+   * for a plan approval (`session.state.state`: `Input`, `Error`, `Approval`, `Plan`).
    */
   "needs_attention",
   /** The session finished its turn, and the user has already seen it: the agent is idle in its input box. */
