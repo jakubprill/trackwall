@@ -12,7 +12,7 @@ Open your own shell in the projects folder, a repo or a task's worktree, already
 
 - A shell in the repo's folder, in a task's worktree, or in the projects folder with all your repos, one click away, without looking up the path.
 - The same shell in the desktop app and in the browser page, where Trackwall runs: in a [dev container](/guide/dev-container), a shell in the container.
-- Your shell keeps running while you look at other views, and shows what it printed when you come back.
+- Your shell keeps running while you look at other views, and shows what it printed when you come back. After Trackwall restarts, it opens again in the same folder.
 - One shell per repo, per task and for the projects folder, so you never wonder which window was the right one.
 - A "Files on disk" panel beside the shell to download a build's JAR, a log or a test report to your computer, and files you drop on the shell land where it runs, also in a container.
 
@@ -40,7 +40,8 @@ A task's "Terminal" tab is still the agent's session; "Shell" is yours. Ctrl+Pag
 
 - The shell is the one your system names: on Windows the command prompt (`cmd.exe`, or whatever `ComSpec` names), on macOS your login shell, on Linux `$SHELL`. To use PowerShell on Windows, type `powershell` in it.
 - It runs as you, with your environment, but without the mise environment of the repo; run `mise` commands as you would in any terminal.
-- Shells end when Trackwall stops or restarts. Up to 16 can be open at once; close one to open another.
+- When Trackwall restarts (an update, quitting the app, restarting the container or your computer), each shell that was open comes back as a new shell in the same folder, with a line at the top saying so. Only the place comes back: what the old shell printed, its variables and history, and anything it was running are gone. A shell you closed or ended with `exit` stays closed.
+- Up to 16 shells can be open at once; close one to open another.
 - A shell runs whatever your shell's own setup runs when it starts, also a per-folder config an agent may have written into a task's worktree (such as a `.envrc` with direnv).
 - Removing a repo is refused while its shell runs; close the shell first.
 - Agents cannot see or type into your shell.

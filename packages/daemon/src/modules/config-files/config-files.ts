@@ -31,6 +31,7 @@ type StateEntryId =
   | "tasks-file"
   | "task-rounds-file"
   | "resumable-sessions-file"
+  | "folder-terminals-file"
   | "last-supervisor-file"
   | "agent-queues-file"
   | "verifications-file"
@@ -148,6 +149,7 @@ export class ConfigFiles {
       case "tasks-file":
       case "task-rounds-file":
       case "resumable-sessions-file":
+      case "folder-terminals-file":
       case "last-supervisor-file":
       case "agent-queues-file":
       case "verifications-file":
