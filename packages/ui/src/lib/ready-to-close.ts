@@ -9,11 +9,16 @@ import { taskName, workingSession } from "./session-entries.ts";
  * and one whose agent works again, and those stay open for the user to look at.
  */
 
-/** The tasks ready to close now, oldest report first: the agent of each said its work is over and does nothing else. */
+/**
+ * The tasks ready to close now, oldest report first: the agent of each said its work is over and does nothing else. The
+ * lead part of a change with one session (ADR-265) comes after the parts it works on, since the daemon ends it only once
+ * they are ended, so "Close all" closes a whole change.
+ */
 export function tasksReadyToClose(tasks: readonly Task[], sessions: readonly Session[]): Task[] {
+  const lead = (task: Task) => (task.change?.session === task.id ? 1 : 0);
   return tasks
     .filter((task) => readyToClose(task, workingSession(sessions, task)))
-    .sort((a, b) => (a.summary?.reportedAt ?? a.createdAt).localeCompare(b.summary?.reportedAt ?? b.createdAt));
+    .sort((a, b) => lead(a) - lead(b) || (a.summary?.reportedAt ?? a.createdAt).localeCompare(b.summary?.reportedAt ?? b.createdAt));
 }
 
 /** One task's Close: done, or why the daemon kept it open. */

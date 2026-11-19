@@ -44,6 +44,13 @@ describe("the tasks ready to close on Home (ADR-282)", () => {
     expect(tasksReadyToClose(tasks, sessions).map((t) => t.id)).toEqual(["1", "3"]);
   });
 
+  test("puts the lead part of a change with one session after the parts it works on, which the daemon ends first (ADR-265)", () => {
+    const change = (session: string) => ({ id: "c", position: 1, session }) as Task["change"];
+    const tasks = [task("1", { change: change("1") }), task("2", { change: change("1") }), task("3", { change: change("1") })];
+
+    expect(tasksReadyToClose(tasks, []).map((t) => t.id)).toEqual(["2", "3", "1"]);
+  });
+
   test("Close all says how many it closed, and names each task it left open with the daemon's reason", () => {
     expect(closeOutcome([{ task: task("1") }, { task: task("2") }])).toBe("Closed 2 tasks.");
     expect(
