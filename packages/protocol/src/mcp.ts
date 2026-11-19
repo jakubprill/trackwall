@@ -1290,7 +1290,8 @@ export const mcpTools = {
       "refused for it is told when they trust it. In a task worktree that " +
       "also happens when its mise config (mise.toml, mise.local.toml, file tasks…) changed since the user trusted it: " +
       "the user trusts the changed config in the task's panel. A session in Trackwall can run only mise tasks of its own " +
-      "repo, a task session only in its own task's worktree or the repo root, and the supervisor none. Long-running " +
+      "repo, a task session only in its own task's worktree or the repo root (the one session of a change: in every " +
+      "part's worktree or repo root), and the supervisor none. Long-running " +
       "tasks (dev servers) keep running until stopped; stop them when you no longer need them. A mise task with a usage " +
       "takes arguments, such as the test filter of the test task: run one test class while you work, the whole task before you finish.",
     args: RunMiseTaskArgs,
@@ -1306,8 +1307,8 @@ export const mcpTools = {
       "process group is killed. Returns after Trackwall has confirmed that no process of the group is alive " +
       "(run: exited with stoppedByUser: true); stop_unconfirmed when some process survived. A task that has already " +
       "ended returns its run; not_found when it has not been run since Trackwall started. A session in Trackwall can " +
-      "stop only mise tasks of its own repo, a task session only in its own task's worktree or the repo root, and the " +
-      "supervisor none.",
+      "stop only mise tasks of its own repo, a task session only in its own task's worktree or the repo root (the one " +
+      "session of a change: in every part's), and the supervisor none.",
     args: MiseTaskArgs,
     result: MiseTaskRunResult,
   },
@@ -1350,7 +1351,8 @@ export const mcpTools = {
       `means the run wrote no JUnit reports. not_found when the worktree has no mise task ${VERIFY_MISE_TASK}; ` +
       "mise_unavailable when its mise config is not trusted (the user trusts it in the task's panel, and a session in " +
       "Trackwall refused for it is told when they do). A task session " +
-      "verifies only its own task, a session in a repo root only tasks of its repo, and the supervisor none: it reads " +
+      "verifies only its own task (the one session of a change every part of it), a session in a repo root only tasks " +
+      "of its repo, and the supervisor none: it reads " +
       `the result in ${GET_SESSION}.`,
     args: z
       .object({
@@ -1391,7 +1393,8 @@ export const mcpTools = {
       "and the root's service then starts again if it was running. Refused when another task holds the port, when the " +
       "task's service already runs on the task port (stop it first) or when the repo has no single known port. " +
       "A session in Trackwall can start only its own repo (dependencies " +
-      "come from the graph), a task session only from its own task's worktree or the repo root, and the supervisor none. " +
+      "come from the graph), a task session only from its own task's worktree or the repo root (the one session of a " +
+      "change: from every part's), and the supervisor none. " +
       "mise_unavailable when the repo's mise config is not trusted; a session in Trackwall refused for it is told when the user trusts it. " +
       `Then use ${CALL_ENDPOINT} with the same task; read logs with tail (miseTask ${SERVICE_MISE_TASK}, the same task) and ` +
       `${GET_ERRORS}. Stop what you started with stop_service when you are done.`,
@@ -1422,7 +1425,8 @@ export const mcpTools = {
       "or that another started slice uses). Returns the stopped services: stopped once the process group has ended and the port " +
       `no longer answers, or stopping with the reason when the port still answers after ${SERVICE_RELEASE_MS / 1000} s (a process ` +
       "outside the group, such as an app Gradle's daemon runs, holds it; calling it again checks again). A session in Trackwall can stop only its own " +
-      "repo's service, a task session only its own task's or the repo root's, and the supervisor none.",
+      "repo's service, a task session only its own task's or the repo root's (the one session of a change: every " +
+      "part's), and the supervisor none.",
     args: z
       .object({
         repo: RepoArg,

@@ -511,6 +511,14 @@ export class Agents {
   }
 
   /**
+   * The tasks session `id` works on, in the parts' order (ADR-265): a task session's own task, and the one session of a
+   * change every listed part; none for a session without a task.
+   */
+  sessionTasks(id: string): Task[] {
+    return this.#worksOn(this.session(id).task).map((task) => this.#tasks.task(task));
+  }
+
+  /**
    * A repo session in the root of `repo`, or with `repo: null` a free session in the projects folder (ADR-100), with
    * `prompt` as its first message (`--interactive`) when there is one. In a terminal its id is also Copilot CLI's
    * session id, so a restart can resume it (ADR-95); in the conversation view Copilot CLI picks the conversation's id

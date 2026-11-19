@@ -485,40 +485,50 @@ function hasEveryTag(tags: readonly string[], wanted: readonly string[]): boolea
 }
 
 /**
- * A Trackwall session starts and stops processes only in the repo it works in (§8, ADR-41), so a task session does
- * not reach other repos in the projects folder through its own bridge. The supervisor works in no repo (ADR-58): it
- * hands running things to the session of the repo with a task proposal. An agent outside Trackwall (`caller: null`)
- * is the user's program, like a terminal, and reaches every repo. A guard for the agent, not a security boundary: a
- * session process can call `/mcp` without its session token (§8).
+ * A Trackwall session starts and stops processes only in the repos it works in (§8, ADR-41): its own, and for the one
+ * session of a change the repo of every part (ADR-265), so a task session does not reach other repos in the projects
+ * folder through its own bridge. The supervisor works in no repo (ADR-58): it hands running things to the session of
+ * the repo with a task proposal. An agent outside Trackwall (`caller: null`) is the user's program, like a terminal,
+ * and reaches every repo. A guard for the agent, not a security boundary: a session process can call `/mcp` without
+ * its session token (§8).
  */
-function assertCallerRepo(facade: Facade, caller: string | null, repo: string, action: string): void {
-  if (caller === null) return;
+function assertCallerRepo(facade: Facade, caller: string | null, repo: string, action: string): CallerScope | null {
+  if (caller === null) return null;
   const session = facade.agents.session(caller);
-  const own = session.repo;
-  if (own === null)
+  if (session.repo === null)
     throw new DomainError(
       "bad_request",
       `${inNoRepo(session)} works in no repo and runs nothing in one; propose a task in ${repo} instead`,
     );
-  if (own !== repo) throw new DomainError("bad_request", `a session in ${own} can ${action} of ${own}, not of ${repo}`);
+  const scope = callerScope(facade, session, session.repo);
+  if (!scope.repos.includes(repo)) {
+    const named = scope.repos.join(" and ");
+    throw new DomainError("bad_request", `a session in ${named} can ${action} of ${named}, not of ${repo}`);
+  }
+  return scope;
 }
 
 /**
- * Where a session may run and stop a mise task or a service (ADR-41, ADR-59, ADR-61): its own repo, and for a task
- * session the repo root or its own task's worktree, so it does not run another agent's worktree. An agent outside
- * Trackwall reaches every repo and task. A guard for the agent, not a security boundary, as in `assertCallerRepo`.
+ * Where a session may run and stop a mise task or a service (ADR-41, ADR-59, ADR-61): its own repos, and for a task
+ * session their roots or the worktrees of the tasks it works on, so it does not run another agent's worktree. An agent
+ * outside Trackwall reaches every repo and task. A guard for the agent, not a security boundary, as in `assertCallerRepo`.
  */
 function callerTarget(facade: Facade, caller: string | null, repo: string, task: string | undefined, action: string): MiseTarget {
-  assertCallerRepo(facade, caller, repo, action);
-  const own = caller === null ? null : facade.agents.session(caller).task;
-  if (task !== undefined && own !== null && task !== own)
-    throw new DomainError("bad_request", `a session of task ${own} can ${action} of its own worktree, not of that of task ${task}`);
+  const own = assertCallerRepo(facade, caller, repo, action)?.tasks ?? [];
+  if (task !== undefined && own.length > 0 && !own.includes(task))
+    throw new DomainError(
+      "bad_request",
+      own.length === 1
+        ? `a session of task ${own[0]} can ${action} of its own worktree, not of that of task ${task}`
+        : `the session of a change can ${action} of the worktrees of the parts it works on (${own.join(", ")}), not of that of task ${task}`,
+    );
   return miseTarget(facade, repo, task);
 }
 
 /**
  * Who may verify a task (ADR-64), before the repo gate of `callerTarget`, with messages that fit verifying: the
- * supervisor reads the verdict instead of running tests, and a task session verifies its own task only.
+ * supervisor reads the verdict instead of running tests, a task session verifies its own task only, and the one
+ * session of a change every part it works on (ADR-265).
  */
 function assertCallerMayVerify(facade: Facade, caller: string | null, task: string): void {
   if (caller === null) return;
@@ -528,8 +538,32 @@ function assertCallerMayVerify(facade: Facade, caller: string | null, task: stri
       "bad_request",
       `${inNoRepo(session)} runs no tests; read task ${task}'s verification with ${mcpTools.getSession.name}, or ask its session to verify it`,
     );
-  if (session.task !== null && session.task !== task)
-    throw new DomainError("bad_request", `a task session can verify only its own task ${session.task}, not task ${task}`);
+  const own = callerScope(facade, session, session.repo).tasks;
+  if (own.length === 0 || own.includes(task)) return;
+  throw new DomainError(
+    "bad_request",
+    own.length > 1
+      ? `the session of a change can verify only the parts it works on (${own.join(", ")}), not task ${task}`
+      : `a task session can verify only its own task ${own[0]}, not task ${task}`,
+  );
+}
+
+/** Where a session in a repo may run things (ADR-41, ADR-59, ADR-265): its repos, and the tasks whose worktrees it may use. */
+interface CallerScope {
+  repos: string[];
+  /** None for a session in a repo root, which may use the root only. */
+  tasks: string[];
+}
+
+/**
+ * A session's scope: a repo session its repo; a task session its task, and the one session of a change every listed
+ * part with its repo. A session whose task is no longer listed keeps its own task and repo, never more.
+ */
+function callerScope(facade: Facade, session: Session, repo: string): CallerScope {
+  if (session.task === null) return { repos: [repo], tasks: [] };
+  const parts = facade.agents.sessionTasks(session.id);
+  if (parts.length === 0) return { repos: [repo], tasks: [session.task] };
+  return { repos: [...new Set(parts.map((part) => part.repo))], tasks: parts.map((part) => part.id) };
 }
 
 /** A session in the projects folder as a refusal names it: the supervisor (ADR-58) or a free session (ADR-100). */
