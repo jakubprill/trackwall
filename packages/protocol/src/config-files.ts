@@ -18,6 +18,7 @@ export const ConfigEntryId = z.enum([
   "tasks-file",
   "task-rounds-file",
   "resumable-sessions-file",
+  "folder-terminals-file",
   "last-supervisor-file",
   "agent-queues-file",
   "verifications-file",
@@ -68,6 +69,7 @@ export type DocsPage =
   | "routines"
   | "task-templates"
   | "sessions"
+  | "shell"
   | "start-my-day"
   | "supervisor"
   | "tasks"
@@ -121,6 +123,14 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: true,
     purpose: "The sessions that resume when Trackwall starts again.",
     docs: "sessions",
+  },
+  "folder-terminals-file": {
+    place: "state",
+    kind: "file",
+    writer: "trackwall",
+    internal: true,
+    purpose: "The places of the shells that open again when Trackwall starts again.",
+    docs: "shell",
   },
   "last-supervisor-file": {
     place: "state",

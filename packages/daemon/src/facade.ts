@@ -96,6 +96,7 @@ import { TaskTemplates } from "./modules/task-templates/task-templates.ts";
 import { DroppedFiles } from "./modules/terminals/dropped-files.ts";
 import { FolderFiles } from "./modules/terminals/folder-files.ts";
 import { FolderTerminals } from "./modules/terminals/folder-terminals.ts";
+import { SHELL_PLACES_FILE, SHELL_PLACES_FORMAT, ShellPlaces } from "./modules/terminals/shell-places.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { UsageReport } from "./modules/usage-report/usage-report.ts";
 import type { KnownPlaces } from "./modules/usage-report/work-place.ts";
@@ -224,7 +225,8 @@ export interface Facade {
   diagnostics: () => Promise<Diagnostics>;
   /**
    * Daemon exit, before `procs.stopAll`: what a restart is to bring back stays as it is now, the sessions to resume
-   * (ADR-95), the agent queues and the verifications (ADR-115), so what the stop of the groups changes does not reach it.
+   * (ADR-95), the agent queues and the verifications (ADR-115) and the places of the shells to open again (ADR-283), so
+   * what the stop of the groups changes does not reach it.
    */
   keepForRestart: () => void;
 }
@@ -264,6 +266,7 @@ export const STATE_FILES: StateFiles = {
   [ROUTINE_APPROVALS_FILE]: approvalsFormat(RoutineName),
   [KNOWLEDGE_APPROVALS_FILE]: approvalsFormat(KnowledgeName),
   [WORK_BACKUP_INFO_FILE]: WORK_BACKUP_INFO_FORMAT,
+  [SHELL_PLACES_FILE]: SHELL_PLACES_FORMAT,
 };
 const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
@@ -580,6 +583,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "tasks-file": join(o.home, TASKS_FILE),
       "task-rounds-file": join(o.home, TASK_ROUNDS_FILE),
       "resumable-sessions-file": join(o.home, RESUMABLE_SESSIONS_FILE),
+      "folder-terminals-file": join(o.home, SHELL_PLACES_FILE),
       "last-supervisor-file": join(o.home, LAST_SUPERVISOR_FILE),
       "agent-queues-file": join(o.home, AGENT_QUEUES_FILE),
       "verifications-file": join(o.home, VERIFICATIONS_FILE),
@@ -696,6 +700,7 @@ export function createFacade(o: FacadeOptions): Facade {
     folder: placeFolder,
     env: o.userEnv,
     shell: (env) => userShell(env),
+    places: new ShellPlaces(join(o.home, SHELL_PLACES_FILE), o.log),
     log: o.log,
   });
 
@@ -775,6 +780,7 @@ export function createFacade(o: FacadeOptions): Facade {
       agents.keepRunningSessionsForResume();
       verifications.keepForRestart();
       reproductionChecks.keepForRestart();
+      terminals.keepForRestart();
     },
   };
 }
