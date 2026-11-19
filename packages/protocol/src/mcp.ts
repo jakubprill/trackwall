@@ -312,8 +312,13 @@ export const WaitStatus = z.enum([
   "working",
   /** The session does not respond (`Stale`) or may be stuck (`Session.stuck`, ADR-151). */
   "stale",
-  /** The session is waiting for the user (`needsAttention`): it finished or failed a turn, asks for permission or for a plan approval. */
+  /**
+   * The session is waiting for the user (`needsAttention`): it finished or failed a turn the user has not seen yet, or
+   * asks for permission or for a plan approval (`session.state.state`: `Input`, `Error`, `Approval`, `Plan`).
+   */
   "needs_attention",
+  /** The session finished its turn, and the user has already seen it: the agent is idle in its input box. */
+  "idle",
   /** The session's process has ended. */
   "exited",
   /** The task has no session (for example after a Trackwall restart); the user can resume it in the UI. */
@@ -1259,8 +1264,11 @@ export const mcpTools = {
     description:
       `Wait until a session or task needs someone: pass session (id from ${LIST_SESSIONS}) or task (id from ${PROPOSE_TASK} ` +
       `or ${LIST_SESSIONS}). Returns as soon as the status is proposal_rejected, stale (no response, or no step for a long time: ` +
-      "session.stuck), needs_attention (the session finished its turn or asks the user for approval), exited or no_session, or after timeoutSeconds with " +
-      "proposal_pending, starting or working; then call it again. On stale do not wait again at once: look at the session " +
+      "session.stuck), needs_attention (the session finished or failed its turn, or asks the user for approval: session.state.state " +
+      "says which), idle (it finished its turn and the user has already seen it), exited or no_session, or after timeoutSeconds with " +
+      "proposal_pending, starting or working; then call it again. A message you just sent with " +
+      `${SEND_MESSAGE} counts as work: the wait goes on until the agent has taken it and ends that turn. On stale do not ` +
+      "wait again at once: look at the session " +
       `(${GET_SESSION}) and tell the user, since a session that may be stuck stays so until its agent takes a step. ` +
       "Waiting on a task follows its latest session. " +
       `The result has the proposal, task (with its summary from ${REPORT_RESULT}) and session; ${GET_SESSION} gives the changed files. ` +
