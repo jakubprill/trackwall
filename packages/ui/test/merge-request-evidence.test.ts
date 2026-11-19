@@ -34,6 +34,7 @@ const task = (fields: Partial<Task> = {}): Task => ({
     reportedAt: "2026-11-10T10:00:00Z",
   },
   inReview: false,
+  readyToClose: false,
   port: 41000,
   included: { files: [], problems: [] },
   change: null,

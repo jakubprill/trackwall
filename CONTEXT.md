@@ -930,8 +930,12 @@ The task evidence above the task's diff (ADR-276): one row per fact (plan, repro
 _Avoid_: evidence panel, proof card, summary (that is the agent's report)
 
 **In review** (`Task.inReview`, the state "Ready for review" of a task, `READY_FOR_REVIEW`, column `review` of a board item):
-A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again, or until its next turn ends without changing the worktree (ADR-258). The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done".
+A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again, or until its next turn ends without changing the worktree (ADR-258). The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done" (also by closing a task ready to close).
 _Avoid_: ready, finished, done (those are the user's), awaiting approval (that is a tool approval)
+
+**Ready to close** (`Task.readyToClose`, `report_result` argument `readyToClose`, `readyToClose`, `READY_TO_CLOSE`; actions `close-task` and `keep-task-open`; "Ready to close", "Close task", "Close all" and "Keep open" in the UI):
+A task in review whose agent said with `report_result` that its work is over: complete and committed, no question left, nothing more to do without new instructions (ADR-282). Only the user answers it: **Close** stops the task's session and ends it with its branch kept, as "End task" would, and makes its board item done once no task is left on it; "Keep open" leaves it in review. Work the agent gets again takes it back, as it takes the task out of review.
+_Avoid_: done, finished, completed (those say the task ended; a task ready to close has not), auto-close (nothing closes by itself)
 
 ## Plan
 
@@ -963,7 +967,7 @@ An item not filed under a project yet, written down so it is not lost: with Alt+
 _Avoid_: draft, note
 
 **Board column** (`BoardColumn`: `ideas`, `ready`, `in_progress`, `review`, `done`, `dropped`; "Column" in the UI, `COLUMN_LABELS`):
-How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review", and back to "Ready" when the last task on an item still in progress is removed (`TaskWorkColumn`, ADR-213), and only the user sets "Done" and "Dropped".
+How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review", and back to "Ready" when the last task on an item still in progress is removed (`TaskWorkColumn`, ADR-213), and only the user sets "Done" and "Dropped", by hand or by closing the last task on an item ready to close (ADR-282).
 _Avoid_: status (a repo's is `RepoStatus`), state (a session's)
 
 **Task item** (`Task.item`, `TaskProposal.item`):
@@ -1032,7 +1036,7 @@ The dashboard's 3D scene on Pawn. It does not know the daemon API: it gets succe
 The first screen, the "Home" view (`HomeView`): the daemon state, sessions (especially those waiting for you), repos and the connections between them, in the "Orbit" layout (`orbitLayout`).
 
 **"Needs you" queue** (`NeedsYouPanel`):
-The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), in a container the repos with unpushed work (ADR-162), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.
+The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), tasks ready to close with "Close all" (ADR-282), in a container the repos with unpushed work (ADR-162), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.
 
 **Unpushed work** (`UnpushedWork`, `unpushedWork`, `Vcs.unpushed`; in the UI *only in this container*):
 What of a repo is on no remote: commits no remote-tracking branch reaches (on local branches and on the detached HEAD of a worktree), stashes, and changed files in the repo's worktrees, task worktrees included. Read only when the daemon runs in a container, where removing the Docker volume deletes it (ADR-162).

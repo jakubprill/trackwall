@@ -4,7 +4,8 @@ import { messageOf } from "../../infra/errors.ts";
 /**
  * How the work of tasks moves their board item (ADR-213, §4.18): to "In progress" when a task starts on it or its agent
  * gets work again, to "In review" once every open task on it has handed its work over with `report_result`, and back
- * to "Ready" when the last task on it is removed before it handed anything over (ADR-213). Only these
+ * to "Ready" when the last task on it is removed before it handed anything over (ADR-213), and to "Done" when the user
+ * closes the last task on it whose agent said its work is over (ADR-282). Only these
  * events move it, never an agent's request, and `board` keeps an item the user closed where it is. The moves run in the
  * background, in order (the board writes one at a time), so a task's start, report or review never waits for the
  * projects folder; one that cannot be written is logged.
@@ -13,6 +14,8 @@ import { messageOf } from "../../infra/errors.ts";
 export interface TaskBoardItemDeps {
   /** `Board.followTasks`: moves the item when its column allows it, `null` when it stays. */
   move: (item: string, column: TaskWorkColumn) => Promise<BoardItem | null>;
+  /** `Board.closeWithTasks`: an item in review goes to done, `null` when it stays (ADR-282). */
+  close: (item: string) => Promise<BoardItem | null>;
   /** Every open task, to tell whether all the tasks on an item are in review. */
   tasks: () => readonly Task[];
   log: (msg: string) => void;
@@ -46,6 +49,15 @@ export class TaskBoardItem {
   settle(item: string): void {
     const onItem = this.#deps.tasks().filter((task) => task.item === item);
     if (onItem.length > 0 && onItem.every((task) => task.inReview)) this.#move(item, "review");
+  }
+
+  /**
+   * The user closed a task on the item whose agent said its work is over (ADR-282): with no task left on it, the item in
+   * review is done, since the user's Close confirmed it; with others left, it stays for them.
+   */
+  closed(item: string): void {
+    if (this.#deps.tasks().some((task) => task.item === item)) return;
+    this.#deps.close(item).catch((err) => this.#deps.log(`board item ${item} did not move to done: ${messageOf(err)}`));
   }
 
   backToWork(task: Task): void {

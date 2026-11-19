@@ -163,7 +163,8 @@
   "report_result": {
     "summary": "required",
     "checkSteps": "optional",
-    "reproTest": "optional"
+    "reproTest": "optional",
+    "readyToClose": "optional"
   },
   "get_review_comments": {},
   "send_message": {

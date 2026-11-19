@@ -26,6 +26,7 @@ function task(id: string, fields: Partial<Task> = {}): Task {
     change: null,
     proposedBy: null,
     inReview: false,
+    readyToClose: false,
     summary: null,
     paused: null,
     createdAt: "2026-11-07T09:00:00.000Z",
@@ -88,6 +89,7 @@ describe("the column of a task on the wall (ADR-224)", () => {
     } as Partial<Session>);
     const reported = task("t", {
       inReview: true,
+      readyToClose: false,
       summary: { text: "done", checkSteps: [], reproTest: null, reportedAt: "2026-11-07T10:19:00.000Z" },
     });
     expect(onlyCard(input({ tasks: [reported], sessions: [finished] }))).toMatchObject({

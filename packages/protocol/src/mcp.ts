@@ -1051,7 +1051,8 @@ export const mcpTools = {
       "Report the result of your task: what you did, what is left and what the user or the session that proposed the " +
       `task should check. Only for a session that runs a task in Trackwall; the summary is saved to your own task (shown in ${GET_SESSION}, ` +
       `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary and its check steps. It hands your work over for review: your task's board ` +
-      "item moves to in review once every open task on it is waiting for review, and only the user moves it to done. Commit your changes on the task branch before reporting.",
+      "item moves to in review once every open task on it is waiting for review, and only the user moves it to done. Commit your changes on the task branch before reporting. " +
+      "With readyToClose you also say your work is over, so the user can close the task with one click; you never close it yourself.",
     args: z
       .object({
         summary: visibleText(TaskSummaryText).describe(
@@ -1086,6 +1087,15 @@ export const mcpTools = {
           .describe(
             "the test you wrote first that reproduces the error your task was given (a stack trace), which failed before your " +
               "fix and passes after it; leave it out when you wrote no such test, and say why in the summary.",
+          ),
+        readyToClose: z
+          .boolean()
+          .default(false)
+          .describe(
+            "true when nothing is left for you to do on this task: the work is complete and committed, you have no question " +
+              "for the user, and you would do nothing more without new instructions (for example the user accepted the work, " +
+              "or the task needs no change). Leave it false when you ask something, left work open or wait for a review. It " +
+              "ends nothing: the user closes the task or keeps it open, and new work for you takes it back.",
           ),
       })
       .strict(),

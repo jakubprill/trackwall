@@ -129,6 +129,7 @@ export function task(n: number, of: Partial<Task> = {}): Task {
     view: "terminal",
     summary: null,
     inReview: false,
+    readyToClose: false,
     port: 41000 + n,
     included: { files: [], problems: [] },
     change: null,

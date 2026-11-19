@@ -27,6 +27,7 @@ import { useTaskReview } from "@/lib/use-task-review";
 import { JavaNavigationMark } from "./JavaNavigationMark.tsx";
 import { PausedNotice } from "./PausedNotice.tsx";
 import { PlanApprovalNotice } from "./PlanApprovalNotice.tsx";
+import { ReadyToCloseNotice } from "./ReadyToCloseNotice.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { ResumeButton, StopButton, TaskEditorButton } from "./TaskButtons.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
@@ -159,6 +160,7 @@ export function TaskPanel({
       )}
       <SessionNotices conn={conn} session={session} onChanged={onChanged} />
       <PlanApprovalNotice conn={conn} task={task} session={session} onApproved={onChanged} />
+      <ReadyToCloseNotice conn={conn} task={task} session={session} onClosed={onRemoved} onKept={onChanged} />
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <TaskNoticeStrip
         notices={details.notices}

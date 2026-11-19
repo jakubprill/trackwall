@@ -605,6 +605,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
       openEditor: () => {},
       boardHas: async () => true,
       followTasks: async () => null,
+      closeBoardItem: async () => null,
       taskOutcomes: () => [],
       knowledge: async () => ({ entries: [], more: 0 }),
       wireApi: async () => null,

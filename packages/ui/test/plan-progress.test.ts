@@ -40,6 +40,7 @@ function task(id: string, fields: Partial<Task> = {}): Task {
     createdAt: "2026-11-05T09:00:00.000Z",
     paused: null,
     inReview: false,
+    readyToClose: false,
     ...fields,
   } as Task;
 }
