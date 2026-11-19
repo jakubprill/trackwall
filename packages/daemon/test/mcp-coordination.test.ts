@@ -189,6 +189,50 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
     await daemon.facade.agents.stop(main.id);
   }, 60_000);
 
+  test("a session waits for its task to finish a turn: a message it sends is not taken for a finished turn, and a turn the user has seen ends the wait", async () => {
+    const main = await daemon.facade.agents.start("shop");
+    const mainClient = await clientOfSession(main.id);
+    const { proposal } = ProposeTaskResult.parse(
+      (await call(mainClient, "propose_task", { repo: "shop", title: "Tidy logs", prompt: "tidy the logs" })).structuredContent,
+    );
+    const task = await daemon.post(agentsApi.approveProposal, {
+      proposal: proposal.id,
+      prompt: "tidy the logs",
+      model: null,
+      approvals: "auto",
+    });
+    const wait = async (timeoutSeconds: number) =>
+      WaitForSessionResult.parse((await call(mainClient, "wait_for_session", { task: task.id, timeoutSeconds })).structuredContent);
+
+    const started = await wait(2);
+    if (!started.session) throw new Error("waiting for a started task did not return its session");
+    const taskSession = started.session.id;
+
+    // The task's agent runs a turn without asking and ends it: nobody looks at its terminal.
+    const window = viewer(daemon.facade.agents, taskSession);
+    window.attachment.input("tidy the logs\r");
+    const ended = await wait(30);
+    expect(ended).toMatchObject({ status: "needs_attention", session: { id: taskSession, state: { state: "Input" } } });
+
+    // The proposer sends a message and waits at once: the wait lasts until the agent took the message and ended that turn.
+    const sentAt = new Date().toISOString();
+    await call(mainClient, "send_message", { task: task.id, text: "Keep the error lines." });
+    const answered = await wait(30);
+    expect(answered).toMatchObject({ status: "needs_attention", session: { id: taskSession, state: { state: "Input" } } });
+    expect(answered.session?.state?.at.localeCompare(sentAt)).toBe(1);
+    expect(window.unwrappedText()).toContain("get_messages");
+
+    // The user looks at the task's terminal: the agent is still done with its turn, so the wait ends at once.
+    window.attachment.focus(true);
+    const seenAt = Date.now();
+    expect(await wait(10)).toMatchObject({ status: "idle", session: { id: taskSession, needsAttention: false } });
+    expect(Date.now() - seenAt).toBeLessThan(5000);
+
+    window.attachment.detach();
+    await daemon.facade.agents.stop(taskSession);
+    await daemon.facade.agents.stop(main.id);
+  }, 60_000);
+
   test("report_result works only in a task's session: an agent outside Trackwall and a session in the repo root get bad_request", async () => {
     const root = await daemon.facade.agents.start("shop");
     for (const client of [outside, await clientOfSession(root.id)]) {

@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import type { Session, Task, TaskProposal, WaitStatus } from "@trackwall/protocol";
+import type { ReadRequestHold, Session, Task, TaskProposal, WaitStatus } from "@trackwall/protocol";
 
 /**
  * Waiting for a session or task (`wait_for_session`, ADR-39): every session cycle reads the state from daemon memory,
@@ -30,15 +30,31 @@ export function outcome(status: WaitStatus, parts: Partial<Omit<WaitOutcome, "st
 }
 
 /**
- * The session's state for the waiter; a stopping session is still working until its group ends, and one that may be
- * stuck (ADR-151) is `stale` like one that does not respond. An error (`Error`
- * from the `errorOccurred` hook) also needs someone: it is unknown whether Copilot CLI sends an end of turn after it, and
- * without this the wait would return with `working` after every time limit.
+ * What the daemon's prompt asking the agent to read is doing when the wait looks (ADR-159): typed or given and not
+ * taken yet (`sent`), or about to go in (`pending`). Either way the agent takes it into a new turn in a moment, so
+ * an input box with such a prompt is not a finished turn: a proposer that sends a message and waits at once would
+ * otherwise get the turn that ended before the message.
+ */
+const ON_ITS_WAY: ReadonlySet<ReadRequestHold> = new Set(["sent", "pending"]);
+
+/**
+ * The session's state for the waiter. A stopping session is still working until its group ends, and one that may be
+ * stuck (ADR-151) is `stale` like one that does not respond. A session blocked in `Approval` or `Plan` needs someone, and
+ * so does one whose turn failed (`Error` from the `errorOccurred` hook, after which it is unknown whether Copilot CLI
+ * sends an end of turn). A turn that ended (`Input`) needs someone until the user has seen it, and is `idle` after that:
+ * what the user saw changes nothing for the agent, which is done with its turn either way, so the wait must not go on.
  */
 export function sessionWaitStatus(session: Session): WaitStatus {
   if (session.run.kind === "exited") return "exited";
-  if (session.needsAttention || session.state?.state === "Error") return "needs_attention";
-  return session.state?.state === "Stale" || session.stuck !== null ? "stale" : "working";
+  const state = session.state?.state;
+  if (state === "Input" || state === "Error") {
+    const hold = session.readRequest?.waitsFor;
+    if (hold !== undefined && ON_ITS_WAY.has(hold)) return "working";
+    return session.needsAttention || state === "Error" ? "needs_attention" : "idle";
+  }
+  // The other states that need someone, `Approval` and `Plan`, do so until the user answers (`SessionAttention`).
+  if (session.needsAttention) return "needs_attention";
+  return state === "Stale" || session.stuck !== null ? "stale" : "working";
 }
 
 /** `read` every cycle, until the state stops being “in progress”, `timeoutMs` passes or the client cancels the call. */
