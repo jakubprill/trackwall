@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { VerifyTaskResult, verificationApi } from "@trackwall/protocol";
+import { agentsApi, MiseTaskRunResult, VerifyTaskResult, verificationApi } from "@trackwall/protocol";
 import { z } from "zod";
 import { gitIn } from "./support/git-repo.ts";
 import { connectHttpClient, connectSessionClient, toolText } from "./support/mcp-client.ts";
@@ -173,6 +173,47 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
       const orders = await daemon.facade.agents.createTask("orders", "no tests here");
       expect(errorText(await verify(outside, { repo: "orders", task: orders.id }))).toStartWith("not_found:");
       expect(await daemon.post(verificationApi.get, { task: orders.id })).toBeNull();
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "the one session of a change verifies and runs mise tasks in every part of its change, and in no task outside it (ADR-265)",
+    async () => {
+      const { tasks, failed } = await daemon.post(agentsApi.createChange, {
+        title: "Shelf prices",
+        prompt: "Show prices on shelves",
+        parts: [{ repo: "warehouse" }, { repo: "shop" }],
+        approvals: "ask",
+        sessions: "shared",
+      });
+      expect(failed).toEqual([]);
+      const [warehouse, shop] = tasks;
+      if (warehouse === undefined || shop === undefined) throw new Error("two parts expected");
+      const outsider = await daemon.facade.agents.createTask("shop", "another agent's task");
+      // Only the lead part has a session; it works on both parts.
+      const { client } = await sessionClient(warehouse.id);
+
+      const lead = VerifyTaskResult.parse((await verify(client, { repo: "warehouse", task: warehouse.id })).structuredContent);
+      expect(lead.verification).toMatchObject({ task: warehouse.id, repo: "warehouse", state: "passed" });
+      const other = VerifyTaskResult.parse((await verify(client, { repo: "shop", task: shop.id })).structuredContent);
+      expect(other.verification).toMatchObject({ task: shop.id, repo: "shop", state: "failed", exitCode: 1 });
+      expect(await daemon.post(verificationApi.get, { task: shop.id })).toEqual(other.verification);
+
+      const run = await client.callTool({ name: "run_mise_task", arguments: { repo: "shop", task: shop.id, miseTask: "test" } });
+      expect(run.isError).not.toBe(true);
+      expect(MiseTaskRunResult.parse(run.structuredContent).run.kind).toBeOneOf(["running", "exited"]);
+
+      expect(errorText(await verify(client, { repo: "shop", task: outsider.id }))).toBe(
+        `bad_request: the session of a change can verify only the parts it works on (${warehouse.id}, ${shop.id}), not task ${outsider.id}`,
+      );
+      expect(errorText(await verify(client, { repo: "orders", task: outsider.id }))).toBe(
+        `bad_request: the session of a change can verify only the parts it works on (${warehouse.id}, ${shop.id}), not task ${outsider.id}`,
+      );
+      const elsewhere = await client.callTool({ name: "run_mise_task", arguments: { repo: "orders", miseTask: "build" } });
+      expect(errorText(elsewhere)).toBe(
+        "bad_request: a session in warehouse and shop can run and stop only mise tasks of warehouse and shop, not of orders",
+      );
     },
     TIMEOUT,
   );
