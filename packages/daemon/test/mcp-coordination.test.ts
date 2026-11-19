@@ -100,6 +100,7 @@ describe.skipIf(process.versions.bun === undefined)("main session over MCP (real
       proposedBy: { session: main.id, supervisor: false, task: null },
       summary: null,
       inReview: false,
+      readyToClose: false,
     });
     expect(task.branch).toMatch(/^trackwall\/fix-login-[0-9a-f]{6}$/);
     expect(daemon.facade.agents.sessions().proposals).toEqual([]);

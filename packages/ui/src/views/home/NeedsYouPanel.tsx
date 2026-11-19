@@ -1,21 +1,22 @@
-import type { HealthWarning, Session, TaskProposal } from "@trackwall/protocol";
+import { type HealthWarning, READY_TO_CLOSE, type Session, type Task, type TaskProposal } from "@trackwall/protocol";
 import { type HomeKey, type HomeModel, repoKey, repoNeedsYou, sessionKey } from "@trackwall/scene/model";
-import { Activity, HardDrive, Lightbulb } from "lucide-react";
+import { Activity, CheckCheck, HardDrive, Lightbulb } from "lucide-react";
 import type { ReactNode } from "react";
 import { Loading } from "@/components/Loading";
 import { QueueItem } from "@/components/QueueItem";
 import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { StatusLabel } from "@/components/StatusLabel";
+import { Button } from "@/components/ui/button";
 import { HEALTH_WARNING_ROWS } from "@/lib/container-health";
 import { twoDigits } from "@/lib/format";
 import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
-import { proposalName } from "@/lib/session-entries";
+import { proposalName, taskName } from "@/lib/session-entries";
 import { PROPOSAL_STATUS, sessionTitle } from "@/lib/session-state";
 import { UNPUSHED_NOTE, type UnpushedRow } from "@/lib/unpushed-work";
 
 /**
  * The queue on the left of the dashboard: first sessions that are waiting for you or ended with an error, then task
- * proposals (ADR-39), in a container what its health warns of (ADR-280) and the repos whose work is only there (ADR-162),
+ * proposals (ADR-39), tasks whose agent said its work is over, which "Close all" closes at once (ADR-282), in a container what its health warns of (ADR-280) and the repos whose work is only there (ADR-162),
  * then repos that are not clean.
  * Sessions and repos are the same objects as the labels on the scene, so the dashboard also works without WebGL.
  * Proposals are not on the scene, and the decision (with an edited prompt) is made in the Sessions view, so a click on a
@@ -26,12 +27,16 @@ export function NeedsYouPanel({
   model,
   sessions,
   proposals,
+  readyToClose,
+  closing,
   unpushed,
   containerWarnings,
   selected,
   onSelect,
   onOpen,
   onOpenProposal,
+  onOpenTask,
+  onCloseAll,
   onOpenContainerHealth,
 }: {
   /** The repo or session list has not arrived yet. */
@@ -39,6 +44,10 @@ export function NeedsYouPanel({
   model: HomeModel;
   sessions: ReadonlyMap<string, Session>;
   proposals: readonly TaskProposal[];
+  /** Tasks whose agent said its work is over (`tasksReadyToClose`). */
+  readyToClose: readonly Task[];
+  /** "Close all" at work, and what its last run did (`closeOutcome`). */
+  closing: { pending: boolean; outcome: string | undefined };
   /** Empty outside a container and when everything is pushed. */
   unpushed: readonly UnpushedRow[];
   /** The container health's warnings; empty outside a container and when nothing needs the user. */
@@ -47,6 +56,8 @@ export function NeedsYouPanel({
   onSelect: (key: HomeKey) => void;
   onOpen: (key: HomeKey) => void;
   onOpenProposal: (id: string) => void;
+  onOpenTask: (id: string) => void;
+  onCloseAll: () => void;
   /** Settings › Diagnostics, where the container's health is. */
   onOpenContainerHealth: () => void;
 }) {
@@ -93,6 +104,33 @@ export function NeedsYouPanel({
             {proposals.map((p) => (
               <QueueItem key={p.id} title={proposalName(p)} active={false} onClick={() => onOpenProposal(p.id)}>
                 <StatusLabel {...PROPOSAL_STATUS} />
+              </QueueItem>
+            ))}
+          </ul>
+        </>
+      )}
+      {(readyToClose.length > 0 || closing.outcome !== undefined) && (
+        <>
+          <h2 className="hud-label flex items-center gap-1.5 px-4 pt-4 pb-2">
+            <CheckCheck className="text-primary size-3" aria-hidden />
+            Ready to close <span className="text-primary">{`// ${twoDigits(readyToClose.length)}`}</span>
+          </h2>
+          {readyToClose.length > 0 && (
+            <div className="px-4 pb-1">
+              <Button variant="outline" size="sm" disabled={closing.pending} onClick={onCloseAll}>
+                <CheckCheck /> {closing.pending ? "Closing…" : "Close all"}
+              </Button>
+            </div>
+          )}
+          {closing.outcome !== undefined && (
+            <p role="status" className="text-muted-foreground px-4 pb-1 text-xs break-words">
+              {closing.outcome}
+            </p>
+          )}
+          <ul aria-label="Tasks whose agent says its work is over" className="max-h-48 overflow-y-auto px-2">
+            {readyToClose.map((task) => (
+              <QueueItem key={task.id} title={`${task.repo} · ${taskName(task)}`} active={false} onClick={() => onOpenTask(task.id)}>
+                <StatusLabel {...READY_TO_CLOSE} />
               </QueueItem>
             ))}
           </ul>

@@ -77,6 +77,9 @@ export const NO_SESSION_LABEL = "No session";
 /** A task whose agent handed its work over (ADR-213) and now only waits for your review (ADR-261). */
 export const READY_FOR_REVIEW: StatusLabel = { tone: "review", label: "Ready for review" };
 
+/** A task whose agent said its work is over (ADR-282): handed over like one ready for review, and yours to close. */
+export const READY_TO_CLOSE: StatusLabel = { tone: "review", label: "Ready to close" };
+
 type LabelledSession = Pick<Session, "run" | "state" | "needsAttention" | "stuck">;
 
 /**
@@ -91,11 +94,23 @@ export function readyForReview(task: Pick<Task, "inReview" | "paused">, session:
 }
 
 /**
- * A task's state in one line: "Paused" for a task the user paused, "Ready for review" for one handed over, otherwise
- * its newest session's, if it has one.
+ * The task's agent said its work is over (ADR-282) and does nothing else now, as `readyForReview` tells: a session that
+ * works again or waits for you says that instead, and the user's Close is refused while its agent is in a turn.
  */
-export function taskStateLabel(task: Pick<Task, "paused" | "inReview">, session: LabelledSession | undefined): StatusLabel {
+export function readyToClose(task: Pick<Task, "inReview" | "readyToClose" | "paused">, session: LabelledSession | undefined): boolean {
+  return task.readyToClose && readyForReview(task, session);
+}
+
+/**
+ * A task's state in one line: "Paused" for a task the user paused, "Ready to close" for one whose agent said its work is
+ * over, "Ready for review" for one handed over, otherwise its newest session's, if it has one.
+ */
+export function taskStateLabel(
+  task: Pick<Task, "paused" | "inReview" | "readyToClose">,
+  session: LabelledSession | undefined,
+): StatusLabel {
   if (task.paused !== null) return { label: PAUSED_LABEL };
+  if (readyToClose(task, session)) return READY_TO_CLOSE;
   if (readyForReview(task, session)) return READY_FOR_REVIEW;
   return session ? sessionStateLabel(session) : { label: NO_SESSION_LABEL };
 }

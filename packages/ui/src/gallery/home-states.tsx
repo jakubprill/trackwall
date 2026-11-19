@@ -1,9 +1,9 @@
-import type { HealthWarning, Repo, Session, TaskProposal, UnpushedWork } from "@trackwall/protocol";
+import type { HealthWarning, Repo, Session, Task, TaskProposal, UnpushedWork } from "@trackwall/protocol";
 import { homeModel } from "@/lib/home-model";
 import { unpushedRows } from "@/lib/unpushed-work";
 import { NeedsYouPanel } from "@/views/home/NeedsYouPanel";
 import type { GalleryState } from "./gallery-state.ts";
-import { exited, LONG_REPO, LONG_TITLE, proposal, session, stateOf, waiting } from "./sample-data.ts";
+import { exited, LONG_REPO, LONG_TITLE, proposal, session, stateOf, task, waiting } from "./sample-data.ts";
 
 function repo(id: string, status: Repo["status"]): Repo {
   return { id, path: `/projects/${id}`, remote: `gitlab.example.com/shop/${id}`, status };
@@ -28,6 +28,8 @@ function NeedsYouOf({
   proposals = [],
   unpushed,
   containerWarnings = [],
+  readyToClose = [],
+  closeOutcome,
   loading = false,
 }: {
   repos: readonly Repo[];
@@ -35,6 +37,8 @@ function NeedsYouOf({
   proposals?: readonly TaskProposal[];
   unpushed?: UnpushedWork;
   containerWarnings?: readonly HealthWarning[];
+  readyToClose?: readonly Task[];
+  closeOutcome?: string;
   loading?: boolean;
 }) {
   const model = homeModel({ repos, sessions, graph: undefined, running: [], services: [], daemonRunning: true });
@@ -45,12 +49,16 @@ function NeedsYouOf({
       model={model}
       sessions={new Map(sessions.map((s) => [s.id, s]))}
       proposals={proposals}
+      readyToClose={readyToClose}
+      closing={{ pending: false, outcome: closeOutcome }}
       unpushed={unpushedRows(unpushed)}
       containerWarnings={containerWarnings}
       selected={first ? `session:${first.id}` : null}
       onSelect={() => {}}
       onOpen={() => {}}
       onOpenProposal={() => {}}
+      onOpenTask={() => {}}
+      onCloseAll={() => {}}
       onOpenContainerHealth={() => {}}
     />
   );
@@ -73,6 +81,7 @@ const busy: GalleryState = {
         session(4, { repo: "billing" }),
       ]}
       proposals={[proposal(10, 1, { title: LONG_TITLE }), proposal(11, 1)]}
+      readyToClose={[readyTask(20, { repo: LONG_REPO, title: LONG_TITLE }), readyTask(21)]}
       unpushed={{
         inContainer: true,
         repos: [
@@ -90,8 +99,24 @@ const busy: GalleryState = {
   ),
 };
 
+/** A task whose agent said its work is over (ADR-282). */
+function readyTask(n: number, of: Partial<Task> = {}): Task {
+  return task(n, { inReview: true, readyToClose: true, title: "Fix the footer links", ...of });
+}
+
+const readyToClose: GalleryState = {
+  name: "Tasks ready to close, one left open by Close all",
+  render: () => (
+    <NeedsYouOf
+      repos={[repoWith("shop", 0)]}
+      readyToClose={[readyTask(31, { repo: LONG_REPO, title: LONG_TITLE }), readyTask(32, { repo: "orders-api" })]}
+      closeOutcome={`Closed 2 tasks. Still open, 1 task: ${LONG_REPO} · ${LONG_TITLE}: ending the task would delete: uncommitted changes in the worktree (3).`}
+    />
+  ),
+};
+
 const quiet: GalleryState = { name: "Nothing needs you", render: () => <NeedsYouOf repos={[repoWith("shop", 0)]} /> };
 
 const loading: GalleryState = { name: "Loading", render: () => <NeedsYouOf repos={[]} loading /> };
 
-export const HOME_STATES: readonly GalleryState[] = [busy, quiet, loading];
+export const HOME_STATES: readonly GalleryState[] = [busy, readyToClose, quiet, loading];

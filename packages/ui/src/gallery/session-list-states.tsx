@@ -105,7 +105,7 @@ const taskStates: GalleryState = {
           task(101, { inReview: true, title: "Add a discount to the cart" }),
           task(102, { inReview: true }),
           task(103, { paused: { at: minutesAgo(30), service: null } }),
-          task(104, {}),
+          task(104, { inReview: true, readyToClose: true, title: "Fix the footer links" }),
           task(105, { title: "Verify the order export" }),
           task(106, { title: LONG_TITLE }),
           task(107, { inReview: true, plan: "planning" }),

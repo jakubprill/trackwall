@@ -281,6 +281,8 @@ export interface AgentsDeps {
   boardHas: (item: string) => Promise<boolean>;
   /** Moves a board item as the work of its tasks goes (ADR-213), `Board.followTasks`. */
   followTasks: TaskBoardItemDeps["move"];
+  /** Moves a board item in review to done once the user closed its last task (ADR-282), `Board.closeWithTasks`. */
+  closeBoardItem: TaskBoardItemDeps["close"];
   /** The workspace knowledge the user approved for a session in `repo` (`null`: in the projects folder), ADR-170. */
   knowledge: (repo: string | null) => Promise<SessionKnowledge>;
   /** The format a session on a model must use with its custom provider (ADR-200), from `provider-models`. */
@@ -425,7 +427,12 @@ export class Agents {
       changed: () => this.#queues.follow(),
       log: deps.log,
     });
-    this.#boardItems = new TaskBoardItem({ move: deps.followTasks, tasks: () => this.#tasks.list(), log: deps.log });
+    this.#boardItems = new TaskBoardItem({
+      move: deps.followTasks,
+      close: deps.closeBoardItem,
+      tasks: () => this.#tasks.list(),
+      log: deps.log,
+    });
     this.#autoReviews = new AutoReviews({
       tasks: {
         task: (id) => this.#tasks.task(id),
@@ -771,7 +778,7 @@ export class Agents {
    * A summary from session `caller` for its own task (`report_result`), with its check steps and the test it says
    * reproduces the task's error (ADR-222); it goes to the task's proposer too, with how much the task changed (ADR-68, ADR-207).
    */
-  async reportSummary(caller: string | null, report: ReportedSummary): Promise<Task> {
+  async reportSummary(caller: string | null, report: ReportedSummary, readyToClose = false): Promise<Task> {
     const own = this.#ownTask(caller, "can report a result");
     // A result would hand the task over for review (ADR-213) before the user approved what it is to do (ADR-229).
     if (this.#tasks.task(own.task).plan === "planning")
@@ -780,7 +787,7 @@ export class Agents {
         "your plan waits for the user's approval: end your turn with the plan, and report the result once it is implemented",
       );
     // The one session of a change reports for every part it works on (ADR-265); any other task's session for its own.
-    const reported = this.#tasks.setSummaries(own.task, report);
+    const reported = this.#tasks.setSummaries(own.task, report, readyToClose);
     for (const part of reported) {
       this.#reviewReturns.forget(part.id);
       this.#autoReviews.afterReport(part.id);
@@ -1080,8 +1087,7 @@ export class Agents {
    */
   pauseTask(id: string): Promise<PausedTask> {
     return this.#tasks.pause(id, async (task) => {
-      const sessions = this.#sessions.views().filter((s) => s.task === id && s.run.kind !== "exited");
-      await Promise.all(sessions.map((session) => this.#deps.procs.stop(sessionOwner(session.id))));
+      const sessions = await this.#stopTaskSessions(id);
       const reviews = this.#autoReviews.stop(id);
       if (reviews !== null) await reviews;
       const work = await this.#deps.stopTaskWork(task);
@@ -1357,6 +1363,36 @@ export class Agents {
   /** The copy of a reproduction check of the task, while its mise config is the trusted one, for the `mise` module (ADR-227). */
   trustedReproCopy(id: string, repo: string): Promise<{ dir: string; port: number }> {
     return this.#tasks.trustedReproCopy(id, repo);
+  }
+
+  /**
+   * The user closes a task whose agent said its work is over (ADR-282): what runs for it stops as a pause stops it, then
+   * it ends with its branch kept, refused like "End task" when work outside the branch would be lost, and its board item
+   * goes to done once no task is left on it. Refused while its agent is in a turn again, whose work the stop would cut.
+   */
+  async closeTask(id: string): Promise<void> {
+    this.#tasks.assertReadyToClose(id);
+    if (inTurn(this.#sessions.runningOfTask(id)?.view()?.state?.state))
+      throw new DomainError("bad_request", "the task's agent is working again; close the task once its turn ends");
+    // Before anything stops: a Close the user has to answer leaves the task as it was.
+    await this.#tasks.refuseLossOnEnd(id);
+    const { item } = this.#tasks.task(id);
+    await this.#stopTaskSessions(id);
+    await this.#deps.stopTaskWork(this.#tasks.task(id));
+    await this.removeTask(id, true, false);
+    if (item !== null) this.#boardItems.closed(item);
+  }
+
+  /** Stops every running session of task `id`, and returns them. */
+  async #stopTaskSessions(id: string): Promise<Session[]> {
+    const sessions = this.#sessions.views().filter((s) => s.task === id && s.run.kind !== "exited");
+    await Promise.all(sessions.map((session) => this.#deps.procs.stop(sessionOwner(session.id))));
+    return sessions;
+  }
+
+  /** The user keeps open a task whose agent said its work is over (ADR-282): it stays in review. */
+  keepTaskOpen(id: string): Task {
+    return this.#tasks.keepOpen(id);
   }
 
   /** Ends task `id`; `keptInstead` names the other attempt at it the user keeps from a comparison (ADR-252). */

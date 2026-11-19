@@ -9,12 +9,14 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { daemonWork, homeDaemonRunning, homeHasObject, homeModel } from "@/lib/home-model";
+import { closeOutcome, closeTasks, tasksReadyToClose } from "@/lib/ready-to-close";
 import { listNeedsSettings } from "@/lib/repo-status";
 import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-watch";
 import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
 import { DARK_ISLAND } from "@/lib/theme";
 import { unpushedRows } from "@/lib/unpushed-work";
+import { useAction } from "@/lib/use-action";
 import { useContainerHealth } from "@/lib/use-container-health";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useRepoList } from "@/lib/use-repo-list";
@@ -28,7 +30,7 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
 
 /**
  * The "Home" view (ADR-33, §5.5): the first screen. On the left the "Needs you" queue (sessions that are waiting or have
- * an error, task proposals waiting for a decision, and repos that are not clean), in the middle the 3D dashboard in the
+ * an error, task proposals waiting for a decision, tasks ready to close (ADR-282), and repos that are not clean), in the middle the 3D dashboard in the
  * "Orbit" layout, on the right the details of the selected object. A click selects; a double click or the button in the
  * details goes to the session or repo. The data is the same daemon responses as in other views (services polled as in the
  * repo's Service panel); sessions and running mise tasks come live from the events WebSocket (ADR-36), and `App` fetches the sessions, because their count is also on the
@@ -82,6 +84,7 @@ export function HomeView({
   const [selected, setSelected] = useState<HomeKey | null>(null);
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();
+  const [closeResult, setCloseResult] = useState<string>();
 
   const daemonRunning = homeDaemonRunning(repos.error, repos.errorCode, eventsLost);
   const repoList = repos.data?.repos;
@@ -90,6 +93,14 @@ export function HomeView({
     [eventsLost, sessions.data, running.data, services.data],
   );
   const sessionList = work.sessions;
+  const readyTasks = useMemo(() => tasksReadyToClose(sessions.data?.tasks ?? [], sessionList ?? []), [sessions.data, sessionList]);
+  const closeAll = useAction(
+    () => closeTasks(conn, readyTasks),
+    (results) => {
+      setCloseResult(closeOutcome(results));
+      sessions.reload();
+    },
+  );
   const model = useMemo(
     () =>
       homeModel({
@@ -145,12 +156,16 @@ export function HomeView({
         model={model}
         sessions={lookup.sessions}
         proposals={sessions.data?.proposals ?? []}
+        readyToClose={readyTasks}
+        closing={{ pending: closeAll.pending, outcome: closeAll.error ?? closeResult }}
         unpushed={unpushedList}
         containerWarnings={health.data?.warnings ?? []}
         selected={current}
         onSelect={setSelected}
         onOpen={open}
         onOpenProposal={(id) => onOpenInSessions({ kind: "proposal", id })}
+        onOpenTask={(id) => onOpenInSessions({ kind: "task", id })}
+        onCloseAll={closeAll.run}
         onOpenContainerHealth={() => onOpenSettings("diagnostics")}
       />
       {/* A dark island in the light theme (ADR-235): the scene's glow adds light, which vanishes on a light background. */}

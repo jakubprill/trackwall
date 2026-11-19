@@ -83,6 +83,7 @@ const billingTask: Task = {
   view: "terminal",
   summary: null,
   inReview: false,
+  readyToClose: false,
   port: 41000,
   included: { files: [], problems: [] },
   change: null,

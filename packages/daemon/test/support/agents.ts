@@ -108,6 +108,7 @@ export function makeAgents(
     openEditor: (path, line) => opened.push(line === undefined ? path : `${path}:${line}`),
     boardHas: async () => true,
     followTasks: async () => null,
+    closeBoardItem: async () => null,
     taskOutcomes: () => [],
     knowledge: async () => ({ entries: [], more: 0 }),
     wireApi: async () => null,

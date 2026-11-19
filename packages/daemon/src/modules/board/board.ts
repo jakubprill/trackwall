@@ -148,6 +148,20 @@ export class Board {
     });
   }
 
+  /**
+   * The user closed the last task on the item, whose agent said its work is over (ADR-282): an item in review goes to
+   * done. Any other item, or one no longer on the board, stays as it is, and the answer is `null`.
+   */
+  closeWithTasks(id: string): Promise<BoardItem | null> {
+    return this.#write(async (items, dir) => {
+      const current = items.find((it) => it.id === id);
+      if (current === undefined || current.kind === "project" || current.column !== "review") return null;
+      const item: BoardItem = { ...current, column: "done", updatedAt: nextUpdatedAt(current) };
+      save(dir, item);
+      return item;
+    });
+  }
+
   move(id: string, parent: string | null, before: string | null): Promise<BoardItem> {
     return this.#write(async (items, dir) => {
       const current = found(items, id);
