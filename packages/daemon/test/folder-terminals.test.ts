@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MAX_FOLDER_TERMINALS, type RunState } from "@trackwall/protocol";
+import { MAX_FOLDER_TERMINALS, type RunState, type TerminalPlace } from "@trackwall/protocol";
 import { DomainError, SpawnFailure } from "../src/infra/errors.ts";
 import { FolderTerminals, type TerminalProcs } from "../src/modules/terminals/folder-terminals.ts";
+import type { ShellPlacesStore } from "../src/modules/terminals/shell-places.ts";
 
 const STARTED: RunState = { kind: "running", runId: "r1", startedAt: "2026-11-03T10:00:00.000Z", pid: 7 };
 
@@ -52,8 +53,29 @@ function settled(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function terminals(procs: TerminalProcs, folder = async () => "/projects/shop") {
-  return new FolderTerminals({ procs, folder, env: async () => ({ PATH: "/bin" }), shell: () => ["/bin/bash"], log: () => {} });
+/** The places file in memory: what the previous daemon left, and every list followed since, until it stops following. */
+function memoryPlaces(left: TerminalPlace[] = []) {
+  const followed: TerminalPlace[][] = [];
+  let following = true;
+  const places: ShellPlacesStore = {
+    read: () => left,
+    follow: (now) => {
+      if (following) followed.push([...now]);
+    },
+    stopFollowing: () => {
+      following = false;
+    },
+  };
+  return { places, followed, last: () => followed.at(-1) };
+}
+
+function terminals(
+  procs: TerminalProcs,
+  folder: (place: TerminalPlace) => Promise<string> = async () => "/projects/shop",
+  places: ShellPlacesStore = memoryPlaces().places,
+  log: (msg: string) => void = () => {},
+) {
+  return new FolderTerminals({ procs, folder, env: async () => ({ PATH: "/bin" }), shell: () => ["/bin/bash"], places, log });
 }
 
 describe("folder terminals", () => {
@@ -195,5 +217,79 @@ describe("folder terminals", () => {
 
     await expect(open.start({ repo: "nowhere", task: null })).rejects.toMatchObject({ code: "not_found" });
     expect(started).toEqual([]);
+  });
+
+  describe("across a daemon restart (ADR-283)", () => {
+    test("the places of running shells follow every start and close, and stay as they were once the daemon stops", async () => {
+      const { procs } = fakeProcs();
+      const file = memoryPlaces();
+      const open = terminals(procs, async () => "/projects", file.places);
+
+      const shop = await open.start({ repo: "shop", task: null });
+      await open.start({ repo: null, task: null });
+      expect(file.last()).toEqual([
+        { repo: "shop", task: null },
+        { repo: null, task: null },
+      ]);
+      await open.close(shop.id);
+      expect(file.last()).toEqual([{ repo: null, task: null }]);
+
+      open.keepForRestart();
+      await open.start({ repo: "billing", task: null });
+      expect(file.last()).toEqual([{ repo: null, task: null }]);
+    });
+
+    test("a shell that ended by itself is left out when the daemon stops", async () => {
+      const { procs } = fakeProcs();
+      const file = memoryPlaces();
+      const open = terminals(procs, async () => "/projects", file.places);
+      const shell = await open.start({ repo: "shop", task: null });
+      const exited: RunState = {
+        ...STARTED,
+        kind: "exited",
+        endedAt: "2026-11-19T10:00:00.000Z",
+        exitCode: 0,
+        signal: null,
+        stoppedByUser: false,
+        lastLines: [],
+      };
+      procs.state = (owner) => (owner === `terminal:${shell.id}` ? exited : undefined);
+
+      open.keepForRestart();
+
+      expect(file.last()).toEqual([]);
+    });
+
+    test("the next daemon opens a shell in each place left, with a line saying it is new, and logs a place that is gone", async () => {
+      const { procs, started } = fakeProcs();
+      const log: string[] = [];
+      const file = memoryPlaces([
+        { repo: "shop", task: null },
+        { repo: "shop", task: "3f2a9c1e-0000-4000-8000-000000000000" },
+      ]);
+      const folder = async (place: TerminalPlace) => {
+        if (place.task !== null) throw new DomainError("not_found", `no task ${place.task}`);
+        return "/projects/shop";
+      };
+      const open = terminals(procs, folder, file.places, (msg) => log.push(msg));
+
+      await open.reopenLeft();
+
+      expect(started.map((s) => s.cwd)).toEqual(["/projects/shop"]);
+      expect(open.list().map(({ repo, task }) => ({ repo, task }))).toEqual([{ repo: "shop", task: null }]);
+      expect(log.some((line) => line.includes("not opening a shell again in task:3f2a9c1e") && line.includes("no task"))).toBe(true);
+      expect(file.last()).toEqual([{ repo: "shop", task: null }]);
+    });
+
+    test("a place the user opened before the reopening keeps the shell it has", async () => {
+      const { procs, started } = fakeProcs();
+      const open = terminals(procs, undefined, memoryPlaces([{ repo: "shop", task: null }]).places);
+      const mine = await open.start({ repo: "shop", task: null });
+
+      await open.reopenLeft();
+
+      expect(started).toHaveLength(1);
+      expect(open.list().map((t) => t.id)).toEqual([mine.id]);
+    });
   });
 });

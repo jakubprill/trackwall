@@ -133,6 +133,7 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
         });
   facade.viewerAccess.open({ port: api.port, instance: api.instance });
   void facade.agents.resumeLeftSessions();
+  void facade.terminals.reopenLeft();
   writeDaemonFile(home, { pid: process.pid, port: api.port, token, startedAt: new Date().toISOString(), version: "0.0.0-test" });
   /** An API action with the token; the result checked by the action's schema. */
   async function post<Req extends z.ZodType, Data extends z.ZodType>(

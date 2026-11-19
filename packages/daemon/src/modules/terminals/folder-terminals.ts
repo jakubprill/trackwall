@@ -4,19 +4,24 @@ import { DomainError, SpawnFailure } from "../../infra/errors.ts";
 import { KeyedQueue } from "../../infra/keyed-queue.ts";
 import { type ScreenViewer, TerminalScreen } from "../../infra/terminal-screen.ts";
 import { checkedPlaceFolder } from "./place-folder.ts";
+import type { ShellPlacesStore } from "./shell-places.ts";
 
 /**
  * Folder terminals (§4.23, ADR-185): the user's own shell in the projects folder, a repo root or a task's worktree, in a PTY from `procs`,
  * with a screen on the daemon side like a session's, so a window that connects later starts from the current screen.
  * One terminal per place: a second start hands back the live one. A close takes the terminal off its place at once and
- * ends its shell after, so the place opens a new shell while the old one is still ending. They live in memory only; a daemon restart ends
- * them with every other group. The place comes as ids and the shell from the daemon's environment, so a request
- * never names a path or a program.
+ * ends its shell after, so the place opens a new shell while the old one is still ending. A shell ends with the daemon
+ * like every other group, but its place does not (ADR-283): `ShellPlaces` keeps the places whose shell runs, and the
+ * next daemon opens a new shell in each (`reopenLeft`), with a line on its screen saying so. The place comes as ids and
+ * the shell from the daemon's environment, so a request never names a path or a program.
  */
 
 /** The size a terminal starts with, until its first window reports its own. */
 const INITIAL_COLS = 120;
 const INITIAL_ROWS = 30;
+
+/** The first line of a shell the daemon opened again after a restart: the old shell's screen, variables and jobs are gone. */
+const REOPENED_NOTE = "\x1b[2m[Trackwall restarted: this is a new shell in the same folder]\x1b[0m\r\n";
 
 /** What `procs` gives a folder terminal (§4.2). */
 export interface TerminalProcs {
@@ -41,6 +46,8 @@ export interface FolderTerminalsDeps {
   env: () => Promise<NodeJS.ProcessEnv>;
   /** The command of the user's shell in that environment (`userShell`). */
   shell: (env: NodeJS.ProcessEnv) => readonly string[];
+  /** The places whose shell runs, for the next daemon (ADR-283). */
+  places: ShellPlacesStore;
   log: (msg: string) => void;
 }
 
@@ -80,13 +87,49 @@ export class FolderTerminals {
    * (`closeTask`) waits for a start in flight in its worktree and closes what it started.
    */
   readonly #places = new KeyedQueue();
+  /** The places whose shell the previous daemon left running, until `reopenLeft` takes them (ADR-283). */
+  #left: TerminalPlace[];
 
+  /** Reads the places the previous daemon left before anything here can follow new ones into the same file. */
   constructor(deps: FolderTerminalsDeps) {
     this.#deps = deps;
+    this.#left = deps.places.read();
   }
 
   /** The place's terminal: the live one, or its ended one with a new shell, or a new one. */
   start(place: TerminalPlace): Promise<FolderTerminal> {
+    return this.#open(place, false);
+  }
+
+  /**
+   * Daemon start: a new shell in every place where one ran when the previous daemon stopped (ADR-283), one after
+   * another. A place that cannot have one any more (its task ended, its repo or the projects folder is gone) goes to
+   * the log; a place the user opened meanwhile keeps the shell it has.
+   */
+  async reopenLeft(): Promise<void> {
+    const left = this.#left;
+    this.#left = [];
+    for (const place of left) {
+      try {
+        const terminal = await this.#open(place, true);
+        this.#deps.log(`folder terminal ${terminal.id} opened again after a restart (${placeKey(place)})`);
+      } catch (err) {
+        this.#deps.log(`not opening a shell again in ${placeKey(place)}: ${String(err)}`);
+      }
+    }
+  }
+
+  /**
+   * Daemon stop, before `procs` ends the shells: the places of the shells that still run stay for the next daemon,
+   * whatever the stop does to them; a shell that ended by itself is left out.
+   */
+  keepForRestart(): void {
+    this.#followPlaces();
+    this.#deps.places.stopFollowing();
+  }
+
+  /** `start`, or the reopening of a place after a restart (`reopened`), whose new shell says so on its first line. */
+  #open(place: TerminalPlace, reopened: boolean): Promise<FolderTerminal> {
     return this.#places.run(placeKey(place), async () => {
       let known = this.#atPlace.get(placeKey(place));
       if (known && this.#live(known)) {
@@ -96,15 +139,11 @@ export class FolderTerminals {
         this.#takeOff(moved).catch((err: unknown) => this.#deps.log(`closing folder terminal ${moved.id}: ${String(err)}`));
         known = undefined;
       }
-      if (!known && this.#entries.size >= MAX_FOLDER_TERMINALS)
-        throw new DomainError(
-          "bad_request",
-          `${MAX_FOLDER_TERMINALS} terminals are open, also ended ones; close one before opening another`,
-        );
+      if (!known) this.#checkRoom();
       const cwd = await this.#folder(place);
       const entry = known ?? this.#add(place);
       try {
-        await this.#spawn(entry, cwd);
+        await this.#spawn(entry, cwd, reopened);
       } catch (err) {
         if (!known) this.#forget(entry);
         throw err;
@@ -172,6 +211,7 @@ export class FolderTerminals {
     this.#atPlace.delete(placeKey(entry.place));
     this.#closeWindows(entry);
     entry.closing = this.#end(entry);
+    this.#followPlaces();
     return entry.closing;
   }
 
@@ -195,6 +235,7 @@ export class FolderTerminals {
     const key = placeKey(entry.place);
     if (!this.#atPlace.has(key)) {
       this.#atPlace.set(key, entry);
+      this.#followPlaces();
       return;
     }
     this.#deps.log(`folder terminal ${entry.id}: its shell did not end, and its place has a new one; it is no longer listed`);
@@ -218,7 +259,14 @@ export class FolderTerminals {
     return entry;
   }
 
-  async #spawn(entry: Entry, cwd: string): Promise<void> {
+  #checkRoom(): void {
+    if (this.#entries.size < MAX_FOLDER_TERMINALS) return;
+    throw new DomainError("bad_request", `${MAX_FOLDER_TERMINALS} terminals are open, also ended ones; close one before opening another`);
+  }
+
+  /** Starts the entry's shell in `cwd` and follows its place; a shell `reopened` after a restart says so on its first line. */
+  async #spawn(entry: Entry, cwd: string, reopened: boolean): Promise<void> {
+    if (reopened) entry.screen.write(new TextEncoder().encode(REOPENED_NOTE));
     const env = { ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor" };
     try {
       const { terminal } = await this.#deps.procs.startTerminal({
@@ -239,6 +287,13 @@ export class FolderTerminals {
       throw startError(err);
     }
     this.#deps.log(`folder terminal ${entry.id} started in ${cwd}`);
+    this.#followPlaces();
+  }
+
+  /** The places of the shells that run now into the file for the next daemon; a shell being closed is off its place already. */
+  #followPlaces(): void {
+    const running = [...this.#atPlace.values()].filter((entry) => this.#live(entry));
+    this.#deps.places.follow(running.map((entry) => entry.place));
   }
 
   #resize(entry: Entry, cols: number, rows: number): void {

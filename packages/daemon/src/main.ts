@@ -190,6 +190,8 @@ async function start(
     facade.viewerAccess.open({ port: api.port, instance: api.instance });
     // After the API too: a resumed session's hooks and MCP server need its port (ADR-95).
     void facade.agents.resumeLeftSessions();
+    // After the API too, so the UI hears of each shell as it opens; a shell needs no port of its own (ADR-283).
+    void facade.terminals.reopenLeft();
     const self = { pid: process.pid, port: api.port, token, startedAt, version: VERSION };
     writeDaemonFile(home, self);
     return { kind: "started" as const, self, pageCode: api.pageCode };
