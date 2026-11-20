@@ -33,6 +33,8 @@ A project shows how far it is at the top: "2 of 9 done", a bar coloured by what 
 
 "Board" at the top of a project shows the same project as columns: "Idea", "Ready", "In progress", "In review" and "Done". Each card is an item not split further, with the item it was split from above its title, its repos and what its task is doing. A card follows its tasks into "In progress" and "In review" by itself; drag it to another column (Esc while dragging puts it back), or click it and press Alt+← and Alt+→, to move it yourself. Dropped items are counted under the board, an item below a done one sits under "Done" with it, and "Hide done" hides the "Done" column. The board stays on when you switch projects. "Outline" brings the tree back, where you split and rearrange the work.
 
+The list in the middle and the selected item on the right share the width half and half. Drag the bar between them to give either side more room, or focus it and press ← and →; a double click on it puts it back at half and half, and Trackwall remembers where you left it. When the list gets narrow, its rows drop their repos and task state first, so every title stays readable. "Read full width" at the top of the item hides the list and shows the item in one comfortable column across the view, for reading a long plan through; "Show the list" or Esc brings the list back.
+
 On the right you read the selected item first: where it sits in its project, its title, its notes formatted as Markdown and a "Ticket" button when it has a link. "Edit" turns them into fields, and "Save" or "Cancel" turns them back. An agent may write to the item while you edit it. What you did not touch shows the agent's new text, and Save keeps it, writing only what you changed. If you and the agent changed the same field, the form says which one and Save waits until you choose: "Use theirs" takes the agent's text for that field, "Keep mine" saves yours over it. Nothing you or the agent wrote is replaced without you seeing it. Below are the items it is split into with their columns, and its tasks as cards with their state, verdict and merge request, each with "Open"; an item split into others also lists the tasks started on those under "Tasks below".
 
 To split an item, type into the line under its notes ("Split: a new item under this one") and press Enter. In the outline, Tab puts the selected item under the one above it, Shift+Tab takes it out a level, and Alt+↑ and Alt+↓ move it among its neighbours. Click the arrow in front of an item to fold what is under it.
@@ -62,6 +64,8 @@ The item then follows its tasks. When the agent says it is done (it reports its 
 | Tab, Shift+Tab | Tab, ⇧Tab | On a selected item in the outline: put it under the one above, or take it out a level. |
 | Alt+↑, Alt+↓ | ⌥↑, ⌥↓ | Move the selected item up or down among its neighbours. |
 | Alt+←, Alt+→ | ⌥←, ⌥→ | On a card of the board: move it to the column on the left or right. |
+| ←, → | ←, → | On the focused bar between the list and the item: give the item more or less room. |
+| Esc | Esc | While reading an item full width: show the list again. |
 
 ## Good to know
 
