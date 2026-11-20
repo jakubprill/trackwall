@@ -88,7 +88,8 @@ export function PlanOutline({
       ) : (
         <>
           {move.error && <p className="text-destructive text-sm">{move.error}</p>}
-          <ul className="flex flex-col">
+          {/* A container, so a narrow list drops a row's repos and task state before its title (ADR-285). */}
+          <ul className="@container flex flex-col">
             {rows.map((row) => (
               <Row
                 key={row.item.id}
@@ -269,12 +270,16 @@ function Row({
           </span>
         )}
         <span className="flex-1" />
-        {item.repos.map((repo) => (
-          <Badge key={repo} variant="outline" className="text-muted-foreground font-mono">
-            {repo}
-          </Badge>
-        ))}
-        <RowTask tasks={tasks} />
+        <span className="hidden shrink-0 items-center gap-1 @xl:flex">
+          {item.repos.map((repo) => (
+            <Badge key={repo} variant="outline" className="text-muted-foreground font-mono">
+              {repo}
+            </Badge>
+          ))}
+        </span>
+        <span className="hidden shrink-0 @md:flex">
+          <RowTask tasks={tasks} />
+        </span>
         <Badge variant="outline" className="w-24 justify-center">
           {COLUMN_LABELS[item.column]}
         </Badge>

@@ -1,4 +1,4 @@
-import type { BoardItem, BoardRevision, SessionList, Task, TaskOutcome } from "@trackwall/protocol";
+import type { BoardItem, BoardRevision, KnowledgeListEntry, SessionList, Task, TaskOutcome } from "@trackwall/protocol";
 import { RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -21,6 +21,7 @@ import { KnowledgeList } from "./KnowledgeList.tsx";
 import { KnowledgePanel } from "./KnowledgePanel.tsx";
 import { PlanOutline } from "./PlanOutline.tsx";
 import { PlanPlaces } from "./PlanPlaces.tsx";
+import { PlanSplit } from "./PlanSplit.tsx";
 
 /**
  * The Plan view (ADR-133): the inbox of ideas and the business projects on the left, the inbox's ideas to sort (ADR-214)
@@ -71,7 +72,7 @@ export function PlanView({
   };
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[14rem_1fr_24rem]">
+    <div className="grid h-full min-h-0 grid-cols-[14rem_1fr]">
       <aside className="flex min-h-0 flex-col border-r">
         <header className="flex items-center justify-between px-4 pt-3 pb-2">
           <h2 className="hud-label">Plan</h2>
@@ -91,90 +92,141 @@ export function PlanView({
           />
         )}
       </aside>
-      <section className="flex min-h-0 min-w-0 flex-col overflow-y-auto">
-        <BoardState board={board} />
-        {place.kind === "knowledge" ? (
-          <KnowledgeList
-            conn={conn}
-            knowledge={knowledge}
-            tasks={tasks}
-            selected={entry?.name}
-            onSelect={selectEntry}
-            filter={filter}
-            onFilter={setFilter}
-          />
-        ) : startingItem ? (
-          <NewSession
-            key={startingItem.id}
-            conn={conn}
-            sessions={sessions?.sessions ?? []}
-            fromItem={{
-              item: startingItem.id,
-              repos: startingItem.repos,
-              prompt: startPrompt(items, startingItem),
-            }}
-            onStarted={(selection) => {
-              setStarting(undefined);
-              onOpenInSessions(selection);
-            }}
-            onCancel={() => setStarting(undefined)}
-          />
-        ) : (
-          board.data && (
-            <PlaceItems
-              conn={conn}
-              items={items}
-              tasks={tasks}
-              taskIndex={taskIndex}
-              place={place}
-              inboxFilter={inboxFilter}
-              onInboxFilter={(filter) => {
-                setInboxFilter(filter);
-                setSelected(undefined);
-              }}
-              selected={shown}
-              onSelect={setSelected}
-              onSelectInTree={select}
-              onStartTask={setStarting}
-              onChanged={board.reload}
-            />
-          )
-        )}
-        <p className="text-muted-foreground mt-auto px-4 py-3 text-xs">
-          {ideaShortcutLabel(IS_MAC)} writes an idea into the inbox from any view.
-        </p>
-      </section>
-      <aside className="min-h-0 overflow-y-auto border-l">
-        {entry ? (
-          <KnowledgePanel
-            key={entry.name}
-            conn={conn}
-            entry={entry}
-            tasks={tasks}
-            onChanged={knowledge.reload}
-            onRemoved={() => {
-              selectEntry(undefined);
-              knowledge.reload();
-            }}
-          />
-        ) : item ? (
-          <ItemPanel
-            key={item.id}
+      <PlanSplit
+        readable={entry?.name ?? (startingItem ? undefined : item?.id)}
+        list={
+          <>
+            <BoardState board={board} />
+            {place.kind === "knowledge" ? (
+              <KnowledgeList
+                conn={conn}
+                knowledge={knowledge}
+                tasks={tasks}
+                selected={entry?.name}
+                onSelect={selectEntry}
+                filter={filter}
+                onFilter={setFilter}
+              />
+            ) : startingItem ? (
+              <NewSession
+                key={startingItem.id}
+                conn={conn}
+                sessions={sessions?.sessions ?? []}
+                fromItem={{
+                  item: startingItem.id,
+                  repos: startingItem.repos,
+                  prompt: startPrompt(items, startingItem),
+                }}
+                onStarted={(selection) => {
+                  setStarting(undefined);
+                  onOpenInSessions(selection);
+                }}
+                onCancel={() => setStarting(undefined)}
+              />
+            ) : (
+              board.data && (
+                <PlaceItems
+                  conn={conn}
+                  items={items}
+                  tasks={tasks}
+                  taskIndex={taskIndex}
+                  place={place}
+                  inboxFilter={inboxFilter}
+                  onInboxFilter={(filter) => {
+                    setInboxFilter(filter);
+                    setSelected(undefined);
+                  }}
+                  selected={shown}
+                  onSelect={setSelected}
+                  onSelectInTree={select}
+                  onStartTask={setStarting}
+                  onChanged={board.reload}
+                />
+              )
+            )}
+            <p className="text-muted-foreground mt-auto px-4 py-3 text-xs">
+              {ideaShortcutLabel(IS_MAC)} writes an idea into the inbox from any view.
+            </p>
+          </>
+        }
+        panel={
+          <SelectedPanel
             conn={conn}
             items={items}
             item={item}
+            entry={entry}
+            tasks={tasks}
             taskIndex={taskIndex}
-            onStartTask={() => setStarting(item.id)}
+            place={place}
+            onStartTask={setStarting}
             onOpenTask={(task) => onOpenInSessions({ kind: "task", id: task })}
-            onRemoved={() => setSelected(undefined)}
-            onFiled={() => setSelected(ideaAfter(shownIdeas(items, inboxFilter), item.id))}
-            onChanged={board.reload}
+            onDeselect={() => setSelected(undefined)}
+            onFiled={(id) => setSelected(ideaAfter(shownIdeas(items, inboxFilter), id))}
+            onBoardChanged={board.reload}
+            onEntryRemoved={() => {
+              selectEntry(undefined);
+              knowledge.reload();
+            }}
+            onKnowledgeChanged={knowledge.reload}
           />
-        ) : (
-          <NothingSelected place={place} />
-        )}
-      </aside>
+        }
+      />
     </div>
+  );
+}
+
+/** The right side: the selected entry of the workspace knowledge, else the selected item, else what to do. */
+function SelectedPanel({
+  conn,
+  items,
+  item,
+  entry,
+  tasks,
+  taskIndex,
+  place,
+  onStartTask,
+  onOpenTask,
+  onDeselect,
+  onFiled,
+  onBoardChanged,
+  onEntryRemoved,
+  onKnowledgeChanged,
+}: {
+  conn: Connection;
+  items: readonly BoardItem[];
+  item: BoardItem | undefined;
+  entry: KnowledgeListEntry | undefined;
+  tasks: readonly Task[];
+  taskIndex: ItemTaskIndex;
+  place: PlanPlace;
+  onStartTask: (item: string) => void;
+  onOpenTask: (task: string) => void;
+  onDeselect: () => void;
+  /** The idea was filed in a project, so the next one of the inbox is selected. */
+  onFiled: (item: string) => void;
+  onBoardChanged: () => void;
+  onEntryRemoved: () => void;
+  onKnowledgeChanged: () => void;
+}) {
+  if (entry) {
+    return (
+      <KnowledgePanel key={entry.name} conn={conn} entry={entry} tasks={tasks} onChanged={onKnowledgeChanged} onRemoved={onEntryRemoved} />
+    );
+  }
+  if (!item) return <NothingSelected place={place} />;
+  return (
+    <ItemPanel
+      key={item.id}
+      conn={conn}
+      items={items}
+      item={item}
+      taskIndex={taskIndex}
+      onStartTask={() => onStartTask(item.id)}
+      onOpenTask={onOpenTask}
+      onRemoved={onDeselect}
+      onFiled={() => onFiled(item.id)}
+      onChanged={onBoardChanged}
+    />
   );
 }
 
