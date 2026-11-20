@@ -278,7 +278,9 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
     expect(text).toContain("The user sees this session in the supervisor panel on the right of every Trackwall view");
     expect(text).toContain("You are the supervisor: the one session above all others, in the projects folder");
-    expect(text).toContain("You coordinate, you do not change code: hand each piece of work to an agent with propose_task");
+    expect(text).toContain(
+      "You coordinate, you do not change code: hand each piece of work to an agent in a proposal whose prompt stands on its own: work in one repo with propose_task.",
+    );
     expect(text).toContain("Copilot CLI refuses you its shell and the tools that write files, so do not try them");
     expect(text).toContain("When the user names a model for the work (a review on a stronger model, say), pass it as the proposal's model");
     expect(text).toContain("before proposing work that only reads and reports (an analysis, a review), ask the user whether it may");
@@ -339,7 +341,9 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
     writeSessionInstructions(sessionDir, "0.4.1", { kind: "supervisor", changesCode: true }, NO_KNOWLEDGE, false);
     const text = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8");
-    expect(text).toContain("You coordinate: hand each piece of work to an agent with propose_task");
+    expect(text).toContain(
+      "You coordinate: hand each piece of work to an agent in a proposal whose prompt stands on its own: work in one repo with propose_task.",
+    );
     expect(text).toContain("The user lets you run commands and change files yourself; keep that to what they ask you for");
     expect(text).toContain(
       "to remove a repo, propose it with propose_folder_action; anything else, do it yourself when the user asked you to, or tell the user what it takes.",
@@ -359,6 +363,20 @@ describe("Copilot CLI session instructions (ADR-46)", () => {
     expect(text).not.toContain("You are the supervisor");
     expect(text).not.toContain("Work only in this worktree");
     expect(text).toContain(MCP_INSTRUCTIONS);
+  });
+
+  test("the supervisor, a free session and a repo session propose work in several repos as one change, and a task per repo only when the user asks (ADR-265)", () => {
+    const roles = [{ kind: "supervisor", changesCode: false }, { kind: "free" }, { kind: "repo", repo: "shop" }] as const;
+    for (const role of roles) {
+      const sessionDir = mkdtempSync(join(tmpdir(), "trackwall-instructions-"));
+      writeSessionInstructions(sessionDir, "0.5.30", role, NO_KNOWLEDGE, false);
+      const roleText = readFileSync(join(sessionDir, "instructions", "trackwall.instructions.md"), "utf8").replace(MCP_INSTRUCTIONS, "");
+      expect(roleText).toContain(
+        "One piece of work in several repos (an endpoint and its callers, the same fix in a few services) is one propose_change, one part per repo in the order their merge requests are to be merged: one agent makes every part in one conversation, which costs a fraction of a session per repo, and the user still reviews, verifies and merges each repo's part on its own. Propose a separate propose_task per repo instead only when the user asks for separate tasks.",
+      );
+      expect(roleText).not.toContain("one proposal per repo");
+      expect(roleText).not.toContain("must fit together");
+    }
   });
 
   test("a session with Java navigation learns that lsp waits for jdtls's import and how to see its state; one without does not", () => {

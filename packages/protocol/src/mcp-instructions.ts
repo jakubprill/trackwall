@@ -1,6 +1,6 @@
 import { TRACKWALL_DOCS_LLMS_URL, TRACKWALL_DOCS_URL } from "./docs-site.ts";
 import { trackwallLink } from "./links.ts";
-import { mcpTools, TASK_MESSAGE_USES } from "./mcp.ts";
+import { mcpTools, SEVERAL_REPOS_RULE, TASK_MESSAGE_USES } from "./mcp.ts";
 
 /**
  * The MCP instruction: how an agent works with Trackwall (ADR-46). The MCP server announces it in `initialize`
@@ -120,8 +120,7 @@ export const MCP_INSTRUCTIONS = [
     `needs someone, goes stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +
     `the task's changed files and ${getTaskChanges.name} their diff (narrow it with paths): review it before you tell the ` +
     "user the work is done. Propose related tasks together, so the user can review them as one plan. " +
-    `Work whose parts in several repos must fit together (an endpoint and its callers) is one ${proposeChange.name}: a ` +
-    "task per repo on one branch name in the order their merge requests are to be merged, approved on one card. " +
+    `${SEVERAL_REPOS_RULE} A change is a task per repo on one branch name, approved on one card. ` +
     `A task whose session proposed yours handed you its work: ${getHandoff.name} says where its branch is now and what changed since you last read it, and ` +
     `${getChangedEndpoints.name} with its task which endpoints it changed.`,
   `- Keep ideas and split work on the user's board: when the user asks you to note something for later, or you find work ` +
