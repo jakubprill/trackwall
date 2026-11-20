@@ -25,7 +25,7 @@ const SHARE_MIN = 0.1;
 const SHARE_MAX = 0.9;
 
 /** A share kept between the bounds any width can use, so a stored or dragged value never hides a side for good. */
-export function clampShare(share: number): number {
+function clampShare(share: number): number {
   if (!Number.isFinite(share)) return DEFAULT_PANEL_SHARE;
   return Math.min(SHARE_MAX, Math.max(SHARE_MIN, share));
 }
@@ -38,6 +38,11 @@ export function panelWidth(area: number, share: number): number {
   const wanted = Math.round(area * clampShare(share));
   const most = Math.max(0, area - LIST_MIN_PX);
   return Math.min(most, Math.max(PANEL_MIN_PX, wanted));
+}
+
+/** The share the panel actually has on this area once the minimums have their say: what the divider shows and stores. */
+export function shownShare(area: number, share: number): number {
+  return area > 0 ? clampShare(panelWidth(area, share) / area) : clampShare(share);
 }
 
 /** The share that puts the divider at `x` pixels from the area's left edge (the list's left edge). */

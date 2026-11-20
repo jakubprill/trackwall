@@ -1,7 +1,7 @@
 import { Maximize2, Minimize2 } from "lucide-react";
-import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { clampShare, DEFAULT_PANEL_SHARE, PANEL_SHARE_STEP, panelWidth, readPanelShare, savePanelShare, shareAt } from "@/lib/plan-split";
+import { DEFAULT_PANEL_SHARE, PANEL_SHARE_STEP, panelWidth, readPanelShare, savePanelShare, shareAt, shownShare } from "@/lib/plan-split";
 import { cn } from "@/lib/utils";
 
 const storage = () => window.localStorage;
@@ -10,22 +10,21 @@ const storage = () => window.localStorage;
  * The list of Plan and the selected item or entry beside it (ADR-285), with a divider between them that the user drags,
  * or moves with ← and → once focused, and a double click puts back at half and half; the split is remembered on this
  * computer (`lib/plan-split.ts`). "Read full width" hides the list so long notes read in one comfortable column, and
- * "Show the list" or Esc brings it back.
+ * "Show the list" or Esc brings it back. Reading belongs to the one item or entry it was asked on, so selecting another, going
+ * to another place or opening the task form (none to read) ends it without the view resetting anything.
  */
 export function PlanSplit({
   list,
   panel,
-  canRead,
-  reading,
-  onReading,
+  readable,
 }: {
   list: ReactNode;
   panel: ReactNode;
-  /** Whether the panel shows something worth reading at full width; without it there is no button. */
-  canRead: boolean;
-  reading: boolean;
-  onReading: (reading: boolean) => void;
+  /** What the panel shows that can be read full width (an item's id, an entry's name); none: no button. */
+  readable: string | undefined;
 }) {
+  const [readingOf, setReadingOf] = useState<string>();
+  const reading = readable !== undefined && readingOf === readable;
   const area = useRef<HTMLDivElement>(null);
   const [areaWidth, setAreaWidth] = useState(0);
   const [share, setShare] = useState(() => readPanelShare(storage));
@@ -45,42 +44,41 @@ export function PlanSplit({
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || typesText(e.target)) return;
       e.preventDefault();
-      onReading(false);
+      setReadingOf(undefined);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [reading, onReading]);
+  }, [reading]);
 
   // What the user left is what they see: a share the minimums overrule is stored as the width it actually gave.
   const choose = (next: number) => {
-    const clamped = areaWidth > 0 ? clampShare(panelWidth(areaWidth, next) / areaWidth) : clampShare(next);
-    setShare(clamped);
-    savePanelShare(storage, clamped);
+    const chosen = shownShare(areaWidth, next);
+    setShare(chosen);
+    savePanelShare(storage, chosen);
   };
-  const shown = reading && canRead;
 
   return (
     <div ref={area} className="flex min-h-0 min-w-0">
-      <section className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto", shown && "hidden")}>{list}</section>
-      {!shown && <Divider share={share} areaWidth={areaWidth} area={area} onShare={setShare} onChosen={choose} />}
+      <section className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto", reading && "hidden")}>{list}</section>
+      {!reading && <Divider share={share} areaWidth={areaWidth} area={area} onShare={setShare} onChosen={choose} />}
       <aside
         aria-label="Selected"
-        className={cn("relative min-h-0 shrink-0 overflow-y-auto", shown && "flex-1")}
-        style={shown || areaWidth === 0 ? undefined : { width: panelWidth(areaWidth, share) }}
+        className={cn("relative min-h-0 shrink-0 overflow-y-auto", reading && "flex-1")}
+        style={reading || areaWidth === 0 ? undefined : { width: panelWidth(areaWidth, share) }}
       >
-        {canRead && (
+        {readable !== undefined && (
           <Button
             variant="ghost"
             size="sm"
             className="absolute top-2 right-2"
-            onClick={() => onReading(!shown)}
-            title={shown ? "Show the list again (Esc)" : "Read it full width"}
+            onClick={() => setReadingOf(reading ? undefined : readable)}
+            title={reading ? "Show the list again (Esc)" : "Read it full width"}
           >
-            {shown ? <Minimize2 /> : <Maximize2 />}
-            {shown ? "Show the list" : "Read full width"}
+            {reading ? <Minimize2 /> : <Maximize2 />}
+            {reading ? "Show the list" : "Read full width"}
           </Button>
         )}
-        <div className={cn(shown && "mx-auto w-full max-w-3xl")}>{panel}</div>
+        <div className={cn(reading && "mx-auto w-full max-w-3xl")}>{panel}</div>
       </aside>
     </div>
   );
@@ -96,7 +94,7 @@ function Divider({
 }: {
   share: number;
   areaWidth: number;
-  area: { current: HTMLDivElement | null };
+  area: RefObject<HTMLDivElement | null>;
   /** While dragging: shown, not yet remembered. */
   onShare: (share: number) => void;
   /** Where the user left it: shown and remembered. */
@@ -121,7 +119,7 @@ function Divider({
       aria-label="Resize the panel"
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={areaWidth === 0 ? Math.round(share * 100) : Math.round((panelWidth(areaWidth, share) / areaWidth) * 100)}
+      aria-valuenow={Math.round(shownShare(areaWidth, share) * 100)}
       tabIndex={0}
       title="Drag to resize, double-click for half and half"
       className="hover:bg-primary/40 focus-visible:bg-primary/40 bg-border w-1 shrink-0 cursor-col-resize touch-none outline-none"

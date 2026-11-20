@@ -8,6 +8,7 @@ import {
   readPanelShare,
   savePanelShare,
   shareAt,
+  shownShare,
 } from "../src/lib/plan-split";
 
 describe("the split of Plan between the list and the panel", () => {
@@ -37,6 +38,12 @@ describe("the split of Plan between the list and the panel", () => {
     expect(shareAt(1000, 990)).toBe(0.1);
     expect(shareAt(1000, -50)).toBe(0.9);
     expect(shareAt(0, 10)).toBe(DEFAULT_PANEL_SHARE);
+  });
+
+  test("a share the minimums overrule is shown and stored as the share the panel actually got", () => {
+    expect(shownShare(1600, 0.1)).toBe(0.24);
+    expect(shownShare(1600, 0.6)).toBe(0.6);
+    expect(shownShare(0, 0.6)).toBe(0.6);
   });
 
   test("the share is remembered on this computer and read back", () => {

@@ -48,7 +48,6 @@ export function PlanView({
   const [selected, setSelected] = useState<string>();
   const [starting, setStarting] = useState<string>();
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
-  const [reading, setReading] = useState(false);
   const { knowledge, entries, entry, select: selectEntry, filter, setFilter } = useKnowledge(conn, place.kind === "knowledge");
   const tasks = sessions?.tasks ?? [];
   const items = board.data?.items ?? [];
@@ -65,7 +64,6 @@ export function PlanView({
     setPlace(next);
     setSelected(undefined);
     setStarting(undefined);
-    setReading(false);
   };
   const select = (id: string | undefined) => {
     setSelected(id);
@@ -95,9 +93,7 @@ export function PlanView({
         )}
       </aside>
       <PlanSplit
-        canRead={entry !== undefined || (item !== undefined && !startingItem)}
-        reading={reading}
-        onReading={setReading}
+        readable={entry?.name ?? (startingItem ? undefined : item?.id)}
         list={
           <>
             <BoardState board={board} />
@@ -162,10 +158,7 @@ export function PlanView({
             tasks={tasks}
             taskIndex={taskIndex}
             place={place}
-            onStartTask={(id) => {
-              setReading(false);
-              setStarting(id);
-            }}
+            onStartTask={setStarting}
             onOpenTask={(task) => onOpenInSessions({ kind: "task", id: task })}
             onDeselect={() => setSelected(undefined)}
             onFiled={(id) => setSelected(ideaAfter(shownIdeas(items, inboxFilter), id))}
