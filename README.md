@@ -21,7 +21,7 @@ Trackwall builds that knowledge once, from the code itself, and gives the same p
 - **Gives agents tasks on their own branch and worktree.** You review the diff, comment on lines and run its tests before anything lands.
 - **Lends your agents the same picture** through its MCP server: code search across every repo, who calls an endpoint, logs and errors, services.
 - **Starts services with the services they call**, in order, and waits until each one answers.
-- **Has a supervisor**, one agent above all your repos that splits a change into one task per repo and follows them, after you approve.
+- **Has a supervisor**, one agent above all your repos that plans the work and follows it, after you approve: a change across several repos is made by one agent in one conversation, with a task per repo to review.
 
 <table>
   <tr>

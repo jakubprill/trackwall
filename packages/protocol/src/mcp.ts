@@ -438,6 +438,16 @@ export const TASK_MESSAGE_RULE =
 /** What a proposer sends its task with `send_message` (ADR-68, ADR-81): one list for the tool, the MCP instruction and the supervisor's role. */
 export const TASK_MESSAGE_USES =
   "a correction, an answer to the task's question, a follow-up on its topic, or what changed elsewhere that it must take into account";
+/**
+ * Which proposal one piece of work in several repos becomes (ADR-265): a change, made by one session in one conversation,
+ * and a task per repo only on the user's word. One text for the MCP instruction and the roles of the sessions that
+ * propose work, so they cannot drift apart; `propose_change`'s description says the same in its own words.
+ */
+export const SEVERAL_REPOS_RULE =
+  `One piece of work in several repos (an endpoint and its callers, the same fix in a few services) is one ${PROPOSE_CHANGE}, ` +
+  "one part per repo in the order their merge requests are to be merged: one agent makes every part in one conversation, " +
+  "which costs a fraction of a session per repo, and the user still reviews, verifies and merges each repo's part on its own. " +
+  `Propose a separate ${PROPOSE_TASK} per repo instead only when the user asks for separate tasks.`;
 const RepoTagsArg = z.array(TagName).max(20);
 const MiseTaskArg = MiseTaskName.describe(`mise task name from ${GET_REPO} (the miseTasks field)`);
 /** A mise task in a task's worktree instead of the repo root (ADR-59). */
@@ -988,12 +998,14 @@ export const mcpTools = {
       "that call it) as one proposal: one task per repo, all on one branch name from the title, in the order their merge " +
       "requests are to be merged, the repo the others build on first. Trackwall shows the user one card with every repo, " +
       "and nothing runs until the user approves it; the user may untick repos (at least two stay) or reject it. Each part " +
-      "is an ordinary task with its own session, which knows its sibling parts and reads the part before it with " +
-      `get_handoff. The approved proposal's id becomes the task id of the first part Trackwall could make (when that part's session ` +
+      "is an ordinary task with its own worktree, rounds, verification and merge request, and one agent makes every part " +
+      "in one conversation, in a folder that holds each part's worktree under its repo's name. The approved proposal's id " +
+      "becomes the task id of the first part Trackwall could make (when that part's session " +
       `then fails to start, the id names nothing; ${LIST_SESSIONS} shows the parts), and ${GET_UPDATES} says which ` +
-      `parts started (change_started) and then what happens to each, as for ${PROPOSE_TASK}. Use ${PROPOSE_TASK} for work ` +
-      `in one repo, and for work in other repos when you run a task yourself: a task cannot propose a change. ` +
-      "Write the prompt so that it stands alone for every part (each agent sees nothing else), and say in a part's note " +
+      `parts started (change_started) and then what happens to each, as for ${PROPOSE_TASK}. This is the default for work ` +
+      `in several repos; use ${PROPOSE_TASK} for work in one repo, for each repo when the user asks for separate tasks, and ` +
+      "for work in other repos when you run a task yourself: a task cannot propose a change. " +
+      "Write the prompt so that it stands alone (the agent sees nothing else), and say in a part's note " +
       `what that repo has to do. Then, in a Trackwall session, end your turn.`,
     args: z
       .object({
