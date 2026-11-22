@@ -6,14 +6,13 @@ import {
   type WorkspaceSettings,
   workspaceApi,
 } from "@trackwall/protocol";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import { Surface } from "@/components/Surface";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
-import { getStartedPlan } from "@/lib/get-started";
-import { readOpenSteps, saveOpenSteps } from "@/lib/get-started-memory";
+import { useOpenSteps } from "@/lib/get-started-memory";
 import { SETTING_ROWS, type SettingRowId, type SettingSources, settingRowOpen, settingsParts, settingValue } from "@/lib/setting-rows";
 import { type SettingsCategory, type SettingsSection, settingsCategory } from "@/lib/settings-categories";
 import { useTheme } from "@/lib/theme-controller";
@@ -120,18 +119,6 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
       </div>
     </div>
   );
-}
-
-/**
- * The open steps of "Get started": from the doctor's report once it ran, and until then as its last run left them
- * (ADR-268), which a new report replaces.
- */
-function useOpenSteps(report: DoctorReport | undefined): number | null {
-  const open = report ? getStartedPlan(report).open : null;
-  useEffect(() => {
-    if (open !== null) saveOpenSteps(() => window.localStorage, open);
-  }, [open]);
-  return useMemo(() => open ?? readOpenSteps(() => window.localStorage), [open]);
 }
 
 /** One setting's folded row, which remembers whether the user opened or folded it while the category is shown. */

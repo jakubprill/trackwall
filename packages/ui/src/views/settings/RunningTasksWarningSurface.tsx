@@ -1,10 +1,10 @@
 import { agentsApi, type WorkspaceSettings, workspaceApi } from "@trackwall/protocol";
 import { useCallback } from "react";
+import { PathForm } from "@/components/PathForm";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { computerDefaultLabel, parseRunningTasksWarning } from "@/lib/running-tasks-warning";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
-import { PathForm } from "./PathForm.tsx";
 import { SettingsRead } from "./SettingsRead.tsx";
 
 const LABEL = "Warn above running tasks";

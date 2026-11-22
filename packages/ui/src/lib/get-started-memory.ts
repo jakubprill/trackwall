@@ -1,9 +1,14 @@
+import type { DoctorReport } from "@trackwall/protocol";
+import { useEffect, useMemo } from "react";
+import { getStartedPlan } from "./get-started.ts";
+
 /**
  * How many steps "Get started" had open the last time the doctor ran (ADR-268), kept so that Settings can say it and
- * open on "Get started" before the doctor has run again: the doctor opens connections and times file writes, so it runs
- * only when one of its two categories shows. A convenience of this browser profile in `localStorage`, like the heights
- * of ADR-264: storage can be missing, refuse access or hold anything, so a value that is no count reads as unknown, and
- * a write that fails is forgotten.
+ * open on "Get started", and the Sessions view can tell whether setup is still under way (ADR-289), before the doctor has
+ * run again: the doctor opens connections and times file writes, so it runs only when one of Settings' two categories or
+ * the Sessions view's card shows. A convenience of this browser profile in `localStorage`, like the heights of ADR-264:
+ * storage can be missing, refuse access or hold anything, so a value that is no count reads as unknown, and a write that
+ * fails is forgotten.
  */
 
 const KEY = "trackwall.get-started.open";
@@ -28,4 +33,17 @@ export function saveOpenSteps(storage: () => Pick<Storage, "setItem">, count: nu
   } catch {
     // The count holds while Settings is open; the next opening only does not know it until the doctor runs.
   }
+}
+
+/**
+ * The open steps of "Get started": from the doctor's report once it ran, and until then as its last run left them,
+ * which a new report replaces. Settings and the Sessions view's card both keep their run's count this way, so either
+ * one's run tells the other.
+ */
+export function useOpenSteps(report: DoctorReport | undefined): number | null {
+  const open = report ? getStartedPlan(report).open : null;
+  useEffect(() => {
+    if (open !== null) saveOpenSteps(() => window.localStorage, open);
+  }, [open]);
+  return useMemo(() => open ?? readOpenSteps(() => window.localStorage), [open]);
 }

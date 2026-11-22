@@ -6,6 +6,7 @@ import {
   type Task,
   type TaskMessage,
   type TaskOutcome,
+  type WorkspaceSettings,
 } from "@trackwall/protocol";
 import { Square, X } from "lucide-react";
 import { type ReactNode, useCallback, useRef, useState } from "react";
@@ -77,7 +78,8 @@ export function SessionsView({
   tree,
   supervisor,
   outcomes,
-  projectsDir,
+  workspace,
+  onRetry,
   onOpenGetStarted,
 }: {
   conn: Connection;
@@ -97,9 +99,11 @@ export function SessionsView({
   supervisor: SupervisorSummary;
   /** What each task's work came to, by task (ADR-154), for the marks on its row. */
   outcomes: ReadonlyMap<string, TaskOutcome>;
-  /** The projects folder (`useProjectsDir`): the form waits for it. */
-  projectsDir: string | null | undefined;
-  /** Opens Settings › Get started, where the view sends the user while no projects folder is set. */
+  /** The window's read of the workspace settings (`useWorkspaceSettings`): the form waits for the projects folder, which the card above it sets. */
+  workspace: RemoteHandle<WorkspaceSettings>;
+  /** Reconnects to the daemon, for a read that failed because the daemon is gone. */
+  onRetry: () => void;
+  /** Opens Settings › Get started, with every step and what is good to have. */
   onOpenGetStarted: () => void;
 }) {
   const list = sessions.data?.sessions ?? [];
@@ -188,10 +192,11 @@ export function SessionsView({
           <NewSessionPane
             conn={conn}
             sessions={sessions.data.sessions}
-            projectsDir={projectsDir}
+            workspace={workspace}
             onStarted={started}
             onCancel={entries.length > 0 ? () => select(undefined) : undefined}
             onWorktreesRemoved={sessions.reload}
+            onRetry={onRetry}
             onOpenGetStarted={onOpenGetStarted}
           />
         )}

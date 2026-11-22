@@ -43,7 +43,6 @@ import { useDaemonEvents, useDaemonLost } from "@/lib/use-daemon-events";
 import { useFileDrop } from "@/lib/use-file-drop";
 import { useJumpRequest } from "@/lib/use-jump-request";
 import { useNewWindow } from "@/lib/use-new-window";
-import { useProjectsDir } from "@/lib/use-projects-dir";
 import { useRepoWatch } from "@/lib/use-repo-watch";
 import { useSessionLink } from "@/lib/use-session-link";
 import { useSessionTree } from "@/lib/use-session-tree";
@@ -51,6 +50,7 @@ import { useSessions } from "@/lib/use-sessions";
 import { useTabAttention } from "@/lib/use-tab-attention";
 import { useTaskOutcomes } from "@/lib/use-task-outcomes";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
+import { useWorkspaceSettings } from "@/lib/use-workspace-settings";
 import { zoomStepOf, zoomWindow } from "@/lib/zoom-shortcut";
 import { FlowView } from "@/views/flow/FlowView";
 import { GraphView } from "@/views/graph/GraphView";
@@ -156,7 +156,9 @@ export function App() {
   const mcpCallsLive = useMemo(() => events?.feed("mcp.calls.changed"), [events]);
   const terminalsLive = useMemo(() => events?.feed("terminals.changed"), [events]);
   const outcomes = useTaskOutcomes(conn, events);
-  const projectsDir = useProjectsDir(conn);
+  // The supervisor's start card and the Sessions view wait for the projects folder, and Sessions sets it (ADR-289).
+  const workspace = useWorkspaceSettings(conn);
+  const projectsDir = workspace.data?.projectsDir;
   // Home lists the container health's warnings (ADR-280) and the view bar counts them on its icon (ADR-287): one read for both.
   const containerHealth = useContainerHealth(conn, { pollMs: CONTAINER_HEALTH_PACE });
   const appUpdate = useAppUpdate(sessions.data && agentsInTurn(sessions.data.sessions));
@@ -341,7 +343,8 @@ export function App() {
                           outcomes={outcomes.byTask}
                           layout={sessionLayout}
                           onLayout={setSessionLayout}
-                          projectsDir={projectsDir}
+                          workspace={workspace}
+                          onRetry={retry}
                           onOpenGetStarted={openGetStarted}
                         />
                       )}

@@ -1,9 +1,9 @@
 import { type WorkspaceSettings, workspaceApi } from "@trackwall/protocol";
+import { SavedAs } from "@/components/SavedAs";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { useAction } from "@/lib/use-action";
 import type { RemoteHandle } from "@/lib/use-remote";
-import { SavedAs } from "./SavedAs.tsx";
 import { SettingsRead } from "./SettingsRead.tsx";
 
 /**

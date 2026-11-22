@@ -145,7 +145,8 @@ table.cmp { border-collapse: collapse; font-size: 14px; max-width: 1060px; }
   </table>
 
   <section class="prose"><span class="hud">Variant A · proposed · 1 of 3</span><h2>The first start opens on Sessions, with what is left above the form</h2>
-    <p class="lede">The steps are the ones of "Get started" (ADR-262), read from the same run of the doctor, and only those still open; finished ones fold into one line. The form below waits for the projects folder, so the one highlighted button is always the next thing to do. The supervisor panel is folded to its strip at the right edge, with the crown and the bell; a click or Alt+0 unfolds it, as today.</p></section>
+    <p class="lede">The steps are the ones of "Get started" (ADR-262), read from the same run of the doctor, and only those still open; finished ones fold into one line. The form below waits for the projects folder, so the one highlighted button is always the next thing to do. The supervisor panel is folded to its strip at the right edge, with the crown and the bell; a click or Alt+0 unfolds it, as today.</p>
+    <p class="lede">Built (ADR-289) with one change: before a folder is set the card is all the view shows, since the form would read the repos, templates and routines of a folder that is not there. The form shows under the card as soon as the folder is saved.</p></section>
   <div class="scroll"><div class="window">
     <div class="rail" data-on="sessions"></div>
     <div class="list"><span class="hud">Sessions <span style="color:var(--primary)">// 00</span></span><span class="muted">No sessions yet. Give the agent a task or start Copilot CLI in a repo from your projects folder.</span></div>
@@ -172,7 +173,8 @@ table.cmp { border-collapse: collapse; font-size: 14px; max-width: 1060px; }
   </div></div>
 
   <section class="prose"><span class="hud">Variant A · proposed · 2 of 3</span><h2>Two clicks later the form is the page</h2>
-    <p class="lede">With nothing needed left, the card shrinks to one line and goes away with the first session. The form is the one built in ADR-266, with the first repo chosen. A step that needs days, such as a proxy that IT has to open, keeps the card above the form, folded to its one line, until the doctor finds it fixed.</p></section>
+    <p class="lede">With nothing needed left, the card shrinks to one line and goes away with the first session. The form is the one built in ADR-266, with the first repo chosen. A step that needs days, such as a proxy that IT has to open, keeps the card above the form, folded to its one line, until the doctor finds it fixed.</p>
+    <p class="lede">Built (ADR-289) without Hide: the card's first line says "Ready", and the card goes when the first session starts. A step still open after that stays in Settings › Get started, so the doctor does not run before every new task.</p></section>
   <div class="scroll"><div class="window short">
     <div class="rail" data-on="sessions"></div>
     <div class="list"><span class="hud">Sessions <span style="color:var(--primary)">// 00</span></span><span class="muted">No sessions yet. Give the agent a task or start Copilot CLI in a repo from your projects folder.</span></div>
