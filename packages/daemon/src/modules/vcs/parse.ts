@@ -8,8 +8,8 @@ import type { ChangedFile, Commit, RepoStatusOk, TreeEntry } from "@trackwall/pr
 /** The `git log` format `parseLog` expects: fields separated by 0x1f, commits separated by NUL through `-z`. */
 export const LOG_FORMAT = "--format=%H%x1f%an%x1f%aI%x1f%s";
 
-/** The result of `git status --porcelain=v2 --branch -z` without the HEAD commit (`vcs` adds it). */
-export interface ParsedStatus extends Omit<RepoStatusOk, "head"> {
+/** The result of `git status --porcelain=v2 --branch -z` without the HEAD commit and the last fetch (`vcs` adds them). */
+export interface ParsedStatus extends Omit<RepoStatusOk, "head" | "fetchedAt"> {
   /** The HEAD commit's hash (`branch.oid`); `null` in a repo without commits (`branch.oid (initial)`). */
   headOid: string | null;
 }

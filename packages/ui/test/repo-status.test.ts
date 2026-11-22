@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoStatus } from "@trackwall/protocol";
-import { branchLabel, listNeedsSettings, repoStatusTone } from "../src/lib/repo-status.ts";
+import { branchLabel, listNeedsSettings, repoListTone, repoStatusTone, serverLabel } from "../src/lib/repo-status.ts";
 
-const ok = { kind: "ok", branch: "main", head: null, upstream: null, untracked: 0 } as const;
+const ok = { kind: "ok", branch: "main", head: null, upstream: null, untracked: 0, fetchedAt: null } as const;
 
 describe("repo state in the UI", () => {
   test("a clean repo has tone ok, a repo with changes tone warning with changed and new files separately, an unavailable one tone error, a loading one no tone", () => {
@@ -26,6 +26,43 @@ describe("repo state in the UI", () => {
 
   test("a branch shows its name, and without a branch the label “detached HEAD”", () => {
     expect([branchLabel({ ...ok, changes: 0 }), branchLabel({ ...ok, branch: null, changes: 0 })]).toEqual(["main", "detached HEAD"]);
+  });
+});
+
+describe("repo state in the repo list (ADR-291)", () => {
+  const behind = (count: number, ahead = 0) => ({ name: "origin/main", ahead, behind: count });
+
+  test("a clean repo whose branch lacks commits of the branch it tracks no longer reads “clean”, and one with changes says both", () => {
+    const statuses: RepoStatus[] = [
+      { ...ok, changes: 0, upstream: behind(15) },
+      { ...ok, changes: 2, upstream: behind(15) },
+      { ...ok, changes: 0, upstream: behind(3, 2) },
+      { ...ok, changes: 0, upstream: behind(0, 4) },
+      { ...ok, changes: 0, upstream: null },
+    ];
+    expect(statuses.map(repoListTone)).toEqual([
+      { tone: "warning", label: "15 to pull" },
+      { tone: "warning", label: "2 changed · 15 to pull" },
+      { tone: "warning", label: "diverged" },
+      { tone: "ok", label: "clean" },
+      { tone: "ok", label: "clean" },
+    ]);
+  });
+
+  test("an unavailable or loading repo reads as in the repo header", () => {
+    expect([repoListTone({ kind: "unavailable", message: "no directory" }), repoListTone({ kind: "loading" })]).toEqual([
+      { tone: "error", label: "unavailable" },
+      { label: "loading" },
+    ]);
+  });
+
+  test("the server part alone: commits to pull, “diverged” when the branch has its own too, nothing when it lacks none or tracks none", () => {
+    expect([
+      serverLabel({ ...ok, changes: 0, upstream: behind(1) }),
+      serverLabel({ ...ok, changes: 0, upstream: behind(1, 1) }),
+      serverLabel({ ...ok, changes: 0, upstream: behind(0, 1) }),
+      serverLabel({ ...ok, changes: 0, upstream: null }),
+    ]).toEqual(["1 to pull", "diverged", null, null]);
   });
 });
 

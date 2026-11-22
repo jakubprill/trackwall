@@ -21,7 +21,7 @@ function repo(id: string, status: Partial<{ changes: number; behind: number; una
     id,
     path: `/p/${id}`,
     remote: null,
-    status: { kind: "ok", branch: "main", head: null, changes: status.changes ?? 0, untracked: 0, upstream },
+    status: { kind: "ok", branch: "main", head: null, changes: status.changes ?? 0, untracked: 0, upstream, fetchedAt: null },
   };
 }
 

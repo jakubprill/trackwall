@@ -46,6 +46,21 @@ export function headRefName(text: string): string | undefined {
   return ref && !ref.includes("\\") && !ref.split("/").includes("..") ? ref : undefined;
 }
 
+/** The file every `git fetch` and `git pull` rewrites, also when nothing came; git keeps one per worktree. */
+export function fetchHeadFile(dirs: GitDirs): string {
+  return join(dirs.gitDir, "FETCH_HEAD");
+}
+
+/**
+ * When the repo last fetched from a remote (ADR-291): the modification time of its `FETCH_HEAD`; `null` when it never
+ * fetched (a fresh clone has no such file) or has no git directory.
+ */
+export async function lastFetch(repo: string): Promise<string | null> {
+  const dirs = await gitDirs(repo);
+  const info = dirs && (await statIfExists(fetchHeadFile(dirs)));
+  return info ? info.mtime.toISOString() : null;
+}
+
 /** `undefined` for a file that is not there. */
 export async function statIfExists(path: string): Promise<Stats | undefined> {
   try {

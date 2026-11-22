@@ -57,6 +57,11 @@ export const RepoStatusOk = z.object({
   untracked: z.number().int().nonnegative(),
   /** The tracking branch with counters; `null` when the branch has none or it disappeared on the remote. */
   upstream: z.object({ name: z.string(), ahead: z.number().int(), behind: z.number().int() }).nullable(),
+  /**
+   * When the repo last fetched from a remote (ISO 8601, the time git wrote its `FETCH_HEAD`), so the commits to pull in
+   * `upstream` are as of then (ADR-291); `null` for a repo that never fetched, such as a fresh clone.
+   */
+  fetchedAt: z.iso.datetime().nullable(),
 });
 export type RepoStatusOk = z.infer<typeof RepoStatusOk>;
 

@@ -1,23 +1,13 @@
-import { type PullResult, type RepoStatusOk, workspaceApi } from "@trackwall/protocol";
-import { ArrowDown, ArrowUp, RotateCw } from "lucide-react";
-import { useState } from "react";
+import type { RepoStatusOk } from "@trackwall/protocol";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
-import { errorMessage, post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { folderWorkWarning, pullLabel, pullResultLine, type UpstreamOffer, upstreamOffer } from "@/lib/upstream-pull";
+import { pullResultLine, type UpstreamOffer, upstreamOffer } from "@/lib/upstream-pull";
+import { usePull } from "@/lib/use-pull";
 import { cn } from "@/lib/utils";
+import { PullButton, PullFailure, PullQuestion } from "./PullControls.tsx";
 import { PutAsideConfirm } from "./PutAsideConfirm.tsx";
-
-/** The pull's own state: running, its result or error, or the question asked first when something works in the folder. */
-type PullState =
-  | { kind: "idle" }
-  | { kind: "asking" }
-  /** The user chose to put the changes aside; the tile spans the row to list the files. */
-  | { kind: "putting-aside" }
-  | { kind: "running" }
-  | { kind: "done"; result: PullResult }
-  | { kind: "failed"; message: string };
 
 /**
  * The Upstream tile of the repo header (ADR-269): the checked-out branch against the branch it tracks, and the pull that
@@ -40,19 +30,12 @@ export function UpstreamTile({
   onShowChanges: () => void;
   onOpenShell: () => void;
 }) {
-  const [pull, setPull] = useState<PullState>({ kind: "idle" });
+  const pull = usePull(conn, repo, workInFolder);
+  const { state } = pull;
   const offer = upstreamOffer(status);
-  const run = () => {
-    setPull({ kind: "running" });
-    post(conn, workspaceApi.pull, { repo }).then(
-      (result) => setPull({ kind: "done", result }),
-      (err: unknown) => setPull({ kind: "failed", message: errorMessage(err) }),
-    );
-  };
-  const start = () => (workInFolder.length > 0 ? setPull({ kind: "asking" }) : run());
 
   return (
-    <div className={cn("surface flex min-w-0 flex-col gap-1 px-3 py-2", pull.kind === "putting-aside" && "col-span-full")}>
+    <div className={cn("surface flex min-w-0 flex-col gap-1 px-3 py-2", state.kind === "putting-aside" && "col-span-full")}>
       <dt className="hud-label">Upstream</dt>
       <dd className="flex min-w-0 flex-col gap-1 text-sm">
         {status.upstream ? (
@@ -70,51 +53,16 @@ export function UpstreamTile({
         ) : (
           <span className="text-muted-foreground">none</span>
         )}
-        {offer.kind === "pull" && pull.kind !== "asking" && (
-          <Button
-            size="sm"
-            className="h-7 self-start"
-            disabled={pull.kind === "running"}
-            onClick={start}
-            title={`Fetch, then fast-forward ${status.branch} to ${status.upstream?.name}; the default branch is synced as in Sync all`}
-          >
-            {pull.kind === "running" ? <RotateCw className="animate-spin" /> : <ArrowDown />}
-            {pull.kind === "running" ? "Pulling…" : pullLabel(offer.behind)}
-          </Button>
+        {offer.kind === "pull" && state.kind !== "asking" && <PullButton offer={offer} pull={pull} className="self-start" />}
+        {offer.kind === "blocked" && state.kind !== "running" && state.kind !== "putting-aside" && (
+          <BlockedOffer offer={offer} onPutAside={pull.putAside} onShowChanges={onShowChanges} onOpenShell={onOpenShell} />
         )}
-        {offer.kind === "blocked" && pull.kind !== "running" && pull.kind !== "putting-aside" && (
-          <BlockedOffer
-            offer={offer}
-            onPutAside={() => setPull({ kind: "putting-aside" })}
-            onShowChanges={onShowChanges}
-            onOpenShell={onOpenShell}
-          />
+        {state.kind === "putting-aside" && (
+          <PutAsideConfirm conn={conn} targets={[{ repo, workInFolder }]} verb="pull" onClose={pull.reset} />
         )}
-        {pull.kind === "putting-aside" && (
-          <PutAsideConfirm conn={conn} targets={[{ repo, workInFolder }]} verb="pull" onClose={() => setPull({ kind: "idle" })} />
-        )}
-        {pull.kind === "asking" && (
-          <span className="flex flex-col gap-1 text-xs">
-            <span className="text-warning">{folderWorkWarning(workInFolder)}</span>
-            <span className="flex gap-2">
-              <Button size="sm" className="h-7" onClick={run}>
-                Pull anyway
-              </Button>
-              <Button variant="outline" size="sm" className="h-7" onClick={() => setPull({ kind: "idle" })}>
-                Cancel
-              </Button>
-            </span>
-          </span>
-        )}
-        {pull.kind === "done" && <StatusLabel {...pullResultLine(pull.result)} className="text-xs whitespace-normal" />}
-        {pull.kind === "failed" && (
-          <span className="flex flex-col items-start gap-1 text-xs">
-            <span className="text-destructive whitespace-pre-wrap break-words">Pull failed: {pull.message}</span>
-            <Button variant="outline" size="sm" className="h-7" onClick={run}>
-              <RotateCw /> Retry
-            </Button>
-          </span>
-        )}
+        {state.kind === "asking" && <PullQuestion workInFolder={workInFolder} pull={pull} />}
+        {state.kind === "done" && <StatusLabel {...pullResultLine(state.result)} className="text-xs whitespace-normal" />}
+        {state.kind === "failed" && <PullFailure message={state.message} pull={pull} />}
       </dd>
     </div>
   );

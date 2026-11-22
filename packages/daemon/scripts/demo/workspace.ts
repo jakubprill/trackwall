@@ -61,9 +61,16 @@ function write(root: string, files: Record<string, string>): void {
   }
 }
 
-function git(repo: string, ...args: string[]): void {
+/** Runs git in `repo` and gives what it printed. */
+function git(repo: string, ...args: string[]): string {
   const result = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
   if (result.status !== 0) throw new Error(`git ${args.join(" ")} in ${repo}: ${result.stderr}`);
+  return result.stdout.trim();
+}
+
+function commit(repo: string, message: string): void {
+  git(repo, "add", "--all");
+  git(repo, "-c", "user.name=Demo", "-c", "user.email=demo@example.com", "commit", "--quiet", "-m", message);
 }
 
 /** A git repo with its files in one commit by a made-up author, and a remote on an invented host. */
@@ -71,8 +78,30 @@ function commitRepo(root: string, name: string, files: Record<string, string>): 
   write(root, files);
   git(root, "init", "--quiet", "--initial-branch=main");
   git(root, "remote", "add", "origin", `https://git.example.com/shop/${name}.git`);
-  git(root, "add", "--all");
-  git(root, "-c", "user.name=Demo", "-c", "user.email=demo@example.com", "commit", "--quiet", "-m", `Start ${name}`);
+  commit(root, `Start ${name}`);
+}
+
+/**
+ * What the invented host has as of a fetch when the demo starts, without a server: `main` tracks `origin/main`, which
+ * has `ahead` commits of the server's own, so "All repos" has commits to pull to show. Git's own `FETCH_HEAD` dates the
+ * fetch. A real fetch, as "Pull" and "Sync all" start, fails on the invented host.
+ */
+function fetchedFromServer(root: string, name: string, ahead: number): void {
+  if (ahead > 0) {
+    git(root, "switch", "--quiet", "--create", "server");
+    for (let i = 1; i <= ahead; i++) {
+      write(root, { [`changes/${i}.md`]: `Change ${i} of ${name}\n` });
+      commit(root, `Change ${i} of ${name}`);
+    }
+  }
+  const serverMain = git(root, "rev-parse", "HEAD");
+  git(root, "update-ref", "refs/remotes/origin/main", serverMain);
+  if (ahead > 0) {
+    git(root, "switch", "--quiet", "main");
+    git(root, "branch", "--quiet", "--delete", "--force", "server");
+  }
+  git(root, "branch", "--quiet", "--set-upstream-to=origin/main", "main");
+  writeFileSync(join(root, ".git", "FETCH_HEAD"), `${serverMain}\t\tbranch 'main' of https://git.example.com/shop/${name}\n`);
 }
 
 /**
@@ -305,11 +334,23 @@ const LIBRARIES: Record<string, Record<string, string>> = {
 /** The names of the demo repos, in the order they are created. */
 export const DEMO_REPOS = [...DEMO_SERVICES.map((s) => s.name), ...FRONTENDS.map((f) => f.name), ...Object.keys(LIBRARIES)];
 
-/** Creates the demo repos in `projectsDir`, each a git repo with one commit, and leaves a few with uncommitted work. */
+/** The commits the server has that a demo repo has not pulled: "All repos" shows them, the rest of the repos are clean. */
+const COMMITS_TO_PULL: Readonly<Record<string, number>> = { catalog: 15, payments: 2, inventory: 3 };
+
+/**
+ * Creates the demo repos in `projectsDir`, each a git repo with one commit that tracks the branch of an invented
+ * host, leaves a few behind it and inventory diverged from it, and a few with uncommitted work.
+ */
 export function createDemoWorkspace(projectsDir: string): void {
   for (const service of DEMO_SERVICES) commitRepo(join(projectsDir, service.name), service.name, serviceFiles(service));
   for (const frontend of FRONTENDS) commitRepo(join(projectsDir, frontend.name), frontend.name, frontendFiles(frontend));
   for (const [name, files] of Object.entries(LIBRARIES)) commitRepo(join(projectsDir, name), name, files);
+  for (const name of DEMO_REPOS) fetchedFromServer(join(projectsDir, name), name, COMMITS_TO_PULL[name] ?? 0);
+  // A commit of its own beside the server's: a branch no pull moves.
+  write(join(projectsDir, "inventory"), {
+    "README.md": "# inventory\n\nThe stock service of the demo shop. Runs on port 8083 and keeps a reservation for an hour.\n",
+  });
+  commit(join(projectsDir, "inventory"), "Keep reservations for an hour");
   // Work in progress, so "Changes" and the repo list have something to show.
   write(join(projectsDir, "orders-api"), {
     "README.md": "# orders-api\n\nThe orders service of the demo shop. Runs on port 8081 and retries payments twice.\n",
@@ -327,8 +368,7 @@ export function commitPricingTaskContract(worktree: string): void {
     "src/main/java/com/example/shop/pricing/PricesDto.java":
       "package com.example.shop.pricing;\n\npublic record PricesDto(String id, String currency) {}\n",
   });
-  git(worktree, "add", "--all");
-  git(worktree, "-c", "user.name=Demo", "-c", "user.email=demo@example.com", "commit", "--quiet", "-m", "Give prices a currency");
+  commit(worktree, "Give prices a currency");
 }
 
 /**

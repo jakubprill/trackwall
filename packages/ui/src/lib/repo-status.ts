@@ -5,7 +5,8 @@ export type { StatusTone };
 
 /**
  * A repo's state in one line (§4.5): the dot tone and the text next to it. One place for the rule
- * "unavailable = error, working directory changes = warning, clean = ok" for the list and the repo header.
+ * "unavailable = error, working directory changes = warning, clean = ok" for the repo header and, under `repoListTone`,
+ * the repo list.
  */
 export function repoStatusTone(status: RepoStatus): { tone?: StatusTone; label: string } {
   // No tone while the status is on its way (ADR-113): a dot would claim a state the view does not know yet.
@@ -13,6 +14,27 @@ export function repoStatusTone(status: RepoStatus): { tone?: StatusTone; label: 
   if (status.kind !== "ok") return { tone: "error", label: "unavailable" };
   const changes = workingTreeLabel(trackedChanges(status), status.untracked);
   return changes ? { tone: "warning", label: changes } : { tone: "ok", label: "clean" };
+}
+
+/**
+ * A repo's state in the repo list (ADR-291): the working directory as `repoStatusTone` says it, then what its branch lacks
+ * from the branch it tracks as of the last fetch, so a clean repo with commits to pull no longer reads "clean".
+ */
+export function repoListTone(status: RepoStatus): { tone?: StatusTone; label: string } {
+  const own = repoStatusTone(status);
+  const server = status.kind === "ok" ? serverLabel(status) : null;
+  if (server === null) return own;
+  return { tone: "warning", label: own.tone === "ok" ? server : `${own.label} · ${server}` };
+}
+
+/**
+ * What the checked-out branch lacks from the branch it tracks, as of the last fetch: "15 to pull", or "diverged" when it
+ * also has commits of its own, which no pull moves; `null` when it lacks nothing or tracks no branch.
+ */
+export function serverLabel(status: RepoStatusOk): string | null {
+  const { upstream } = status;
+  if (upstream === null || upstream.behind === 0) return null;
+  return upstream.ahead > 0 ? "diverged" : `${upstream.behind} to pull`;
 }
 
 /** The "Changes" tab of one repo: the user's uncommitted work, which no event reports. */

@@ -6,10 +6,12 @@ import { Loading } from "@/components/Loading";
 import { MoreMenu } from "@/components/MoreMenu";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
+import { allReposRows } from "@/lib/all-repos";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime, twoDigits } from "@/lib/format";
-import { branchLabel, listNeedsSettings, repoStatusTone } from "@/lib/repo-status";
+import { branchLabel, listNeedsSettings, repoListTone } from "@/lib/repo-status";
+import type { RepoTab } from "@/lib/repo-tabs";
 import { REPO_LIST_PACE } from "@/lib/repo-watch";
 import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
@@ -22,19 +24,21 @@ import type { RepoWatchHandle } from "@/lib/use-repo-watch";
 import { type StarredReposHandle, useStarredRepos } from "@/lib/use-starred-repos";
 import { useSyncRun } from "@/lib/use-sync-run";
 import { useTagFilter } from "@/lib/use-tag-filter";
+import { useUnpushedWork } from "@/lib/use-unpushed-work";
 import { cn } from "@/lib/utils";
+import { AllReposEntry, AllReposPanel } from "./AllRepos.tsx";
 import { BatchBar, BatchPanel } from "./BatchView.tsx";
 import { CloneView } from "./CloneView.tsx";
 import { ProjectsFolderShell } from "./ProjectsFolderShell.tsx";
 import { RepoDetail } from "./RepoDetail.tsx";
-import { SyncBar, SyncView } from "./SyncView.tsx";
+import { SyncView } from "./SyncView.tsx";
 import { TagFilter } from "./TagFilter.tsx";
 
 /**
- * What the right side shows: the selected repo, the search for repos to clone, the sync, the batch command, or the
- * shell of the projects folder.
+ * What the right side shows: All repos (ADR-291), the selected repo, the search for repos to clone, the sync, the batch
+ * command, or the shell of the projects folder.
  */
-type Panel = "repo" | "clone" | "sync" | "batch" | "shell";
+type Panel = "all" | "repo" | "clone" | "sync" | "batch" | "shell";
 
 /** About how many repos the list shows without scrolling: they get their statuses before the rest (ADR-113). */
 const FIRST_SHOWN = 15;
@@ -56,7 +60,7 @@ export function ReposView({
   onOpenSettings,
 }: {
   conn: Connection;
-  /** The repo selected at start, for example opened from the dashboard in the "Home" view. */
+  /** The repo opened at start, for example from the dashboard in the "Home" view; without one the view opens on All repos. */
   initialRepo?: string;
   /** Commits and repos added to the folder (ADR-63): the list is fetched again at once. */
   repoWatch: RepoWatchHandle;
@@ -69,7 +73,8 @@ export function ReposView({
   onOpenSettings: (category: SettingsCategory) => void;
 }) {
   const [selected, setSelected] = useState(initialRepo);
-  const [panel, setPanel] = useState<Panel>("repo");
+  const [openTab, setOpenTab] = useState<RepoTab>();
+  const [panel, setPanel] = useState(firstPanel(initialRepo));
   const list = useRepoList(conn, repoWatch.options(REPO_LIST_PACE));
   const sync = useSyncRun(conn, list.reload);
   const synced = syncedByPath(sync.run);
@@ -81,6 +86,13 @@ export function ReposView({
   const stars = useStarredRepos(conn);
   const repos = starredFirst(filter.repos, stars.ids);
   const current = repos.find((r) => r.id === selected) ?? repos[0];
+  const unpushed = useUnpushedWork(conn, repoWatch.options(REPO_LIST_PACE));
+  const rows = allReposRows(repos, unpushed.data, new Date());
+  const openRepo = (id: string, tab?: RepoTab) => {
+    setSelected(id);
+    setOpenTab(tab);
+    setPanel("repo");
+  };
   // The selected repo and the top of the list get their statuses first (ADR-113); only remembered, so every render may.
   useEffect(() => list.showFirst(shownFirst(selected, repos)));
   const actionsDir = folderForActions(list.data, needsSettings);
@@ -107,7 +119,6 @@ export function ReposView({
             />
           </span>
         </div>
-        {actionsDir !== null && <SyncBar sync={sync} onShow={() => setPanel("sync")} />}
         <BatchBar batch={batch} onShow={() => setPanel("batch")} />
         <TagFilter counts={filter.counts} selected={filter.selected} onToggle={filter.toggle} onClear={filter.clear} />
         <nav aria-label="Repo list" className="flex-1 overflow-y-auto px-2 pb-4">
@@ -129,6 +140,7 @@ export function ReposView({
           )}
           <NoTagMatch shown={repos.length} all={allRepos.length} />
           <StarsError error={stars.error} />
+          <AllReposEntry rows={rows} active={shown === "all"} onSelect={() => setPanel("all")} />
           {repos.map((repo, i) => (
             <RepoListItem
               key={repo.id}
@@ -138,15 +150,27 @@ export function ReposView({
               tags={filter.tags.get(repo.id) ?? []}
               active={shown === "repo" && repo.id === current?.id}
               stars={stars}
-              onSelect={() => {
-                setSelected(repo.id);
-                setPanel("repo");
-              }}
+              onSelect={() => openRepo(repo.id)}
             />
           ))}
         </nav>
       </aside>
       <section className="min-h-0 min-w-0 overflow-y-auto">
+        {shown === "all" && repos.length > 0 && (
+          <AllReposPanel
+            conn={conn}
+            rows={rows}
+            inContainer={unpushed.data?.inContainer === true}
+            filter={{ shown: repos.length, all: allRepos.length }}
+            sessions={sessions}
+            runningLive={runningLive}
+            sync={sync}
+            canSync={canSync}
+            onShowSync={() => setPanel("sync")}
+            onOpenRepo={openRepo}
+            onOpenInSessions={onOpenInSessions}
+          />
+        )}
         {shown === "clone" && <CloneView conn={conn} onCloned={list.reload} onOpenSettings={onOpenSettings} />}
         {shown === "sync" && <SyncView sync={sync} canSync={canSync} />}
         {/* A new tag filter is a new group of repos: the panel starts with all of them ticked. */}
@@ -166,6 +190,7 @@ export function ReposView({
             key={current.id}
             conn={conn}
             repo={current}
+            initialTab={openTab}
             projectsDir={list.data?.projectsDir}
             sessions={sessions}
             runningLive={runningLive}
@@ -179,9 +204,14 @@ export function ReposView({
   );
 }
 
-/** The panel to show: the shell of a projects folder that is no longer set gives way to the repo. */
+/** The panel at the start: the repo opened from elsewhere (Home, the command palette), else All repos. */
+function firstPanel(initialRepo: string | undefined): Panel {
+  return initialRepo === undefined ? "all" : "repo";
+}
+
+/** The panel to show: the shell of a projects folder that is no longer set gives way to All repos. */
 function panelShown(panel: Panel, actionsDir: string | null): Panel {
-  return panel === "shell" && actionsDir === null ? "repo" : panel;
+  return panel === "shell" && actionsDir === null ? "all" : panel;
 }
 
 /** The projects folder the actions on all repos work in (sync, batch, shell): none while it is not set or not readable. */
@@ -207,8 +237,9 @@ function repoCount(shown: number, all: number): string {
 }
 
 /**
- * What the list's header does less often than adding a repo and "Sync all" (ADR-273), in its "More" menu: the projects
- * folder's path, its shell and the batch command, which need the folder, then another folder and a refresh of the list.
+ * What the list's header does less often than adding a repo (ADR-273), in its "More" menu: the projects folder's path,
+ * its shell and the batch command, which need the folder, then another folder and a refresh of the list. "Sync all"
+ * stands above the table of All repos (ADR-291).
  */
 function FolderMenu({
   projectsDir,
@@ -305,11 +336,11 @@ function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
 }
 
 /**
- * A list row in HUD style (ADR-16): the item number, name, branch, and the state dot and text; the active one has a
- * glowing stroke on the left. The number is only the position in the list, not the repo identifier. The star beside the
- * row moves the repo to the top (ADR-192): always shown on a starred repo, on the others only on hover. Under the state
- * stands the result of the last sync (`listSyncBadge`)
- * and the repo's tags (reasons in the tooltip); the `no-mise` tag is warning text, because such a repo has nothing to run (ADR-34).
+ * A list row in HUD style (ADR-16): the item number, name, branch, and the state dot and text, which also counts the
+ * commits to pull (ADR-291); the active one has a glowing stroke on the left. The number is only the position in the
+ * list, not the repo identifier. The star beside the row moves the repo to the top (ADR-192): always shown on a starred
+ * repo, on the others only on hover. Under the state stands the result of the last sync (`listSyncBadge`) and the
+ * repo's tags (reasons in the tooltip); the `no-mise` tag is warning text, because such a repo has nothing to run (ADR-34).
  */
 function RepoListItem({
   repo,
@@ -329,7 +360,7 @@ function RepoListItem({
   onSelect: () => void;
 }) {
   const { status } = repo;
-  const state = repoStatusTone(status);
+  const state = repoListTone(status);
   const noMise = tags.some((t) => t.name === NO_MISE_TAG);
   const otherTags = tags.filter((t) => t.name !== NO_MISE_TAG);
   return (

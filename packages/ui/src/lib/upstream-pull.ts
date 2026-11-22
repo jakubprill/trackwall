@@ -20,7 +20,8 @@ import { sessionTitle } from "./session-state.ts";
 /** What the Upstream tile offers: a pull, a reason with the way out, or nothing (no upstream, nothing to pull). */
 export type UpstreamOffer =
   | { kind: "none" }
-  | { kind: "pull"; behind: number }
+  /** `title`: the button's tooltip, which branch moves where. */
+  | { kind: "pull"; behind: number; title: string }
   | { kind: "blocked"; message: string; way: "changes" | "shell" };
 
 export function upstreamOffer(status: RepoStatusOk): UpstreamOffer {
@@ -39,7 +40,11 @@ export function upstreamOffer(status: RepoStatusOk): UpstreamOffer {
       message: `${countLabel(changed, { one: "changed file", other: "changed files" })} on ${branch} ${changed === 1 ? "is" : "are"} in the way.`,
       way: "changes",
     };
-  return { kind: "pull", behind: upstream.behind };
+  return {
+    kind: "pull",
+    behind: upstream.behind,
+    title: `Fetch, then fast-forward ${branch} to ${upstream.name}; the default branch is synced as in Sync all`,
+  };
 }
 
 /** The button's text: "Pull 320". */
