@@ -81,24 +81,37 @@ export type ProjectsFolderTrust = z.infer<typeof ProjectsFolderTrust>;
 export const CopilotCliRelation = z.enum(["older", "tested", "newer", "unknown"]);
 export type CopilotCliRelation = z.infer<typeof CopilotCliRelation>;
 
+/**
+ * Where the Copilot CLI that sessions run comes from: the user's `computer`, or in a container its mise config
+ * (`container-mise`, as the dev container guide installs it) or its image (`container-image`, such as `npm i -g` in a
+ * Dockerfile), where a `mise use` installs a second copy that never runs.
+ */
+export const CopilotCliSource = z.enum(["computer", "container-mise", "container-image"]);
+export type CopilotCliSource = z.infer<typeof CopilotCliSource>;
+
 export const CopilotCliVersion = z.discriminatedUnion("relation", [
   /**
    * What `copilot --version` says, as `x.y.z`, against the tested version, `TESTED_COPILOT_CLI_VERSION` of this daemon;
-   * `inContainer` when the daemon runs in a container, where Copilot CLI comes from its mise config or image.
+   * and where that Copilot CLI comes from (`CopilotCliSource`).
    */
-  z.object({ relation: z.enum(["older", "tested", "newer"]), version: z.string(), tested: z.string(), inContainer: z.boolean() }),
-  z.object({ relation: z.literal("unknown"), version: z.null(), tested: z.string(), inContainer: z.boolean() }),
+  z.object({ relation: z.enum(["older", "tested", "newer"]), version: z.string(), tested: z.string(), source: CopilotCliSource }),
+  z.object({ relation: z.literal("unknown"), version: z.null(), tested: z.string(), source: CopilotCliSource }),
 ]);
 export type CopilotCliVersion = z.infer<typeof CopilotCliVersion>;
 
 /**
- * How to get the tested Copilot CLI, for the doctor and the window's strip alike (ADR-274). In a container Copilot CLI
- * comes from the mise config the dev container guide sets up, or from the image, so an update made inside the
- * container any other way is gone at the next rebuild, and the user has to know which version to put there.
+ * How to get the tested Copilot CLI, for the doctor and the window's strip alike (ADR-274), by where the running one
+ * comes from: in a container an update made any other way than its source is gone at the next rebuild or never runs.
  */
-export function copilotCliInstallAdvice(tested: string, inContainer: boolean): string {
-  if (!inContainer) return `Install Copilot CLI ${tested} the way you installed it (npm, Homebrew or WinGet).`;
-  return `Install Copilot CLI ${tested} where the container gets it: run \`mise use -g npm:@github/copilot@${tested}\` in the container, or put that version into its image and rebuild it. An update made any other way is lost at the next rebuild.`;
+export function copilotCliInstallAdvice(tested: string, source: CopilotCliSource): string {
+  switch (source) {
+    case "computer":
+      return `Install Copilot CLI ${tested} the way you installed it (npm, Homebrew or WinGet).`;
+    case "container-mise":
+      return `Install Copilot CLI ${tested} with mise, which the container runs it from: \`mise use -g npm:@github/copilot@${tested}\` in the container.`;
+    case "container-image":
+      return `Copilot CLI comes with the container's image: install ${tested} where the image installs it, for example \`npm i -g @github/copilot@${tested}\` in its Dockerfile, and rebuild the container. An update made inside the container is lost at the next rebuild.`;
+  }
 }
 
 const endpoint = apiEndpoints("doctor");
