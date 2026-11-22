@@ -63,13 +63,15 @@ const STEPS: readonly { id: DoctorCheckId; title: string; need: GetStartedNeed; 
     later: "Checked once the projects folder is set.",
   },
   { id: "git-remotes", title: "Git access to your repo hosts", need: "recommended" },
+  // Verify, services and the agents' builds and tests run as mise tasks, so the repos' readiness blocks without it (ADR-292).
+  { id: "mise", title: "mise for builds and tests", need: "recommended" },
 ];
 
 /** The step Trackwall settles itself on the user's click, with "Trust folder" (ADR-270). */
 export const TRUST_FOLDER_STEP: DoctorCheckId = "copilot-trusted-folder";
 
 /** Tools Trackwall works without, in the order of how much they add. */
-const GOOD_TO_HAVE: readonly DoctorCheckId[] = ["mise", "copilot-sandbox", "github-cli", "gitlab-cli"];
+const GOOD_TO_HAVE: readonly DoctorCheckId[] = ["copilot-sandbox", "github-cli", "gitlab-cli"];
 
 function stepState(check: DoctorCheck, need: GetStartedNeed): GetStartedState {
   if (check.status === "ok") return "done";

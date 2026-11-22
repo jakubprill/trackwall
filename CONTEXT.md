@@ -1004,7 +1004,7 @@ The checks of what Trackwall needs on this computer: the projects folder, every 
 _Avoid_: health check (that is `GET /api/health`), diagnostics, setup wizard
 
 **Get started** (`getStartedPlan`, `GetStartedStep`, the `get-started` Settings category; in the UI *Get started*):
-The doctor checks that stand between a new user and a first session, shown as **steps** in the order to do them (ADR-262): the projects folder, Git, Copilot CLI and the network are *needed*, Copilot CLI's trusted folder and git access to the repo hosts *recommended*. With no needed step open it says *Ready*. It adds no checks of its own. Settings lists every step; while setup is under way the Sessions view shows the steps left above its form (`GetStartedCard`, ADR-289).
+The doctor checks that stand between a new user and a first session, shown as **steps** in the order to do them (ADR-262): the projects folder, Git, Copilot CLI and the network are *needed*, Copilot CLI's trusted folder, git access to the repo hosts and mise *recommended*. With no needed step open it says *Ready*. It adds no checks of its own. Settings lists every step; while setup is under way the Sessions view shows the steps left above its form (`GetStartedCard`, ADR-289).
 _Avoid_: onboarding, setup wizard, profile
 
 **Config files** (`ConfigFiles`, the `config-files` module, `configFilesApi`; in the UI *Files* in Settings):
