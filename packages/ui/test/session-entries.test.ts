@@ -165,9 +165,31 @@ describe("Sessions view entries", () => {
     });
     const [t1, t2] = entries;
     if (!t1 || !t2) throw new Error("expected two entries");
-    expect(selectionAfterRemoval(entries, { kind: "task", id: "t1" }, t1)).toEqual({ kind: "task", id: "t2" });
-    expect(selectionAfterRemoval(entries, { kind: "task", id: "t2" }, t2)).toEqual({ kind: "task", id: "t1" });
-    expect(selectionAfterRemoval(entries, { kind: "task", id: "t2" }, t1)).toBe("keep");
+    expect(selectionAfterRemoval(entries, { kind: "task", id: "t1" }, [t1])).toEqual({ kind: "task", id: "t2" });
+    expect(selectionAfterRemoval(entries, { kind: "task", id: "t2" }, [t2])).toEqual({ kind: "task", id: "t1" });
+    expect(selectionAfterRemoval(entries, { kind: "task", id: "t2" }, [t1])).toBe("keep");
+  });
+
+  test("closing several tasks at once, the selected one among them, selects the nearest task that stays", () => {
+    const entries = rowEntries({
+      sessions: [],
+      tasks: [
+        task("t1", "2026-10-23T12:00:00Z"),
+        task("t2", "2026-10-23T11:00:00Z"),
+        task("t3", "2026-10-23T10:00:00Z"),
+        task("t4", "2026-10-23T09:00:00Z"),
+      ],
+      proposals: [],
+      messages: [],
+      lastSupervisor: null,
+      sessionProfile: { name: null },
+    });
+    const [t1, t2, t3, t4] = entries;
+    if (!t1 || !t2 || !t3 || !t4) throw new Error("expected four entries");
+    expect(selectionAfterRemoval(entries, { kind: "task", id: "t2" }, [t2, t3])).toEqual({ kind: "task", id: "t4" });
+    expect(selectionAfterRemoval(entries, { kind: "task", id: "t3" }, [t3, t4])).toEqual({ kind: "task", id: "t2" });
+    expect(selectionAfterRemoval(entries, { kind: "task", id: "t1" }, [t2, t3])).toBe("keep");
+    expect(selectionAfterRemoval(entries, { kind: "task", id: "t1" }, entries)).toBeUndefined();
   });
 
   test("selecting a task's session (from the tray or “Next waiting”) points to its task", () => {

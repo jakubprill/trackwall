@@ -236,24 +236,26 @@ export function selectionAfterClose(
   selected: SessionSelection,
   closed: SessionEntry,
 ): SessionSelection | "keep" {
-  return closed.kind === "session" ? selectionAfterRemoval(entries, selected, closed) : "keep";
+  return closed.kind === "session" ? selectionAfterRemoval(entries, selected, [closed]) : "keep";
 }
 
 /**
- * What to select after `removed` left the list (a closed session in a repo root, an ended task): `"keep"` unless it is
- * the selected entry. Then its neighbour in `entries`, the list that still holds `removed`: the next entry or the
- * previous one after the last, so the selection stays where the user was (also on the same grid page); `undefined`
- * (the first entry) when nothing else is left. `selected` is the raw selection, not the entry `findEntry` falls back
- * to once a refreshed list no longer has `removed`.
+ * What to select after `removed` left the list (a closed session in a repo root, an ended task, the tasks "Close all"
+ * closed): `"keep"` unless the selected entry is among them. Then its nearest neighbour in `entries`, the list that
+ * still holds them, that stays: the next entry, or the previous one after the last, so the selection stays where the
+ * user was (also on the same grid page); `undefined` (the first entry) when nothing else is left. `selected` is the raw
+ * selection, not the entry `findEntry` falls back to once a refreshed list no longer has the removed ones.
  */
 export function selectionAfterRemoval(
   entries: readonly SessionEntry[],
   selected: SessionSelection,
-  removed: SessionEntry,
+  removed: readonly SessionEntry[],
 ): SessionSelection | "keep" {
-  if (selected === undefined || selected.kind === "new" || !selects(selected, removed)) return "keep";
-  const at = entries.findIndex((entry) => entryId(entry) === entryId(removed));
-  const neighbour = at === -1 ? undefined : (entries[at + 1] ?? entries[at - 1]);
+  if (selected === undefined || selected.kind === "new" || !removed.some((entry) => selects(selected, entry))) return "keep";
+  const gone = new Set(removed.map(entryId));
+  const at = entries.findIndex((entry) => gone.has(entryId(entry)) && selects(selected, entry));
+  const stays = (entry: SessionEntry) => !gone.has(entryId(entry));
+  const neighbour = at === -1 ? undefined : (entries.slice(at + 1).find(stays) ?? entries.slice(0, at).findLast(stays));
   return neighbour ? entrySelection(neighbour) : undefined;
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Page } from "playwright";
 import { layoutFaults, WIDER_FONT } from "./support/layout-faults.ts";
-import { changeSessionLists, SMALL_SCREEN, showSessions, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
+import { changeSessionLists, SMALL_SCREEN, showHomeOnBar, showSessions, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
 const trackwall = useTrackwall();
 
@@ -41,9 +41,12 @@ describe("text in the UI", () => {
     await page.getByRole("button", { name: "Start session" }).click();
     await waitForTerminal(page, "Welcome to the fake");
     await page.getByRole("button", { name: /The supervisor is waiting for you/ }).waitFor();
+    // Home has no icon until the user shows it (ADR-294): shown, it is one of the views below too.
+    const views = page.getByRole("navigation", { name: "Views" }).getByRole("button");
+    expect(await page.getByRole("navigation", { name: "Views" }).getByRole("button", { name: /^Home/ }).count()).toBe(0);
+    await showHomeOnBar(page);
 
     const found: string[] = [];
-    const views = page.getByRole("navigation", { name: "Views" }).getByRole("button");
     // By position, named by the label: a view's text can be only a number (a shortcut, a waiting count), which another
     // view's text holds too, such as the "1" of Sessions' shortcut and the "1" waiting in it.
     for (let i = 0; i < (await views.count()); i++) {

@@ -26,7 +26,7 @@ In a [dev container](/guide/dev-container), builds, tests and agents share the m
 
 Each tile shows one resource: how much is in use, the container's limit, and a bar. Without a limit of its own, a tile names what the machine Docker runs on has, which the container shares. Trackwall reads the counts every 30 seconds and keeps a day of them, so the chart and the list under "Today" still show the morning after Trackwall restarts.
 
-Above the tiles, warnings name what needs you and what to do. A short peak does not raise one: memory has to stay above 90% of the limit for five minutes, and the processors held back for more than a fifth of the time for ten. A kill for memory or a crash of the daemon warns for an hour. The same warnings stand under "Container" in "Needs you" on [Home](/features/home), and a click there brings you here. Home's icon on the view bar shows how many there are, whichever view you are in.
+Above the tiles, warnings name what needs you and what to do. A short peak does not raise one: memory has to stay above 90% of the limit for five minutes, and the processors held back for more than a fifth of the time for ten. A kill for memory or a crash of the daemon warns for an hour. The "Settings" icon on the view bar shows how many there are, whichever view you are in, and Settings then opens here, on "Diagnostics". The same warnings stand under "Container" in "Needs you" on [Home](/features/home), and a click there brings you here.
 
 Agents read the same state with the `get_container_health` tool of the [MCP server](/features/mcp). When a build or a test of theirs ends with exit code 137 or a Java process vanishes, they check it first, and a kill for memory near that time tells them the fix is more memory, not a change to the code.
 

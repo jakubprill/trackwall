@@ -154,8 +154,13 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
   "task-templates": async (page) => {
     await page.keyboard.press("Control+1");
     await page.getByRole("button", { name: "New task or Copilot CLI session" }).click();
+    await page.getByRole("button", { name: "Templates", exact: true }).click();
     await page.getByRole("button", { name: "Fix a failing test" }).click();
-    // Picking a template selects its first placeholder, so typing fills it in.
+    // Picking a template selects its first placeholder, so typing fills it in once the selection is there.
+    await page.waitForFunction(() => {
+      const field = document.activeElement;
+      return field instanceof HTMLTextAreaElement && field.selectionStart < field.selectionEnd;
+    });
     await page.keyboard.type("RefundServiceTest.refundsOnlyOnce");
     await settle(page);
   },

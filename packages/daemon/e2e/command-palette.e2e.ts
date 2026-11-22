@@ -58,7 +58,9 @@ describe("the command palette (ADR-246)", () => {
     await expect(palette(page).count()).resolves.toBe(0);
     await page.keyboard.press(PALETTE_KEY_IN_TERMINAL);
     await goTo(page, "home", /^Views\s*Home/);
-    await expect(currentView(page).getAttribute("aria-label")).resolves.toBe("Home");
+    // Home has no icon on the view bar until the user shows it (ADR-294), and the palette opens it all the same.
+    await page.getByRole("heading", { name: /^Needs you/ }).waitFor();
+    await expect(currentView(page).count()).resolves.toBe(0);
 
     await page.keyboard.press(PALETTE_KEY);
     const command = palette(page).getByRole("option", { name: /^Sessions\s*shop/ });

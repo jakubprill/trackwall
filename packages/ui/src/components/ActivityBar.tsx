@@ -9,8 +9,11 @@ export type ActivityView<Id extends string> = {
   label: string;
   icon: LucideIcon;
   shortcut: ViewShortcut;
-  /** Work views are at the top of the bar, and settings and the app state at the bottom edge, as in VS Code. */
-  placement: "top" | "bottom";
+  /**
+   * Work views are at the top of the bar, and settings and the app state at the bottom edge, as in VS Code. A view the
+   * user keeps off the bar (Home, ADR-294) has no icon, and its shortcut still opens it.
+   */
+  placement: "top" | "bottom" | "none";
 };
 
 /**
@@ -34,7 +37,7 @@ export function ActivityBar<Id extends string>({
 }) {
   useViewShortcuts(views, active, onSelect, newWindow?.open);
 
-  const group = (placement: ActivityView<Id>["placement"]) =>
+  const group = (placement: "top" | "bottom") =>
     views
       .filter((v) => v.placement === placement)
       .map((v) => (

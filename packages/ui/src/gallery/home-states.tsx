@@ -45,23 +45,24 @@ function NeedsYouOf({
   const model = homeModel({ repos, sessions, graph: undefined, running: [], services: [], daemonRunning: true });
   const first = model.sessions[0];
   return (
-    <NeedsYouPanel
-      loading={loading}
-      model={model}
-      sessions={new Map(sessions.map((s) => [s.id, s]))}
-      proposals={proposals}
-      readyToClose={readyToClose}
-      closing={{ pending: false, outcome: closeOutcome }}
-      unpushed={unpushedRows(unpushed)}
-      containerWarnings={containerWarnings}
-      selected={first ? `session:${first.id}` : null}
-      onSelect={() => {}}
-      onOpen={() => {}}
-      onOpenProposal={() => {}}
-      onOpenTask={() => {}}
-      onCloseAll={() => {}}
-      onOpenContainerHealth={() => {}}
-    />
+    // A grid that fills the frame, as Home's grid fills the window's height, so the column gets the frame's height.
+    <div className="grid min-h-0 flex-1 grid-cols-1">
+      <NeedsYouPanel
+        loading={loading}
+        model={model}
+        sessions={new Map(sessions.map((s) => [s.id, s]))}
+        proposals={proposals}
+        closeAll={{ ready: readyToClose, pending: false, outcome: closeOutcome, run: () => {} }}
+        unpushed={unpushedRows(unpushed)}
+        containerWarnings={containerWarnings}
+        selected={first ? `session:${first.id}` : null}
+        onSelect={() => {}}
+        onOpen={() => {}}
+        onOpenProposal={() => {}}
+        onOpenTask={() => {}}
+        onOpenContainerHealth={() => {}}
+      />
+    </div>
   );
 }
 

@@ -139,7 +139,7 @@ async function openTrayPanel(page: Page, origin: string, address: string): Promi
 }
 
 /** A view's icon on the view bar, by the view's name: its label also carries a count of what needs the user there. */
-function viewButton(page: Page, view: "Sessions" | "Home"): Locator {
+function viewButton(page: Page, view: "Sessions" | "Home" | "Settings"): Locator {
   return page.getByRole("navigation", { name: "Views" }).getByRole("button", { name: new RegExp(`^${view}`) });
 }
 
@@ -148,9 +148,21 @@ export async function showSessions(page: Page): Promise<void> {
   await viewButton(page, "Sessions").click();
 }
 
-/** Opens the Home view from the view bar, where it is the last of the work views (ADR-288). */
+/** Opens the Home view with its shortcut, Ctrl+6 (⌘6), as Home has no icon on the view bar until the user shows it (ADR-294). */
 export async function showHome(page: Page): Promise<void> {
-  await viewButton(page, "Home").click();
+  // The shortcut listens from the window's first render on, which draws the view bar.
+  await viewButton(page, "Sessions").waitFor();
+  await page.keyboard.press("ControlOrMeta+6");
+  await page.getByRole("heading", { name: /^Needs you/ }).waitFor();
+}
+
+/** Shows Home's icon on the view bar, as the user does in Settings › App › Home (ADR-294); the bar follows at once. */
+export async function showHomeOnBar(page: Page): Promise<void> {
+  await viewButton(page, "Settings").click();
+  await page.getByRole("navigation", { name: "Settings categories" }).getByRole("button", { name: /^App/ }).click();
+  await page.getByRole("button", { name: /^Home/, expanded: false }).click();
+  await page.getByRole("radio", { name: /^Shown/ }).check();
+  await viewButton(page, "Home").waitFor();
 }
 
 /** The list on the left of the Sessions view. */

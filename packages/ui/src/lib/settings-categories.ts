@@ -63,7 +63,7 @@ export const SETTINGS_CATEGORIES = [
       "browser-notifications",
       "vscode-extension",
       "theme",
-      "home-scene",
+      "home",
     ],
     wide: false,
     group: "settings",
@@ -105,12 +105,25 @@ export type SettingsGroup = (typeof SETTINGS_CATEGORIES)[number]["group"];
 export const SETTINGS_GROUP_LABELS: Record<SettingsGroup, string | null> = { start: null, settings: "Settings", reports: "Reports" };
 
 /**
- * The category Settings opens on: "Get started" until a session exists, which shows the setup is behind the user, and
- * also later while the doctor's last run left a step open (ADR-268); otherwise the folders, the settings changed most
- * often.
+ * The category Settings opens on: "Diagnostics" while the container's health warns, since the number on Settings' icon
+ * counts those warnings (ADR-294); else "Get started" until a session exists, which shows the setup is behind the user,
+ * and also later while the doctor's last run left a step open (ADR-268); otherwise the folders, the settings changed
+ * most often.
  */
-export function firstSettingsCategory(sessionCount: number | undefined, openSteps: number | null): SettingsCategory {
-  const started = sessionCount !== undefined && sessionCount > 0;
+export function firstSettingsCategory({
+  sessions,
+  openSteps,
+  containerWarnings,
+}: {
+  /** How many sessions the list holds; `undefined` until the daemon answers. */
+  sessions: number | undefined;
+  /** The steps the doctor's last run left open; `null` before it ever ran. */
+  openSteps: number | null;
+  /** The warnings of the container's health (`containerAttentionCount`). */
+  containerWarnings: number;
+}): SettingsCategory {
+  if (containerWarnings > 0) return "diagnostics";
+  const started = sessions !== undefined && sessions > 0;
   return started && (openSteps ?? 0) === 0 ? "workspace" : "get-started";
 }
 

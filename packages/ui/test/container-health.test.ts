@@ -65,8 +65,8 @@ describe("the container's health panel", () => {
   });
 });
 
-describe("the number on Home's icon", () => {
-  test("counts the container's warnings, which no other view lists", () => {
+describe("the number on Settings' icon", () => {
+  test("counts the container's warnings, which Settings › Diagnostics explains", () => {
     const warns: ContainerHealth = {
       ...HEALTH,
       warnings: [
