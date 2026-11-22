@@ -141,5 +141,8 @@ export const gitlabApi: HostingApi = {
       all.length,
     );
   },
-  env: (host) => ({ GITLAB_HOST: host, NO_PROMPT: "1", GLAB_CHECK_UPDATE: "false", NO_COLOR: "1" }),
+  // `GLAB_NO_PROMPT`, not `NO_PROMPT`: glab 1.131 and newer answer `NO_PROMPT` with a deprecation warning that replaces
+  // the error of a failed call (#557). Older glab ignores `GLAB_NO_PROMPT`, but no glab prompts unless both its stdout and
+  // stderr are a terminal (`IOStreams.PromptEnabled`), and the daemon reads both through pipes.
+  env: (host) => ({ GITLAB_HOST: host, GLAB_NO_PROMPT: "1", GLAB_CHECK_UPDATE: "false", NO_COLOR: "1" }),
 };

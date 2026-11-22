@@ -4,6 +4,7 @@
  * (answered from `apiResponses.graphql`), `auth status --hostname <host>` or
  * `repo clone <repo> <directory>`.
  * Every call appends to `log` the arguments and the environment variables the daemon is meant to set.
+ * Like glab 1.131 and newer, a failed call with `NO_PROMPT` set says only that the variable is deprecated (#557).
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
@@ -31,11 +32,17 @@ const Config = z.object({
   authErrors: z.record(z.string(), z.string()).default({}),
 });
 
+const NO_PROMPT_DEPRECATED =
+  "DEPRECATION WARNING: The environment variable NO_PROMPT has been deprecated and will be removed in future releases. Use GLAB_NO_PROMPT instead.";
+
 const [configFile, ...args] = process.argv.slice(2);
 if (!configFile) throw new Error("missing fake settings file");
 const config = Config.parse(JSON.parse(readFileSync(configFile, "utf8")));
 const env = Object.fromEntries(
-  ["GH_HOST", "GITLAB_HOST", "GH_PROMPT_DISABLED", "NO_PROMPT", "GIT_TERMINAL_PROMPT", "GIT_DIR"].map((name) => [name, process.env[name]]),
+  ["GH_HOST", "GITLAB_HOST", "GH_PROMPT_DISABLED", "GLAB_NO_PROMPT", "NO_PROMPT", "GIT_TERMINAL_PROMPT", "GIT_DIR"].map((name) => [
+    name,
+    process.env[name],
+  ]),
 );
 appendFileSync(config.log, `${JSON.stringify({ args, env })}\n`);
 
@@ -78,6 +85,10 @@ if (command === "api") {
 }
 
 function fail(message: string): never {
+  if (process.env.NO_PROMPT !== undefined) {
+    process.stderr.write(`${NO_PROMPT_DEPRECATED}\n\n   ERROR\n\n`);
+    process.exit(1);
+  }
   process.stderr.write(`${message}\n`);
   process.exit(1);
 }
