@@ -15,7 +15,7 @@ import { fakeHosting } from "./support/hosting.ts";
 async function setup() {
   const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-  const vcs = new Vcs(systemTempFolder);
+  const vcs = new Vcs(systemTempFolder, tmpdir());
   const workspace = new Workspace({
     inContainer: false,
     file: new WorkspaceFile(join(home, "workspace.yaml")),

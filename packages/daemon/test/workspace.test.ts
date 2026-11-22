@@ -21,7 +21,7 @@ async function workspaceWithProjectsDir() {
   const workspace = new Workspace({
     inContainer: false,
     file: new WorkspaceFile(file),
-    vcs: new Vcs(systemTempFolder),
+    vcs: new Vcs(systemTempFolder, tmpdir()),
     hosting: fakeHosting().hosting,
     openEditor: (dir) => opened.push(dir),
     openFolder: () => {},
@@ -106,7 +106,7 @@ describe("workspace", () => {
       const workspace = new Workspace({
         inContainer: false,
         file: new WorkspaceFile(file),
-        vcs: new Vcs(systemTempFolder),
+        vcs: new Vcs(systemTempFolder, tmpdir()),
         hosting: fakeHosting().hosting,
         openEditor: () => {},
         openFolder: () => {},
@@ -156,7 +156,7 @@ describe("workspace", () => {
     const workspace = new Workspace({
       inContainer: false,
       file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
-      vcs: new Vcs(systemTempFolder),
+      vcs: new Vcs(systemTempFolder, tmpdir()),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
@@ -171,7 +171,7 @@ describe("workspace", () => {
     const workspace = new Workspace({
       inContainer: false,
       file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
-      vcs: new Vcs(systemTempFolder),
+      vcs: new Vcs(systemTempFolder, tmpdir()),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
@@ -191,7 +191,7 @@ describe("workspace", () => {
     const workspace = new Workspace({
       inContainer: false,
       file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
-      vcs: new Vcs(systemTempFolder),
+      vcs: new Vcs(systemTempFolder, tmpdir()),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
@@ -320,7 +320,7 @@ describe("workspace", () => {
       const workspace = new Workspace({
         inContainer: false,
         file: new WorkspaceFile(file),
-        vcs: new Vcs(systemTempFolder),
+        vcs: new Vcs(systemTempFolder, tmpdir()),
         hosting: fakeHosting().hosting,
         openEditor: () => {},
         openFolder: () => {},
@@ -592,7 +592,7 @@ describe("the task worktrees folder (ADR-84)", () => {
     const workspace = new Workspace({
       inContainer: false,
       file: new WorkspaceFile(file),
-      vcs: new Vcs(systemTempFolder),
+      vcs: new Vcs(systemTempFolder, tmpdir()),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},

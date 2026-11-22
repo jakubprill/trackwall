@@ -433,7 +433,7 @@ describe("the local config store", () => {
         gitIn(projects, "init", "-q", "--bare", other);
         const pushDir = join(mkdtempSync(join(tmpdir(), "trackwall-home-")), "local-config-push");
 
-        await new Vcs(systemTempFolder).pushBackups(store, pushDir, BACKUPS_REMOTE, head);
+        await new Vcs(systemTempFolder, tmpdir()).pushBackups(store, pushDir, BACKUPS_REMOTE, head);
 
         expect(gitIn(bare, "rev-parse", "main").trim()).toBe(head);
         expect(gitIn(other, "branch", "--list").trim()).toBe("");
@@ -682,7 +682,7 @@ describe("the local config store", () => {
     async () => {
       const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
       const { facade } = await setup(projects);
-      const vcs = new Vcs(systemTempFolder);
+      const vcs = new Vcs(systemTempFolder, tmpdir());
       const pushDir = join(mkdtempSync(join(tmpdir(), "trackwall-home-")), "local-config-push");
       const localConfig = new LocalConfig({ repos: facade.workspace, vcs, log: () => {}, pushDir, pushRetryMs: 0 });
       const backUp = async () => {

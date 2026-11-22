@@ -271,7 +271,7 @@ describe("Graph on cards from real git", () => {
   async function setup() {
     const home = mkdtempSync(join(tmpdir(), "trackwall-graph-home-"));
     const projects = mkdtempSync(join(tmpdir(), "trackwall-graph-projects-"));
-    const vcs = new Vcs(systemTempFolder);
+    const vcs = new Vcs(systemTempFolder, tmpdir());
     const file = new WorkspaceFile(join(home, "workspace.yaml"));
     const workspace = new Workspace({
       inContainer: false,

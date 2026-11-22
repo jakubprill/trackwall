@@ -59,7 +59,7 @@ function setup(
     procs,
     repos: { repoPath, projectsDir: async () => home, sessionProfile: () => null },
     tasks: NO_TASKS,
-    vcs: new Vcs(systemTempFolder),
+    vcs: new Vcs(systemTempFolder, tmpdir()),
     command: FAKE_MISE,
     env: async () => process.env,
     onTrusted: () => {},

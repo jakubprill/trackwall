@@ -52,7 +52,7 @@ async function workspaceWithHistory() {
   const workspace = new Workspace({
     inContainer: false,
     file: new WorkspaceFile(join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml")),
-    vcs: new Vcs(systemTempFolder),
+    vcs: new Vcs(systemTempFolder, tmpdir()),
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},

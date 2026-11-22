@@ -9,7 +9,7 @@ import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 
 /** A `Vcs` whose scratch folder is `scratch`. */
 function vcsIn(scratch = mkdtempSync(join(tmpdir(), "trackwall-scratch-"))): Vcs {
-  return new Vcs(async () => scratch);
+  return new Vcs(async () => scratch, tmpdir());
 }
 
 const LINES = "one\ntwo\nthree\nfour\nfive\nsix\n";

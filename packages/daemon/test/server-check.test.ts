@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createFacade, type Facade } from "../src/facade.ts";
@@ -68,10 +68,10 @@ function cloneFromServer(projects: string, name: string, config: string[] = []) 
   };
 }
 
-async function facadeOn(projects: string): Promise<Facade> {
+async function facadeOn(projects: string, home = mkdtempSync(join(tmpdir(), "trackwall-server-check-home-"))): Promise<Facade> {
   const facade = createFacade({
     inContainer: false,
-    home: mkdtempSync(join(tmpdir(), "trackwall-server-check-home-")),
+    home,
     homeFrom: "flag",
     openUrl: () => {},
     openFolder: () => {},
@@ -179,6 +179,38 @@ describe("the server check asks real git servers for new commits without fetchin
 
       expect(facade.serverCheck.state().last?.newCommits).toEqual([{ repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z" }]);
       expect(existsSync(marker)).toBe(false);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "git asks the server from a folder of the daemon's state folder, not from the system temp folder, where a sandboxed task may plant a .git",
+    async () => {
+      const projects = mkdtempSync(join(tmpdir(), "trackwall-server-check-temp-"));
+      const shop = cloneFromServer(projects, "shop");
+      shop.push("Add a discount for big orders");
+      const home = mkdtempSync(join(tmpdir(), "trackwall-server-check-home-"));
+      const facade = await facadeOn(projects, home);
+      // A temp folder that is not there: a question that made its folder in the temp folder would fail before git starts.
+      const saved = { TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP };
+      const noTempFolder = join(root, "no-temp-folder");
+      Object.assign(process.env, { TMPDIR: noTempFolder, TMP: noTempFolder, TEMP: noTempFolder });
+      try {
+        await facade.serverCheck.checkIfDue();
+      } finally {
+        for (const [name, value] of Object.entries(saved)) {
+          if (value === undefined) delete process.env[name];
+          else process.env[name] = value;
+        }
+      }
+
+      expect(facade.serverCheck.state().last).toEqual({
+        endedAt: "2026-11-22T10:00:00.000Z",
+        newCommits: [{ repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z" }],
+        unreached: [],
+      });
+      // Each question's own folder is gone once it is answered.
+      expect(readdirSync(join(home, "server-questions"))).toEqual([]);
     },
     REAL_GIT_TIMEOUT,
   );

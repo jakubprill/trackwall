@@ -93,8 +93,11 @@ const GIT_PROGRAM_CHECK_TIMEOUT_MS = 15_000;
 /** Trial merges remembered: a pair for every two tasks of a repo with shared files, and the pairs their earlier commits made. */
 const TRIAL_MERGES_KEPT = 200;
 
-/** The system temp folder for git's scratch files, while there is no projects folder to keep them in. */
+/** The system temp folder for git's scratch files, while there is no projects folder to keep them in, and in tests. */
 export const systemTempFolder = async (): Promise<string> => tmpdir();
+
+/** The folder of the daemon's state folder git asks the repos' servers in, each question in a fresh empty folder of it. */
+export const SERVER_QUESTIONS_DIR = "server-questions";
 
 /**
  * The `vcs` module (§4, §4.5): the local git adapter. It knows directories, not repo identifiers; `workspace` translates those.
@@ -114,9 +117,16 @@ export class Vcs {
    */
   private readonly scratchDir: () => Promise<string>;
 
+  /**
+   * `serverQuestionsDir` is the folder git asks the repos' servers in (`remote-reach.ts`): a folder of the daemon's state
+   * folder, which a sandboxed task cannot write, never the system temp folder, where it may plant a `.git`.
+   */
+  private readonly serverQuestionsDir: string;
+
   /** `now` is the clock of the status memo (ADR-141), monotonic milliseconds; tests move it by hand. */
-  constructor(scratchDir: () => Promise<string>, now: () => number = () => performance.now()) {
+  constructor(scratchDir: () => Promise<string>, serverQuestionsDir: string, now: () => number = () => performance.now()) {
     this.scratchDir = scratchDir;
+    this.serverQuestionsDir = serverQuestionsDir;
     this.statuses = new StatusMemo({ now, gitDirKey });
   }
 
@@ -214,14 +224,16 @@ export class Vcs {
 
   /** Whether git reaches `url` with the user's sign-in, outside every repo (ADR-195); git's error otherwise. */
   reachRemote(url: string): Promise<void> {
-    return reachRemote(url);
+    return reachRemote(url, this.serverQuestionsDir);
   }
 
   /**
    * Whether the server moved the branch the checked-out branch tracks since the last fetch, asked outside the repo
    * (ADR-295); `null` when there is nothing to ask, git's error when the server does not answer.
    */
-  readonly newOnServer = newOnServer;
+  newOnServer(dir: string): Promise<boolean | null> {
+    return newOnServer(dir, this.serverQuestionsDir);
+  }
 
   private async readStatus(dir: string): Promise<TimedStatus> {
     const [{ stdout, ranMs }, fetchedAt] = await Promise.all([

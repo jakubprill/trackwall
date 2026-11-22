@@ -101,7 +101,7 @@ import { TestReports } from "./modules/test-results/test-reports.ts";
 import { UsageReport } from "./modules/usage-report/usage-report.ts";
 import type { KnownPlaces } from "./modules/usage-report/work-place.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
-import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
+import { SERVER_QUESTIONS_DIR, systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
 import { VERIFICATIONS_FILE, VERIFICATIONS_FORMAT, Verifications } from "./modules/verification/verifications.ts";
 import { ViewerAccess } from "./modules/viewer-access/viewer-access.ts";
 import { WORK_BACKUP_DIR, WORK_BACKUP_INFO_FILE, WORK_BACKUP_INFO_FORMAT, WorkBackup } from "./modules/work-backup/work-backup.ts";
@@ -345,11 +345,13 @@ export function createErrorJournal(
 
 export function createFacade(o: FacadeOptions): Facade {
   // `workspace` is set right below, before any git command asks for the folder.
-  const vcs: Vcs = new Vcs(() =>
-    workspace.projectsDir().then(
-      (projects: string) => ensureTrackwallDir(projects, "scratch"),
-      () => systemTempFolder(),
-    ),
+  const vcs: Vcs = new Vcs(
+    () =>
+      workspace.projectsDir().then(
+        (projects: string) => ensureTrackwallDir(projects, "scratch"),
+        () => systemTempFolder(),
+      ),
+    join(o.home, SERVER_QUESTIONS_DIR),
   );
   const hosting = new Hosting(o.hostingClis);
   const openEditor = (path: string, line?: number) => o.openUrl(vscodeUrl(path, line));
@@ -611,6 +613,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "state-backups-dir": join(o.home, STATE_BACKUPS_DIR),
       "work-backup-dir": join(o.home, WORK_BACKUP_DIR),
       "container-health-dir": join(o.home, CONTAINER_HEALTH_DIR),
+      "server-questions-dir": join(o.home, SERVER_QUESTIONS_DIR),
     },
     // A projects folder that is not set or cannot be read is a state the view shows, not an error of the whole list.
     projectsDir: () => workspace.projectsDir().catch(() => null),

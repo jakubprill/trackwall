@@ -35,6 +35,7 @@ export const ConfigEntryId = z.enum([
   "state-backups-dir",
   "work-backup-dir",
   "container-health-dir",
+  "server-questions-dir",
   "projects-mise-config",
   "local-config-store",
   "task-worktrees-dir",
@@ -262,6 +263,15 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     internal: true,
     purpose: "A reading of the container's memory, processors and processes every 30 seconds, kept for a day. Only in a dev container.",
     docs: "container-health",
+  },
+  "server-questions-dir": {
+    place: "state",
+    kind: "folder",
+    writer: "trackwall",
+    internal: true,
+    purpose:
+      "Where git asks your repos' servers for new commits and whether they answer, outside every repo, so only your own git configuration applies; empty between questions.",
+    docs: "repos",
   },
   "projects-mise-config": {
     place: "projects",

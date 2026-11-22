@@ -14,7 +14,7 @@ function newWorkspace() {
   return new Workspace({
     inContainer: false,
     file: new WorkspaceFile(file),
-    vcs: new Vcs(systemTempFolder),
+    vcs: new Vcs(systemTempFolder, tmpdir()),
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
@@ -94,7 +94,7 @@ describe("dropped folder", () => {
     const workspace = new Workspace({
       inContainer: false,
       file: new WorkspaceFile(join(dir, "workspace.yaml")),
-      vcs: new Vcs(systemTempFolder),
+      vcs: new Vcs(systemTempFolder, tmpdir()),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},
