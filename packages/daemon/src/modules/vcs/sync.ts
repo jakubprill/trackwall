@@ -7,7 +7,7 @@ import {
   trackedChanges,
 } from "@trackwall/protocol";
 import { type GitNetwork, git, knownDefaultBranch, revParse } from "./git.ts";
-import { mainRemote, readConfig } from "./git-config.ts";
+import { type GitConfig, mainRemote, readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
 import { listWorktrees } from "./worktree-list.ts";
 
@@ -42,11 +42,23 @@ export async function syncDefaultBranch(dir: string): Promise<SyncBranchOutcome>
   const branch = await defaultBranch(dir, remote.name, network);
   if (branch === undefined)
     return skipped("no-default-branch", `${remote.name} does not point to a default branch (git remote set-head ${remote.name} --auto)`);
-  return fastForward(
-    dir,
-    { branch, remoteRef: `refs/remotes/${remote.name}/${branch}`, remoteBranch: `${remote.name}/${branch}` },
-    network,
-  );
+  return fastForward(dir, defaultBranchTarget(remote.name, branch), network);
+}
+
+/**
+ * The main remote's default branch as the repo last heard of it, without asking the server (`knownDefaultBranch`), with
+ * the main remote's address: where a new task starts (`defaultBase`), what the New task form compares (`newTaskBase`) and
+ * one of the branches the server check asks about (ADR-296). `undefined` without a main remote or a default branch pointer.
+ */
+export async function knownDefaultTarget(dir: string, config: GitConfig): Promise<{ url: string; target: FastForwardTarget } | undefined> {
+  const remote = mainRemote(config);
+  const branch = remote && (await knownDefaultBranch(dir, remote.name));
+  return remote && branch !== undefined ? { url: remote.url, target: defaultBranchTarget(remote.name, branch) } : undefined;
+}
+
+/** The default branch `branch` of `remote` and the remote-tracking ref a sync moves it to. */
+function defaultBranchTarget(remote: string, branch: string): FastForwardTarget {
+  return { branch, remoteRef: `refs/remotes/${remote}/${branch}`, remoteBranch: `${remote}/${branch}` };
 }
 
 /** `git fetch` of one remote; also a task's refresh from its base branch (ADR-245). */
@@ -120,7 +132,7 @@ export async function fastForward(dir: string, target: FastForwardTarget, networ
 }
 
 /** How many commits only the local branch has (`ahead`), and how many only the remote one (`behind`). */
-async function divergence(dir: string, localRef: string, remoteRef: string): Promise<{ ahead: number; behind: number }> {
+export async function divergence(dir: string, localRef: string, remoteRef: string): Promise<{ ahead: number; behind: number }> {
   const { stdout } = await git(dir, ["rev-list", "--left-right", "--count", `${localRef}...${remoteRef}`]);
   const m = /^(\d+)\s+(\d+)/.exec(stdout.toString("utf8").trim());
   if (!m) throw new Error(`unexpected git rev-list output: ${stdout.toString("utf8").trim()}`);

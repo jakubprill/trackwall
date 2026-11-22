@@ -34,23 +34,25 @@ export async function networkRemote(dir: string): Promise<{ url: string; address
  * `questionsDir` holds the fresh folder the question runs in (`SERVER_QUESTIONS_DIR` of the state folder).
  */
 export async function reachRemote(url: string, questionsDir: string): Promise<void> {
-  await lsRemote(url, "HEAD", questionsDir);
+  await lsRemote(url, ["HEAD"], questionsDir);
 }
 
 /**
- * The commit the server at `url` (an HTTPS or SSH address) has under `ref`, a full ref name such as `refs/heads/main`;
- * `null` when it has no such ref. Throws git's message when the server does not answer with the user's sign-in.
+ * The commits the server at `url` (an HTTPS or SSH address) has under `refs`, full ref names such as `refs/heads/main`,
+ * asked in one connection; a ref the server does not have is missing from the map. Throws git's message when the server
+ * does not answer with the user's sign-in.
  */
-export async function serverTip(url: string, ref: string, questionsDir: string): Promise<string | null> {
-  // git matches `ref` against the end of every ref name, so `refs/x/refs/heads/main` would answer too.
-  for (const line of (await lsRemote(url, ref, questionsDir)).split("\n")) {
+export async function serverTips(url: string, refs: readonly string[], questionsDir: string): Promise<ReadonlyMap<string, string>> {
+  const tips = new Map<string, string>();
+  // git matches each ref against the end of every ref name, so `refs/x/refs/heads/main` would answer too.
+  for (const line of (await lsRemote(url, refs, questionsDir)).split("\n")) {
     const [hash, name] = line.split("\t");
-    if (name === ref && hash) return hash;
+    if (hash && name !== undefined && refs.includes(name)) tips.set(name, hash);
   }
-  return null;
+  return tips;
 }
 
-async function lsRemote(url: string, ref: string, questionsDir: string): Promise<string> {
+async function lsRemote(url: string, refs: readonly string[], questionsDir: string): Promise<string> {
   if (networkAddress(url) === undefined) throw new Error(`${url} is not an HTTPS or SSH address`);
   // A fresh empty folder, not `questionsDir` itself, so that no question finds what another left there.
   await mkdir(questionsDir, { recursive: true });
@@ -58,7 +60,7 @@ async function lsRemote(url: string, ref: string, questionsDir: string): Promise
   try {
     const user = await readConfig(outside);
     // `url` already went through `insteadOf`; git applies the user's rules to it once more, as it would to a rewritten fetch.
-    const { stdout } = await git(outside, ["ls-remote", "--quiet", "--", url, ref], {
+    const { stdout } = await git(outside, ["ls-remote", "--quiet", "--", url, ...refs], {
       timeoutMs: REACH_TIMEOUT_MS,
       network: { sshCommand: user.sshCommand },
     });

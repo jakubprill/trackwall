@@ -152,8 +152,8 @@ const newOnServer: GalleryState = {
         last: {
           endedAt: minutesAgo(4),
           newCommits: [
-            { repo: "catalog", checkedAt: minutesAgo(4) },
-            { repo: "orders-api", checkedAt: minutesAgo(4) },
+            { repo: "catalog", checkedAt: minutesAgo(4), remoteBranches: ["origin/main"] },
+            { repo: "orders-api", checkedAt: minutesAgo(4), remoteBranches: ["origin/main"] },
           ],
           unreached: [],
         },

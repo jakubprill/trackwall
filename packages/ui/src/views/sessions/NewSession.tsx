@@ -29,6 +29,7 @@ import {
   type FromItem,
   firstListedRepo,
   formChangeStart,
+  formTaskRepos,
   type NewSessionStart,
   newSessionForm,
   offersStackTrace,
@@ -47,8 +48,10 @@ import { type PlanFirstOffer, planFirstOffer, planFirstToSend } from "@/lib/task
 import { useAction } from "@/lib/use-action";
 import { useProviderModels } from "@/lib/use-provider-models";
 import { useRemote } from "@/lib/use-remote";
+import { useServerCheck } from "@/lib/use-server-check";
 import { ChangeParts } from "./ChangeParts.tsx";
 import { FoldedStartOptions } from "./FoldedStartOptions.tsx";
+import { NewTaskBaseNote } from "./NewTaskBaseNote.tsx";
 import { RunningTasksNote } from "./RunningTasksNote.tsx";
 import { StackTraceField } from "./StackTraceField.tsx";
 import { TaskTemplatePicker, TemplatePlaceholders, useTemplatePrompt } from "./TaskTemplatePicker.tsx";
@@ -105,6 +108,8 @@ export function NewSession({
   const change = useChangeForm(conn, onStarted, () => setPrompt(""));
   const { start, firstPart } = formChangeStart(form, repo, choice.worktree, prompt, change.parts, change.title);
   const offers = useStartOffers(conn, repo);
+  const serverCheck = useServerCheck(conn, {});
+  const taskRepos = formTaskRepos(firstPart, change.parts);
   const providerModels = useProviderModels(conn).models;
   const java = javaNavigationInChange(javaNavigationInView(offers.java, choice.view), startsChange(start));
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
@@ -206,6 +211,15 @@ export function NewSession({
               partly={change.partly}
             />
           )}
+          {taskRepos.map((taskRepo) => (
+            <NewTaskBaseNote
+              key={taskRepo}
+              conn={conn}
+              repo={taskRepo}
+              serverCheck={serverCheck.data}
+              label={taskRepos.length > 1 ? taskRepo : null}
+            />
+          ))}
           <RunningTasksNote sessions={sessions} warning={offers.runningTasksWarning} starting={tasksStarting(start)} />
           <StartNote start={start} repo={repo} sessions={sessions} />
           <div className="flex flex-wrap items-center gap-2">

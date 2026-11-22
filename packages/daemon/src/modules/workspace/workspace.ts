@@ -14,6 +14,7 @@ import {
   type HostRepos,
   type JavaNavigationSettings,
   MAX_ALWAYS_ALLOWED_TOOLS,
+  type NewTaskBase,
   PATCH_MAX_BYTES,
   type PullResult,
   type PutAside,
@@ -109,6 +110,7 @@ interface WorkspaceVcs extends CodeSearchVcs, CommitSearchVcs {
   status(dir: string, how: StatusRead): Promise<RepoStatusOk>;
   remote(dir: string): Promise<string | null>;
   sync(dir: string): Promise<SyncResult>;
+  newTaskBase(dir: string): Promise<NewTaskBase | null>;
   pull(dir: string, options: { putAside: boolean }): Promise<PullResult>;
   putAsideFiles(dir: string): Promise<PutAsideFile[]>;
   putAsides(dir: string): Promise<PutAside[]>;
@@ -414,13 +416,20 @@ export class Workspace {
   }
 
   /**
-   * Sync of one repo for the batch command (§4.8); a repo that is being cloned is an error. A running
-   * sync of the whole folder does not get in the way, because `vcs` syncs one `.git` directory at a time.
+   * Sync of one repo, for the batch command (§4.8) and "Sync main" in the New task form (ADR-296); a repo that is being
+   * cloned is an error. A running sync of the whole folder does not get in the way, because `vcs` syncs one `.git`
+   * directory at a time.
    */
   async syncRepo(id: string): Promise<SyncResult> {
     const entry = await this.entry(id);
     if (this.clones.runningInto(entry.path)) throw new DomainError("bad_request", `${id}: this repo is being cloned`);
     return this.deps.vcs.sync(entry.path);
+  }
+
+  /** Where a new task of the repo starts, against the server as of the last fetch (ADR-296). */
+  async newTaskBase(id: string): Promise<NewTaskBase | null> {
+    const entry = await this.entry(id);
+    return this.inRepo(entry, () => this.deps.vcs.newTaskBase(entry.path));
   }
 
   /** A pull of one repo from its header (ADR-268); a repo that is being cloned is an error, as for `syncRepo`. */

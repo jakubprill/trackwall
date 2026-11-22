@@ -1,4 +1,4 @@
-import { countLabel, type SyncRepo, type SyncRun, type SyncSkipReason, type SyncWorkingTree } from "@trackwall/protocol";
+import { countLabel, type SyncRepo, type SyncResult, type SyncRun, type SyncSkipReason, type SyncWorkingTree } from "@trackwall/protocol";
 import { workingTreeLabel } from "./format.ts";
 import type { StatusTone } from "./repo-status.ts";
 
@@ -44,25 +44,33 @@ export function syncMessage(repo: SyncRepo): string | undefined {
       return undefined;
     case "failed":
       return sentences([repo.message]);
+    default:
+      return syncResultMessage(repo);
+  }
+}
+
+/** The sentences about a sync that ended without an error: of a repo in "Sync all", or of one repo ("Sync main", ADR-296). */
+export function syncResultMessage(result: SyncResult): string {
+  switch (result.state) {
     case "updated":
       return sentences([
-        `${repo.branch} moved ${countLabel(repo.commits, { one: "commit", other: "commits" })} forward to ${repo.remoteBranch}`,
-        repo.workingTree &&
-          (repo.workingTree.branch === repo.branch
+        `${result.branch} moved ${countLabel(result.commits, { one: "commit", other: "commits" })} forward to ${result.remoteBranch}`,
+        result.workingTree &&
+          (result.workingTree.branch === result.branch
             ? "Files in the working directory were updated"
-            : `${checkedOut(repo.workingTree)}, so files in the working directory did not change`),
-        localChanges(repo.workingTree),
+            : `${checkedOut(result.workingTree)}, so files in the working directory did not change`),
+        localChanges(result.workingTree),
       ]);
     case "up-to-date":
       return sentences([
-        `${repo.branch} already matches ${repo.remoteBranch}`,
-        repo.workingTree && repo.workingTree.branch !== repo.branch
-          ? `${checkedOut(repo.workingTree)}; sync only moves ${repo.branch}`
+        `${result.branch} already matches ${result.remoteBranch}`,
+        result.workingTree && result.workingTree.branch !== result.branch
+          ? `${checkedOut(result.workingTree)}; sync only moves ${result.branch}`
           : undefined,
-        localChanges(repo.workingTree),
+        localChanges(result.workingTree),
       ]);
     case "skipped":
-      return sentences([repo.message, localChanges(repo.workingTree)]);
+      return sentences([result.message, localChanges(result.workingTree)]);
   }
 }
 

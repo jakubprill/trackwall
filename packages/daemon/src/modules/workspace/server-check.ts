@@ -4,9 +4,10 @@ import { mapLimit } from "../../infra/map-limit.ts";
 import type { RepoEntry } from "./projects-dir.ts";
 
 /**
- * The server check (§4.5, ADR-295): every 15 minutes the daemon asks the server of each repo's checked-out branch
- * whether that branch moved since the repo's last fetch (`vcs.newOnServer`: `git ls-remote` outside the repo, with only
- * the user's own sign-in, as the doctor asks, ADR-195), so "All repos" shows the repos with new commits on the server.
+ * The server check (§4.5, ADR-295): every 15 minutes the daemon asks the server of each repo whether the branch the
+ * checked-out branch tracks or the default branch moved since the repo's last fetch (`vcs.newOnServer`: `git ls-remote`
+ * outside the repo, with only the user's own sign-in, as the doctor asks, ADR-195), so "All repos" shows the repos with
+ * new commits on the server, and the New task form a default branch a task would start behind (ADR-296).
  * It fetches nothing: a fetch in the background would run what a repo's own configuration names (§8), and the user's
  * Pull or "Sync all" brings the commits. Why a server did not answer is the doctor's to explain, so a round keeps no
  * message, and none reaches the log, where a token someone put in a remote's address would stay.
@@ -27,8 +28,8 @@ type Round = NonNullable<ServerCheckState["last"]>;
 /** What the check needs from `workspace` and `vcs`; wired in the facade. */
 export interface ServerCheckDeps {
   repos: { repoEntries(): Promise<RepoEntry[]> };
-  /** `null`: nothing to ask in the repo; an exception: the server did not answer, or git could not read the repo. */
-  vcs: { newOnServer(dir: string): Promise<boolean | null> };
+  /** The remote-tracking branches the server moved past (`origin/main`); an exception: a server did not answer, or git could not read the repo. */
+  vcs: { newOnServer(dir: string): Promise<string[]> };
   /** `serverCheck` in `workspace.yaml`, read before every round, so turning it off stops the next one. */
   on: () => boolean;
   now: () => Date;
@@ -96,7 +97,7 @@ export class ServerCheck {
     });
     this.#last = {
       endedAt: this.#deps.now().toISOString(),
-      newCommits: asked.filter((a) => a.moved === true).map(({ repo, checkedAt }) => ({ repo, checkedAt })),
+      newCommits: asked.flatMap(({ repo, checkedAt, moved }) => (moved?.length ? [{ repo, checkedAt, remoteBranches: moved }] : [])),
       unreached: asked.filter((a) => a.moved === undefined).map((a) => a.repo),
     };
   }
