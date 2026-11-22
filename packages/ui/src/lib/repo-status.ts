@@ -27,6 +27,9 @@ export function repoListTone(status: RepoStatus, newOnServer: boolean): { tone?:
   return { tone: "warning", label: own.tone === "ok" ? server : `${own.label} · ${server}` };
 }
 
+/** What a repo reads while only the server check knows of commits it has not fetched (ADR-295). */
+export const NEW_ON_SERVER = "new on the server";
+
 /**
  * What the checked-out branch lacks from the branch it tracks: as of the last fetch "15 to pull", or "diverged" when it
  * also has commits of its own, which no pull moves; otherwise "new on the server" when the server check found commits
@@ -37,7 +40,7 @@ export function serverLabel(status: RepoStatusOk, newOnServer: boolean): string 
   const { upstream } = status;
   if (upstream === null) return null;
   if (upstream.behind > 0) return upstream.ahead > 0 ? "diverged" : `${upstream.behind} to pull`;
-  return newOnServer ? "new on the server" : null;
+  return newOnServer ? NEW_ON_SERVER : null;
 }
 
 /** The "Changes" tab of one repo: the user's uncommitted work, which no event reports. */

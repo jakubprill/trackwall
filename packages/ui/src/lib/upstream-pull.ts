@@ -28,15 +28,18 @@ export interface PullOffer {
 }
 
 /** What the Upstream tile offers: a pull, a reason with the way out, or nothing (no upstream, nothing to pull). */
-export type UpstreamOffer =
-  | { kind: "none" }
-  | (PullOffer & { behind: number })
-  | { kind: "blocked"; message: string; way: "changes" | "shell" };
+export type UpstreamOffer = { kind: "none" } | PullOffer | { kind: "blocked"; message: string; way: "changes" | "shell" };
 
-export function upstreamOffer(status: RepoStatusOk): UpstreamOffer {
+/**
+ * What the Upstream tile and a row of All repos offer for the checked-out branch: a pull when it lacks commits of the
+ * branch it tracks, as of the last fetch or as the server check found on the server since (`newOnServer`), a reason with
+ * the way out when a pull would not move it, and nothing otherwise. A branch with commits of its own that only the server
+ * check knows to be behind is offered the pull: its fetch tells whether the two diverged.
+ */
+export function upstreamOffer(status: RepoStatusOk, newOnServer: boolean): UpstreamOffer {
   const { upstream, branch } = status;
-  if (branch === null || upstream === null || upstream.behind === 0) return { kind: "none" };
-  if (upstream.ahead > 0)
+  if (branch === null || upstream === null || (upstream.behind === 0 && !newOnServer)) return { kind: "none" };
+  if (upstream.ahead > 0 && upstream.behind > 0)
     return {
       kind: "blocked",
       message: `${branch} and ${upstream.name} have diverged (${upstream.ahead} local, ${upstream.behind} remote). Merge or rebase by hand.`,
@@ -49,12 +52,11 @@ export function upstreamOffer(status: RepoStatusOk): UpstreamOffer {
       message: `${countLabel(changed, { one: "changed file", other: "changed files" })} on ${branch} ${changed === 1 ? "is" : "are"} in the way.`,
       way: "changes",
     };
-  return { kind: "pull", behind: upstream.behind, title: pullTitle(branch, upstream.name) };
-}
-
-/** The tooltip of a pull: which branch moves where, and that the default branch is synced too. */
-export function pullTitle(branch: string, tracked: string): string {
-  return `Fetch, then fast-forward ${branch} to ${tracked}; the default branch is synced as in Sync all`;
+  return {
+    kind: "pull",
+    behind: upstream.behind > 0 ? upstream.behind : null,
+    title: `Fetch, then fast-forward ${branch} to ${upstream.name}; the default branch is synced as in Sync all`,
+  };
 }
 
 /** The button's text: "Pull 320", or "Pull" while the count is the server's, not yet fetched. */

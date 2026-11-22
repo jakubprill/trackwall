@@ -225,7 +225,7 @@ export class Workspace {
     const retryModel = configOrProblem(() => this.deps.file.retryModel(), null);
     const taskTokenBudget = configOrProblem(() => this.deps.file.taskTokenBudget(), null);
     const runningTasksWarning = configOrProblem(() => this.deps.file.runningTasksWarning(), null);
-    const serverCheck = configOrProblem(() => this.deps.file.serverCheck(), false);
+    const serverCheck = this.serverCheckSetting();
     const supervisor = configOrProblem(() => this.deps.file.supervisorSettings(), SupervisorSettings.parse({}));
     const sandbox = configOrProblem(() => this.deps.file.sandboxSettings(), null);
     const alwaysAllow = configOrProblem(() => this.deps.file.alwaysAllowedTools(), []);
@@ -689,12 +689,17 @@ export class Workspace {
     return this.settings();
   }
 
-  /**
-   * Whether the server check asks the repos' servers (`serverCheck`, ADR-295): on without the key, and off while the key
-   * cannot be read, so that a typo in the line meant to turn it off never connects anywhere.
-   */
+  /** Whether the server check asks the repos' servers (`serverCheck`, ADR-295), read before each of its rounds. */
   serverCheckOn(): boolean {
-    return configOrProblem(() => this.deps.file.serverCheck(), false).value;
+    return this.serverCheckSetting().value;
+  }
+
+  /**
+   * `serverCheck` with its problem: on without the key, and off while the key cannot be read, so that a typo in the line
+   * meant to turn it off never connects anywhere.
+   */
+  private serverCheckSetting(): { value: boolean; problem: string | null } {
+    return configOrProblem(() => this.deps.file.serverCheck(), false);
   }
 
   /**

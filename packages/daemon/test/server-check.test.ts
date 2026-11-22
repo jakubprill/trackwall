@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createFacade, type Facade } from "../src/facade.ts";
@@ -68,7 +68,13 @@ function cloneFromServer(projects: string, name: string, config: string[] = []) 
   };
 }
 
-async function facadeOn(projects: string, home = mkdtempSync(join(tmpdir(), "trackwall-server-check-home-"))): Promise<Facade> {
+async function facadeOn(
+  projects: string,
+  {
+    home = mkdtempSync(join(tmpdir(), "trackwall-server-check-home-")),
+    log = () => {},
+  }: { home?: string; log?: (msg: string) => void } = {},
+): Promise<Facade> {
   const facade = createFacade({
     inContainer: false,
     home,
@@ -84,10 +90,18 @@ async function facadeOn(projects: string, home = mkdtempSync(join(tmpdir(), "tra
     userEnv: async () => process.env,
     tlsProbe: async () => ({ kind: "ok" }),
     diskSpace: async () => ({ disk: 1, free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
-    log: () => {},
+    log,
   });
   await facade.workspace.setProjectsDir(projects);
   return facade;
+}
+
+/** Waits up to 20 s for what the check's timer does; the tests' `Date` stands still, so the waits are counted. */
+async function until(done: () => boolean): Promise<void> {
+  for (let waitedMs = 0; !done(); waitedMs += 10) {
+    if (waitedMs > 20_000) throw new Error("gave up waiting for the server check's timer");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }
 
 describe("the server check asks real git servers for new commits without fetching them (ADR-295)", () => {
@@ -190,7 +204,7 @@ describe("the server check asks real git servers for new commits without fetchin
       const shop = cloneFromServer(projects, "shop");
       shop.push("Add a discount for big orders");
       const home = mkdtempSync(join(tmpdir(), "trackwall-server-check-home-"));
-      const facade = await facadeOn(projects, home);
+      const facade = await facadeOn(projects, { home });
       // A temp folder that is not there: a question that made its folder in the temp folder would fail before git starts.
       const saved = { TMPDIR: process.env.TMPDIR, TMP: process.env.TMP, TEMP: process.env.TEMP };
       const noTempFolder = join(root, "no-temp-folder");
@@ -235,6 +249,39 @@ describe("the server check asks real git servers for new commits without fetchin
       expect(facade.workspace.setServerCheck(true)).toMatchObject({ serverCheck: true, serverCheckProblem: null });
       expect(workspaceFile()).toBe(before);
       await facade.serverCheck.checkIfDue();
+      expect(facade.serverCheck.state().last?.newCommits).toEqual([{ repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z" }]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "a workspace.yaml that cannot be read does not stop the daemon: the check logs it once while it lasts, then asks the servers",
+    async () => {
+      const projects = mkdtempSync(join(tmpdir(), "trackwall-server-check-unreadable-"));
+      const shop = cloneFromServer(projects, "shop");
+      shop.push("Add a discount for big orders");
+      const lines: string[] = [];
+      const facade = await facadeOn(projects, { log: (line) => lines.push(line) });
+      const workspaceFile = facade.workspace.configFile();
+      const text = readFileSync(workspaceFile, "utf8");
+      // A folder in the file's place fails every read, as a file that another program holds can on Windows.
+      rmSync(workspaceFile);
+      mkdirSync(workspaceFile);
+
+      facade.serverCheck.start(10);
+      try {
+        await until(() => lines.length > 0);
+        // Ten more ticks fail the same way.
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(lines).toEqual([expect.stringMatching(/^server check: .*EISDIR/)]);
+
+        rmSync(workspaceFile, { recursive: true });
+        writeFileSync(workspaceFile, text);
+        await until(() => facade.serverCheck.state().last !== null);
+      } finally {
+        facade.serverCheck.close();
+      }
+
       expect(facade.serverCheck.state().last?.newCommits).toEqual([{ repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z" }]);
     },
     REAL_GIT_TIMEOUT,

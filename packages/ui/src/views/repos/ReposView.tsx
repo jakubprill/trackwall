@@ -197,6 +197,7 @@ export function ReposView({
             repo={current}
             initialTab={openTab}
             projectsDir={list.data?.projectsDir}
+            newOnServer={newOnServer.has(current.id)}
             sessions={sessions}
             runningLive={runningLive}
             onOpenInSessions={onOpenInSessions}

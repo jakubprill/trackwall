@@ -69,14 +69,16 @@ export class ServerCheck {
   /**
    * A round when one is due: the check is on, and no round has ended yet or the last one ended 15 minutes ago or more.
    * A call during a running round gets that one instead of starting another. Turned off, the last round is forgotten.
+   * Async, so that a `workspace.yaml` that cannot be read (held by another program on Windows) rejects into the log
+   * instead of throwing out of the timer, which would end the daemon (`uncaughtException` in `main.ts`).
    */
-  checkIfDue(): Promise<void> {
+  async checkIfDue(): Promise<void> {
     if (!this.#deps.on()) {
       this.#last = null;
-      return Promise.resolve();
+      return;
     }
     if (this.#running) return this.#running;
-    if (this.#last !== null && this.#deps.now().getTime() - Date.parse(this.#last.endedAt) < ROUND_EVERY_MS) return Promise.resolve();
+    if (this.#last !== null && this.#deps.now().getTime() - Date.parse(this.#last.endedAt) < ROUND_EVERY_MS) return;
     this.#running = this.#round().finally(() => {
       this.#running = undefined;
     });

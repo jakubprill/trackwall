@@ -2,7 +2,7 @@ import { type Repo, type RepoStatusOk, type ServerCheckState, trackedChanges, ty
 import { clockTime, relativeTime, workingTreeLabel } from "./format.ts";
 import { branchLabel, type StatusTone, serverLabel } from "./repo-status.ts";
 import { type UnpushedRow, unpushedRows } from "./unpushed-work.ts";
-import { type PullOffer, pullTitle, upstreamOffer } from "./upstream-pull.ts";
+import { type PullOffer, upstreamOffer } from "./upstream-pull.ts";
 
 /**
  * "All repos", the first entry of the repo list and the panel the "Repos" view opens on (ADR-293): every repo's state
@@ -121,17 +121,14 @@ export function splitRows(rows: readonly AllReposRow[], kept: ReadonlySet<string
 }
 
 /**
- * The pull when the Upstream tile would offer it, or when the server has new commits and no changed file is in the way
- * (the pull fetches them first); otherwise the tab with the way out: Changes for uncommitted files, Shell for a diverged
- * branch and for commits or stashes only here, and the repo itself for other work only here.
+ * The pull the Upstream tile offers, also for commits only the server check knows of; otherwise the tab with the way
+ * out: Changes for uncommitted files, Shell for a diverged branch and for commits or stashes only here, and the repo
+ * itself for other work only here.
  */
 function rowAction(status: RepoStatusOk, newOnServer: boolean, onlyHere: boolean, toPush: boolean): AllReposAction | null {
-  const offer = upstreamOffer(status);
+  const offer = upstreamOffer(status, newOnServer);
   if (offer.kind === "pull") return offer;
   if (offer.kind === "blocked") return { kind: "open", tab: offer.way };
-  const { branch, upstream } = status;
-  if (newOnServer && branch !== null && upstream !== null && trackedChanges(status) === 0)
-    return { kind: "pull", behind: null, title: pullTitle(branch, upstream.name) };
   if (status.changes > 0) return { kind: "open", tab: "changes" };
   if (toPush) return { kind: "open", tab: "shell" };
   return onlyHere ? { kind: "open", tab: null } : null;
