@@ -96,6 +96,16 @@ async function facadeOn(
   return facade;
 }
 
+/** Runs `ask` with the fake ssh adding a line per connection to `log`. */
+async function askedWithConnectionsIn(log: string, ask: () => Promise<void>): Promise<void> {
+  process.env.TRACKWALL_FAKE_SSH_LOG = log;
+  try {
+    await ask();
+  } finally {
+    delete process.env.TRACKWALL_FAKE_SSH_LOG;
+  }
+}
+
 /** Waits up to 20 s for what the check's timer does; the tests' `Date` stands still, so the waits are counted. */
 async function until(done: () => boolean): Promise<void> {
   for (let waitedMs = 0; !done(); waitedMs += 10) {
@@ -127,7 +137,7 @@ describe("the server check asks real git servers for new commits without fetchin
       await facade.serverCheck.checkIfDue();
       expect(facade.serverCheck.state().last).toEqual({
         endedAt: "2026-11-22T10:15:00.000Z",
-        newCommits: [{ repo: "shop", checkedAt: "2026-11-22T10:15:00.000Z" }],
+        newCommits: [{ repo: "shop", checkedAt: "2026-11-22T10:15:00.000Z", remoteBranches: ["origin/main"] }],
         unreached: [],
       });
       // Nothing was fetched: the repo has no FETCH_HEAD, and its branch lacks nothing as far as it knows.
@@ -139,6 +149,37 @@ describe("the server check asks real git servers for new commits without fetchin
       setSystemTime(new Date("2026-11-22T10:30:00.000Z"));
       await facade.serverCheck.checkIfDue();
       expect(facade.serverCheck.state().last?.newCommits).toEqual([]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "with another branch checked out it also asks about the default branch, where a new task starts, in the same connection (ADR-297)",
+    async () => {
+      const projects = mkdtempSync(join(tmpdir(), "trackwall-server-check-default-"));
+      const shop = cloneFromServer(projects, "shop");
+      gitIn(shop.clone, "checkout", "-q", "-b", "discounts");
+      gitIn(shop.clone, "push", "-q", "-u", "origin", "discounts");
+      shop.push("Add a discount for big orders");
+      const facade = await facadeOn(projects);
+      const connections = join(root, "ssh.log");
+
+      await askedWithConnectionsIn(connections, () => facade.serverCheck.checkIfDue());
+      expect(facade.serverCheck.state().last?.newCommits).toEqual([
+        { repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z", remoteBranches: ["origin/main"] },
+      ]);
+
+      const colleague = join(root, "colleague");
+      gitIn(root, "clone", "-q", "-b", "discounts", shop.bare, colleague);
+      commitFiles(colleague, { "discounts.txt": "10%\n" }, "Make the discount 10%");
+      gitIn(colleague, "push", "-q", "origin", "discounts");
+      setSystemTime(new Date("2026-11-22T10:15:00.000Z"));
+      await askedWithConnectionsIn(connections, () => facade.serverCheck.checkIfDue());
+      expect(facade.serverCheck.state().last?.newCommits).toEqual([
+        { repo: "shop", checkedAt: "2026-11-22T10:15:00.000Z", remoteBranches: ["origin/discounts", "origin/main"] },
+      ]);
+      // One connection to the server a round, for both branches.
+      expect(readFileSync(connections, "utf8")).toBe("git-upload-pack /me/shop.git\n".repeat(2));
     },
     REAL_GIT_TIMEOUT,
   );
@@ -191,7 +232,9 @@ describe("the server check asks real git servers for new commits without fetchin
 
       await facade.serverCheck.checkIfDue();
 
-      expect(facade.serverCheck.state().last?.newCommits).toEqual([{ repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z" }]);
+      expect(facade.serverCheck.state().last?.newCommits).toEqual([
+        { repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z", remoteBranches: ["origin/main"] },
+      ]);
       expect(existsSync(marker)).toBe(false);
     },
     REAL_GIT_TIMEOUT,
@@ -220,7 +263,7 @@ describe("the server check asks real git servers for new commits without fetchin
 
       expect(facade.serverCheck.state().last).toEqual({
         endedAt: "2026-11-22T10:00:00.000Z",
-        newCommits: [{ repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z" }],
+        newCommits: [{ repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z", remoteBranches: ["origin/main"] }],
         unreached: [],
       });
       // Each question's own folder is gone once it is answered.
@@ -249,7 +292,9 @@ describe("the server check asks real git servers for new commits without fetchin
       expect(facade.workspace.setServerCheck(true)).toMatchObject({ serverCheck: true, serverCheckProblem: null });
       expect(workspaceFile()).toBe(before);
       await facade.serverCheck.checkIfDue();
-      expect(facade.serverCheck.state().last?.newCommits).toEqual([{ repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z" }]);
+      expect(facade.serverCheck.state().last?.newCommits).toEqual([
+        { repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z", remoteBranches: ["origin/main"] },
+      ]);
     },
     REAL_GIT_TIMEOUT,
   );
@@ -282,7 +327,9 @@ describe("the server check asks real git servers for new commits without fetchin
         facade.serverCheck.close();
       }
 
-      expect(facade.serverCheck.state().last?.newCommits).toEqual([{ repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z" }]);
+      expect(facade.serverCheck.state().last?.newCommits).toEqual([
+        { repo: "shop", checkedAt: "2026-11-22T10:00:00.000Z", remoteBranches: ["origin/main"] },
+      ]);
     },
     REAL_GIT_TIMEOUT,
   );

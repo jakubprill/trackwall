@@ -29,7 +29,11 @@ const tracking = (behind: number, ahead = 0) => ({ name: "origin/main", ahead, b
 function checked(newCommits: string[], unreached: string[] = []): ServerCheckState {
   return {
     on: true,
-    last: { endedAt: FOUR_MIN_AGO, newCommits: newCommits.map((repo) => ({ repo, checkedAt: FOUR_MIN_AGO })), unreached },
+    last: {
+      endedAt: FOUR_MIN_AGO,
+      newCommits: newCommits.map((repo) => ({ repo, checkedAt: FOUR_MIN_AGO, remoteBranches: ["origin/main"] })),
+      unreached,
+    },
   };
 }
 
@@ -193,6 +197,23 @@ describe("new commits the server check found without a fetch (ADR-295)", () => {
       "Compared with origin/main, fetched 2 days ago; the server had newer commits 4 min ago",
     );
     expect(allReposSummary(rows).label).toBe("4 to pull · 1 changed");
+  });
+
+  test("only the branch the checked-out one tracks counts: a default branch that moved under another checked-out branch is the New task form's (ADR-297)", () => {
+    const onFeature = repo(
+      "catalog",
+      ok({ branch: "discounts", upstream: { name: "origin/discounts", ahead: 0, behind: 0 }, fetchedAt: TWO_DAYS_AGO }),
+    );
+    expect(newOnServerSince([onFeature], checked(["catalog"])).size).toBe(0);
+    const serverCheck: ServerCheckState = {
+      on: true,
+      last: {
+        endedAt: FOUR_MIN_AGO,
+        newCommits: [{ repo: "catalog", checkedAt: FOUR_MIN_AGO, remoteBranches: ["origin/discounts", "origin/main"] }],
+        unreached: [],
+      },
+    };
+    expect([...newOnServerSince([onFeature], serverCheck)]).toEqual([["catalog", FOUR_MIN_AGO]]);
   });
 
   test("without a round of the check, or with it off, no repo is new on the server, nor one git has not read yet", () => {

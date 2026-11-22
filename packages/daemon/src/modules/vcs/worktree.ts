@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
 import { removeFolder, removeIfPresent } from "../../infra/remove-folder.ts";
-import { existingCommit, git, knownDefaultBranch, revParse, symbolicRef } from "./git.ts";
-import { mainRemote, readConfig } from "./git-config.ts";
+import { existingCommit, git, revParse, symbolicRef } from "./git.ts";
+import { readConfig } from "./git-config.ts";
 import { parseStatus } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
+import { knownDefaultTarget } from "./sync.ts";
 import { listWorktrees } from "./worktree-list.ts";
 
 /**
@@ -27,10 +28,10 @@ export interface WorktreeBase {
  * a default branch pointer gives the branch checked out in the repo, and a detached HEAD the bare commit.
  */
 export async function defaultBase(dir: string): Promise<WorktreeBase> {
-  const remote = mainRemote(await readConfig(dir));
-  const branch = remote ? await knownDefaultBranch(dir, remote.name) : undefined;
-  if (remote && branch) {
-    const commit = (await revParse(dir, `refs/heads/${branch}`)) ?? (await revParse(dir, `refs/remotes/${remote.name}/${branch}`));
+  const known = await knownDefaultTarget(dir, await readConfig(dir));
+  if (known) {
+    const { branch, remoteRef } = known.target;
+    const commit = (await revParse(dir, `refs/heads/${branch}`)) ?? (await revParse(dir, remoteRef));
     if (commit) return { branch, commit };
   }
   // Not `revParse`: a repo git cannot read (a damaged `HEAD`) is not a repo without commits, and git's error says what is wrong.

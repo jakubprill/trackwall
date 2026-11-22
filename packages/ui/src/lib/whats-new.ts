@@ -37,6 +37,12 @@ export interface WhatsNewEntry {
  */
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
+    id: "sync-main-in-new-task",
+    title: "Sync main in the New task form",
+    text: "When a repo's main is behind the server, the New task form says so above Create task and offers Sync main, so the task starts from the newest code.",
+    show: { place: { kind: "new-session" } },
+  },
+  {
     id: "tips",
     title: "Tips",
     text: "A tip explains a feature where you meet it for the first time, such as Own worktree in the New session form.",

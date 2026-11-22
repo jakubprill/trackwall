@@ -6,6 +6,7 @@ import {
   firstListedRepo,
   formChangeStart,
   formStart,
+  formTaskRepos,
   mayAddPart,
   newSessionForm,
   newSessionStart,
@@ -183,6 +184,17 @@ describe("a task with more repos is a change (ADR-171)", () => {
       firstPart: null,
     });
     expect(formChangeStart(form, null, true, "", added, "Refunds").firstPart).toBeNull();
+  });
+
+  test("each repo a task would start in gets its own line about its default branch (ADR-297): the task's, then each added one once, and none for a session", () => {
+    const added = [
+      { repo: "orders-api", note: "" },
+      { repo: "", note: "not chosen yet" },
+      { repo: "payments", note: "" },
+    ];
+    expect(formTaskRepos("payments", [])).toEqual(["payments"]);
+    expect(formTaskRepos("payments", added)).toEqual(["payments", "orders-api"]);
+    expect(formTaskRepos(null, added)).toEqual([]);
   });
 
   test("a change has at most six parts, the task's own repo among them, and each other repo once", () => {
