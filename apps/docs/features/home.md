@@ -20,7 +20,7 @@ See your whole environment in one 3D view, with everything that needs you in one
 
 ## How it works
 
-"Home" opens when Trackwall starts. Trackwall sits in the middle, sessions circle it on the inner track next to their repo, and repos sit on the outer ring, grouped into arcs by layer (entries, gateways, backends, libraries, as in the [connection graph](/features/graph)), with the graph's connections between them. Colour and shape show the state: a ring around each repo fills as its changes or commits to pull pile up, a second ring of four arcs on the floor shows its running [service](/features/services) (steady while it is ready, breathing while it starts or stops, blinking red when it stops answering or crashes), and the floor around Trackwall shows how many sessions are working and how many wait for you. Each repo has a label beside it, joined by a thin line: the name, and when something is going on, what it is, in the state's colour. Labels that would cover each other move apart. Hover over anything to see its name and state in the corner. Repos appear at once, faint and without a label of their own until git has read them.
+"Home" is the last view at the top of the view bar (Ctrl+6); Trackwall itself opens on "Sessions". Trackwall sits in the middle, sessions circle it on the inner track next to their repo, and repos sit on the outer ring, grouped into arcs by layer (entries, gateways, backends, libraries, as in the [connection graph](/features/graph)), with the graph's connections between them. Colour and shape show the state: a ring around each repo fills as its changes or commits to pull pile up, a second ring of four arcs on the floor shows its running [service](/features/services) (steady while it is ready, breathing while it starts or stops, blinking red when it stops answering or crashes), and the floor around Trackwall shows how many sessions are working and how many wait for you. Each repo has a label beside it, joined by a thin line: the name, and when something is going on, what it is, in the state's colour. Labels that would cover each other move apart. Hover over anything to see its name and state in the corner. Repos appear at once, faint and without a label of their own until git has read them.
 
 The "Needs you" queue on the left lists what waits for you: sessions, repos and [task proposals](/features/main-session). A session shows its window title next to the repo, so two sessions of one repo can be told apart. A session whose finished turn you have already seen turns calm grey and leaves the queue. "Ready to close" lists the [tasks](/features/tasks) whose agent says it has nothing more to do; click one to open it, or press "Close all" to close them all, keeping their branches. A task Trackwall could not close, such as one with files nobody committed, stays on the list, and the line under the heading says why.
 
@@ -30,7 +30,7 @@ Click an object to select it and turn the camera to it; the panel on the right s
 
 ## Use it
 
-1. Start Trackwall, or press Ctrl+1 (⌘1 on macOS).
+1. Click "Home" on the view bar, or press Ctrl+6 (⌘6 on macOS).
 2. Work through the "Needs you" queue from the top.
 3. Click anything in the picture for its details; double-click to open it.
 

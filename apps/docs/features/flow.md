@@ -33,7 +33,7 @@ Click a card to open its task or session. In the desktop app it opens in the win
 
 ## Use it
 
-1. Press Ctrl+Shift+6 (⌥⌘6 on macOS) to open "Flow" in a new window.
+1. Press Ctrl+Shift+5 (⌥⌘5 on macOS) to open "Flow" in a new window.
 2. Drag the window to your second monitor, and press Ctrl+= (⌘= on macOS) until the cards read well from your desk.
 3. Click a card in "Waits for you" or "Stuck" to deal with it.
 
@@ -41,8 +41,8 @@ Click a card to open its task or session. In the desktop app it opens in the win
 
 | Keys | What happens |
 |---|---|
-| Ctrl+6 (⌘6) | Show "Flow" in this window. |
-| Ctrl+Shift+6 (⌥⌘6) | Open "Flow" in a new window. |
+| Ctrl+5 (⌘5) | Show "Flow" in this window. |
+| Ctrl+Shift+5 (⌥⌘5) | Open "Flow" in a new window. |
 | Ctrl+= and Ctrl+- (⌘= and ⌘-) | Make the wall larger or smaller in this window. |
 
 ## Good to know

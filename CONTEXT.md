@@ -45,7 +45,7 @@ A newer version of Trackwall from GitHub Releases, installed by the shell after 
 _Avoid_: upgrade, sync (that is the repo synchronization)
 
 **View** (`View`):
-A screen of the app in the UI (Home, Repos, Sessions, Overview, Plan, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut. A number at a view's icon counts what needs the user there: at Sessions the waiting sessions and task proposals (`attentionCount`), at Home the container's health warnings (`containerAttentionCount`, ADR-287).
+A screen of the app in the UI (Sessions, Repos, Overview, Plan, Flow, Home, Settings, in the view bar's order; a window opens on Sessions, ADR-288), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut. A number at a view's icon counts what needs the user there: at Sessions the waiting sessions and task proposals (`attentionCount`), at Home the container's health warnings (`containerAttentionCount`, ADR-287).
 _Avoid_: tab (for a whole screen)
 
 **Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):

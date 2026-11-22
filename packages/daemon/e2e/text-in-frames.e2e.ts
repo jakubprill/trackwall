@@ -45,7 +45,7 @@ describe("text in the UI", () => {
     const found: string[] = [];
     const views = page.getByRole("navigation", { name: "Views" }).getByRole("button");
     // By position, named by the label: a view's text can be only a number (a shortcut, a waiting count), which another
-    // view's text holds too, such as Home's "1" and the "1" waiting in Sessions.
+    // view's text holds too, such as the "1" of Sessions' shortcut and the "1" waiting in it.
     for (let i = 0; i < (await views.count()); i++) {
       const button = views.nth(i);
       const view = await button.getAttribute("aria-label");

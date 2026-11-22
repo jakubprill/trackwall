@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { SMALL_SCREEN, showSessions, typeInTerminal, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
+import { SMALL_SCREEN, showHome, showSessions, typeInTerminal, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "..", "test", "fixtures", "fake-mise.ts")];
 /**
@@ -67,6 +67,7 @@ describe("a small screen", () => {
   test("Home keeps the 3D scene wide enough to read with the supervisor panel pinned, and widened", async () => {
     const page = await trackwall().open(SMALL_SCREEN);
     try {
+      await showHome(page);
       await page.getByRole("button", { name: /Pin the supervisor panel open/ }).click();
       const panel = page.getByRole("complementary", { name: "Supervisor" });
       const canvas = page.locator("canvas").first();
