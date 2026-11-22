@@ -1,8 +1,8 @@
 import type { RemoteRepoSearch } from "@trackwall/protocol";
 
 /**
- * "Show more" in the "Add repo" view (ADR-201); pure functions, tests in `test/remote-repo-search.test.ts`. The pages
- * shown belong to one search: changing the query or a filter starts again at the first page.
+ * The search and "Show more" in the "Add repo" view (ADR-201); pure functions, tests in `test/remote-repo-search.test.ts`.
+ * The pages shown belong to one search: changing the query or a filter starts again at the first page.
  */
 
 export type RemoteRepoFilters = Omit<RemoteRepoSearch, "pages">;
@@ -23,12 +23,37 @@ export function pagesOf(shown: ShownPages, key: string): number {
   return shown.searchKey === key ? shown.pages : 1;
 }
 
+/** What the list on screen is waiting for: nothing, a new search (`searching`), or another page of the same one. */
+export type SearchProgress = "settled" | "searching" | "loading-more";
+
 /**
- * "Show more" is on its way: the list on screen has fewer pages than asked for, and the last request did not fail
- * (after a failure the button is back, so that pressing it again retries).
+ * The list on screen stays while a new search runs, so that typing does not empty and refill the view; this says what it
+ * waits for. `listed` is the search and pages of the list on screen, `key` and `pages` those asked for, and `typing` a
+ * query or filter typed but not sent yet (the debounce). After a failed request nothing is on its way: the error shows,
+ * and "Show more" is back so that pressing it again retries.
  */
-export function loadingMore(shownPages: number | undefined, pages: number, failed: boolean): boolean {
-  return shownPages !== undefined && shownPages < pages && !failed;
+export function searchProgress({
+  listed,
+  key,
+  pages,
+  failed,
+  typing,
+}: {
+  listed: ShownPages | undefined;
+  key: string;
+  pages: number;
+  failed: boolean;
+  typing: boolean;
+}): SearchProgress {
+  if (typing) return "searching";
+  if (failed || listed === undefined) return "settled";
+  if (listed.searchKey !== key) return "searching";
+  return listed.pages < pages ? "loading-more" : "settled";
+}
+
+/** The key of one request: the search and its pages; a change of it asks the hosts again. */
+export function requestKey(key: string, pages: number): string {
+  return JSON.stringify([key, pages]);
 }
 
 /** One page more in the search `key`. */

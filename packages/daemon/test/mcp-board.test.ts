@@ -49,6 +49,11 @@ async function endTurn(session: string): Promise<void> {
   const window = viewer(daemon.facade.agents, session);
   await waitFor(daemon.facade.agents, session, () => window.text().includes("--interactive="), "the screen image");
   window.attachment.input("start\r");
+  await approveTurn(session, window);
+}
+
+/** Approves the command of the turn under way, or of the one about to start, and waits for the turn to end. */
+async function approveTurn(session: string, window = viewer(daemon.facade.agents, session)): Promise<void> {
   await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Approval", "the approval request");
   window.attachment.input("1");
   await waitFor(daemon.facade.agents, session, (s) => s.state?.reason === "hook agentStop", "the end of the turn");
@@ -257,6 +262,9 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
     const comment = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Also the header" };
     await daemon.post(agentsApi.sendReview, { task: task.id, comments: [comment] });
     expect(daemon.facade.agents.task(task.id)).toMatchObject({ inReview: false, readyToClose: false });
+    // The review reaches the agent as a turn of its own; it ends before Close is tried below, since Close refuses a turn
+    // under way, and how soon the review is typed differs between systems.
+    await approveTurn(session);
 
     await call(agent, "report_result", { summary: "Fixed the header too.", readyToClose: true });
     const kept = await daemon.post(agentsApi.keepTaskOpen, { task: task.id });
