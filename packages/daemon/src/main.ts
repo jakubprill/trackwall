@@ -15,6 +15,7 @@ import {
   ADDRESS_COMMAND,
   APPLY_UPDATE_COMMAND,
   CONTAINER_COMMAND,
+  CONTAINER_RELAY,
   CONTAINER_START,
   CONTAINER_UPDATE,
   type CommandLine,
@@ -26,6 +27,7 @@ import {
   USAGE,
 } from "./infra/args.ts";
 import { appendNote } from "./infra/container-log.ts";
+import { runContainerRelay } from "./infra/container-relay.ts";
 import { containerStart } from "./infra/container-start.ts";
 import { DAEMON_LOG, superviseDaemon } from "./infra/container-supervisor.ts";
 import { applyUpdate, containerUpdate } from "./infra/container-update.ts";
@@ -351,6 +353,16 @@ function runContainerCommand(line: ContainerCommandLine): void {
       return;
     case APPLY_UPDATE_COMMAND:
       runApplyUpdate(home, line.port, line.target);
+      return;
+    case CONTAINER_RELAY:
+      runContainerRelay(join(home, DAEMON_LOG), line.port)
+        .then((started) => {
+          if (!started) process.exitCode = 1;
+        })
+        .catch((err: unknown) => {
+          process.stderr.write(`[relay] ${messageOf(err)}\n`);
+          process.exitCode = 1;
+        });
       return;
   }
 }
