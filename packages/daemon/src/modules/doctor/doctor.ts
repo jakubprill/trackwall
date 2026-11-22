@@ -32,6 +32,7 @@ import { folderStorage } from "./folder-storage.ts";
 import { modelProviderOutcome, type ProfileEnvironment } from "./model-provider-check.ts";
 import { networkOutcome, sessionCertificates } from "./network-check.ts";
 import { type RemoteReachRead, remoteOutcome } from "./remote-check.ts";
+import { ALL_APPLICATION_PACKAGES, gitInstallFolder, sandboxGitBlocked } from "./sandbox-git.ts";
 import type { TlsProbe } from "./tls-probe.ts";
 import { compareVersions, versionIn } from "./version.ts";
 
@@ -97,6 +98,8 @@ export interface DoctorDeps {
   measureFileWrites: (folder: string, files: number) => Promise<number>;
   /** Trackwall runs in a container, whose disk is Docker's: the same `FacadeOptions.inContainer` that `unpushedWork` reads (ADR-162). */
   inContainer: boolean;
+  /** The daemon's system: on Windows the sandbox check also asks whether git can start in the sandbox (`sandbox-git.ts`). */
+  platform: NodeJS.Platform;
   /** `/proc/self/mountinfo` on Linux, `null` elsewhere: where the projects folder's files live. */
   mountTable: () => Promise<string | null>;
   /** The full path of `workspace.yaml`. */
@@ -402,17 +405,26 @@ export class Doctor {
         `${CONTAINER_SANDBOX_FIX}, or choose "No task" in Settings › Agents › Sandbox to keep it so.`,
       );
     }
-    if (problem === null)
-      return ok(
-        tasks === "all"
-          ? "Every task runs its commands in Copilot CLI's sandbox."
-          : "Tasks without approvals run their commands in Copilot CLI's sandbox.",
-      );
+    const which = tasks === "all" ? "Every task runs its" : "Tasks without approvals run their";
+    if (problem === null) return (await this.sandboxGit(which)) ?? ok(`${which} commands in Copilot CLI's sandbox.`);
     return fail(
       `Copilot CLI's sandbox cannot run here: ${problem}, so Trackwall refuses to start ${tasks === "all" ? "any task" : "tasks without approvals"}.`,
       this.deps.inContainer
         ? `${CONTAINER_SANDBOX_FIX}, or choose "No task" in Settings › Agents › Sandbox.`
         : `Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables, and the tun kernel module), or choose "No task" in Settings › Agents › Sandbox.`,
+    );
+  }
+
+  /** On Windows, a git that Copilot CLI's sandbox cannot start: such a task's every git command fails, and it cannot commit. */
+  private async sandboxGit(which: string): Promise<Outcome> {
+    if (this.deps.platform !== "win32") return null;
+    const version = await settle(this.deps.gitVersion(CHECK_TIMEOUT_MS));
+    if (!version.ok) return null;
+    const { program } = version.value;
+    if ((await sandboxGitBlocked(program, this.deps.run, await this.deps.env(), CHECK_TIMEOUT_MS)) !== true) return null;
+    return warn(
+      `${which} commands in Copilot CLI's sandbox, but git cannot start there: ${program} does not let Windows apps (ALL APPLICATION PACKAGES) run it, so such a task cannot commit.`,
+      `Reinstall Git for Windows with its default permissions, or grant them as an administrator: icacls "${gitInstallFolder(program)}" /grant "*${ALL_APPLICATION_PACKAGES}:(OI)(CI)RX" /T`,
     );
   }
 
