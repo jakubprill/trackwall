@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { useTrackwall } from "./support/trackwall-ui.ts";
+import { showHome, useTrackwall } from "./support/trackwall-ui.ts";
 
 const SCENE_TIMEOUT_MS = 20_000;
 const TEST_TIMEOUT_MS = 40_000;
@@ -16,6 +16,7 @@ describe("the main window under the desktop shell's CSP", () => {
       // repo's status reached it after the quick list (ADR-113).
       writeFileSync(join(trackwall().daemon.projects, "shop", "notes.txt"), "to do\n");
       const { page, problems, eventsArrived, close } = await trackwall().openDesktopWindow();
+      await showHome(page);
 
       const label = page.locator("div:has(> canvas)").getByText("1 change", { exact: true });
       // Either way the scene ends, so that a refused scene fails on what the CSP refused rather than on a timeout.
@@ -33,6 +34,7 @@ describe("the main window under the desktop shell's CSP", () => {
     "a 3D view that fails to load leaves a message in its place, and the rest of the window keeps working",
     async () => {
       const { page, problems, close } = await trackwall().openDesktopWindow(/\/HomeCanvas-[^/]*\.js$/);
+      await showHome(page);
 
       await page.getByText("The 3D view is unavailable here").waitFor({ timeout: SCENE_TIMEOUT_MS });
       await page

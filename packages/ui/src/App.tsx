@@ -60,20 +60,25 @@ import { ReposView } from "@/views/repos/ReposView";
 import { SessionsView } from "@/views/sessions/SessionsView";
 import { SettingsView } from "@/views/settings/SettingsView";
 
-/** Order and shortcuts of the view bar; "Home" is first (ADR-33), the next work views get the next digits. */
+/**
+ * Order and shortcuts of the view bar: "Sessions", where the work happens and the view the main window opens on, is
+ * first, and "Home", the dashboard, is the last of the work views (ADR-288); each work view takes the next digit.
+ */
 // The macOS menu bar has the same ids, labels and shortcuts (`app_menu.rs`); `apps/desktop/test/shell-events.test.ts`
 // compares them and reads each entry's keys in this order.
 const VIEWS = [
-  { id: "home", label: "Home", icon: Orbit, shortcut: "1", placement: "top" },
+  { id: "sessions", label: "Sessions", icon: SquareTerminal, shortcut: "1", placement: "top" },
   { id: "repos", label: "Repos", icon: FolderGit2, shortcut: "2", placement: "top" },
-  { id: "sessions", label: "Sessions", icon: SquareTerminal, shortcut: "3", placement: "top" },
-  { id: "graph", label: "Overview", icon: Network, shortcut: "4", placement: "top" },
-  { id: "plan", label: "Plan", icon: ListTree, shortcut: "5", placement: "top" },
-  { id: "flow", label: "Flow", icon: Columns3, shortcut: "6", placement: "top" },
+  { id: "graph", label: "Overview", icon: Network, shortcut: "3", placement: "top" },
+  { id: "plan", label: "Plan", icon: ListTree, shortcut: "4", placement: "top" },
+  { id: "flow", label: "Flow", icon: Columns3, shortcut: "5", placement: "top" },
+  { id: "home", label: "Home", icon: Orbit, shortcut: "6", placement: "top" },
   { id: "settings", label: "Settings", icon: Settings, shortcut: ",", placement: "bottom" },
 ] as const satisfies readonly ActivityView<string>[];
 type View = (typeof VIEWS)[number]["id"];
 const VIEW_IDS = VIEWS.map((v) => v.id);
+/** The view the main window opens on at every start, and a new window opened without one (ADR-288). */
+const START_VIEW: View = "sessions";
 /** The views that show sessions or tasks, which keep the session list fresh while open. */
 const VIEWS_WITH_SESSIONS: readonly View[] = ["home", "sessions", "plan", "graph", "flow"];
 
@@ -81,7 +86,7 @@ export function App() {
   // A repo opened from the dashboard belongs to the navigation, not to the view: any other navigation to "Repos" starts without it;
   // the same holds for the category Settings opens on.
   // An extra window starts with the view it was opened with or showed at the last run (ADR-49), the main window with
-  // Home. `visit` grows with every opening of a repo, of a Settings category or of a task's impact, so that the view is mounted again with it even when it is already open.
+  // `START_VIEW`. `visit` grows with every opening of a repo, of a Settings category or of a task's impact, so that the view is mounted again with it even when it is already open.
   const [{ view, repo, settingsCategory, impactTask, visit }, setNav] = useState<{
     view: View;
     repo?: string;
@@ -90,7 +95,7 @@ export function App() {
     impactTask?: string;
     visit: number;
   }>(() => ({
-    view: startFromLocation(window.location.search, START_PARAMS.view, VIEW_IDS) ?? "home",
+    view: startFromLocation(window.location.search, START_PARAMS.view, VIEW_IDS) ?? START_VIEW,
     visit: 0,
   }));
   const setView = useCallback((next: View) => setNav((nav) => ({ view: next, visit: nav.visit })), []);

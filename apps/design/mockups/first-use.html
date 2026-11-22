@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>First use: start where the work starts</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Trackwall's first start and every start after it: Sessions first, the missing setup where the first session starts, the supervisor folded until used. */
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--background); color: var(--foreground);
+  font: 15px/1.6 var(--font-sans);
+  padding: 40px max(16px, env(safe-area-inset-left, 0px)) 80px max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+.prose { max-width: 78ch; display: flex; flex-direction: column; gap: 8px; }
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+h1 { font-size: 2rem; } h2 { font-size: 1.35rem; } p { margin: 0; }
+.hud { font: 500 11px/16px var(--font-mono); letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); }
+.lede { color: var(--muted-foreground); }
+.scroll { overflow-x: auto; }
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--muted-foreground); }
+.small { font-size: 12px; }
+
+/* The app window at 1200 x 800, the size Trackwall first opens with: view bar, the view's list, the view, the supervisor panel. */
+.window { width: 1200px; height: 800px; display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--background); font: 13px/1.5 var(--font-sans); position: relative; }
+.window.short { height: 600px; }
+.rail { width: 48px; flex: none; border-right: 1px solid var(--border); background: var(--card); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0; }
+.rail .gap { flex: 1; }
+.ico { width: 36px; height: 36px; border-radius: 6px; display: grid; place-items: center; color: var(--muted-foreground); position: relative; }
+.ico svg, .strip svg, .btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ico.on { color: var(--primary); background: color-mix(in oklch, var(--primary) 12%, transparent); }
+.ico.on::before { content: ""; position: absolute; left: -6px; top: 8px; bottom: 8px; width: 2px; background: var(--primary); border-radius: 1px; }
+.ico .badge { position: absolute; right: 1px; top: 1px; min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px; font: 600 9.5px/15px var(--font-mono); text-align: center; background: var(--warning); color: var(--background); }
+.list { width: 288px; flex: none; border-right: 1px solid var(--border); background: var(--card); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.view { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pad { padding: 24px 28px; display: flex; flex-direction: column; gap: 14px; max-width: 820px; }
+.strip { width: 48px; flex: none; border-left: 1px solid var(--border); background: var(--card); display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 0; color: var(--muted-foreground); }
+.strip .crown { color: var(--primary); }
+.measure { position: absolute; bottom: 14px; height: 22px; display: flex; align-items: center; justify-content: center; font: 11px/1 var(--font-mono); color: var(--primary); border-top: 1px dashed color-mix(in oklch, var(--primary) 60%, transparent); }
+.measure span { background: var(--background); padding: 2px 8px; border: 1px solid color-mix(in oklch, var(--primary) 40%, transparent); border-radius: 4px; transform: translateY(-1px); }
+
+.surface { border: 1px solid var(--border); border-radius: 8px; background: var(--card); min-width: 0; display: flex; flex-direction: column; }
+.surface > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.btn { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border); color: var(--foreground); font-size: 12.5px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; background: transparent; }
+.btn svg { width: 14px; height: 14px; }
+.btn.primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; font-weight: 600; }
+.btn.ghost { border-color: transparent; color: var(--muted-foreground); }
+.btn.link { border: 0; padding: 0; color: var(--primary); height: auto; }
+.btn.off { opacity: 0.45; }
+.input { height: 34px; border: 1px solid var(--input); border-radius: 6px; padding: 0 10px; font-size: 13px; display: flex; align-items: center; justify-content: space-between; }
+.area { min-height: 112px; border: 1px solid var(--input); border-radius: 6px; padding: 10px; font-size: 13px; }
+.area.empty { color: var(--muted-foreground); }
+.pill { height: 28px; padding: 0 12px; border-radius: 14px; border: 1px solid color-mix(in oklch, var(--primary) 50%, transparent); color: var(--foreground); display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+.fold { color: var(--foreground); font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.fold::before { content: "\203A"; color: var(--muted-foreground); font-size: 15px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.form { display: flex; flex-direction: column; gap: 12px; }
+.form.waiting { opacity: 0.4; }
+
+/* A step of the setup card: its state, what it is, what was found, and the one action that settles it (ADR-262). */
+.step { display: grid; grid-template-columns: 22px 1fr auto; gap: 2px 10px; align-items: start; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.step:last-child { border-bottom: 0; }
+.mark { width: 18px; height: 18px; border-radius: 50%; margin-top: 1px; display: grid; place-items: center; font: 600 11px/1 var(--font-mono); border: 1px solid var(--border); color: var(--muted-foreground); }
+.mark.ok { background: color-mix(in oklch, var(--success) 22%, transparent); color: var(--success); border-color: transparent; }
+.mark.todo { background: color-mix(in oklch, var(--warning) 22%, transparent); color: var(--warning); border-color: transparent; }
+.step .k { font-size: 13.5px; font-weight: 600; }
+.step .v { color: var(--muted-foreground); grid-column: 2; font-size: 12.5px; }
+.step .act { grid-column: 2; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.step .side { grid-row: 1; grid-column: 3; color: var(--muted-foreground); font-size: 12px; }
+.done-steps { display: flex; gap: 14px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 12.5px; }
+.done-steps span::before { content: "\2713  "; color: var(--success); }
+.ready { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border: 1px solid color-mix(in oklch, var(--success) 40%, transparent); border-radius: 8px; background: color-mix(in oklch, var(--success) 8%, transparent); font-size: 13px; }
+
+/* The Sessions list and a task. */
+.entry { border: 1px solid color-mix(in oklch, var(--primary) 45%, transparent); background: color-mix(in oklch, var(--primary) 7%, transparent); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.entry .t { font-weight: 600; }
+.state-working { color: var(--primary); font-size: 12px; }
+.taskhead { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.tabs { display: flex; gap: 18px; padding: 0 16px; border-bottom: 1px solid var(--border); color: var(--muted-foreground); font-size: 12.5px; }
+.tabs span { padding: 8px 0; }
+.tabs .on { color: var(--foreground); border-bottom: 2px solid var(--primary); }
+.term { flex: 1; background: var(--background); padding: 12px 16px; font: 12.5px/1.6 var(--font-mono); color: var(--foreground); overflow: hidden; }
+.term .dim { color: var(--muted-foreground); }
+.term .ok { color: var(--success); }
+.term .acc { color: var(--primary); }
+
+/* The view bar, before and after. */
+.bars { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; max-width: 980px; }
+.bar { border: 1px solid var(--border); border-radius: 8px; background: var(--card); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.bar ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.bar li { display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; align-items: baseline; }
+.bar li .key { font: 12px var(--font-mono); color: var(--muted-foreground); }
+.bar li.start { color: var(--primary); }
+.bar li .note { font-size: 12px; color: var(--muted-foreground); }
+
+/* A setting as a folded row (ADR-263). */
+.setting { display: grid; grid-template-columns: 14px 170px 1fr auto; gap: 10px; align-items: baseline; padding: 9px 14px; border-bottom: 1px solid var(--border); }
+.setting:last-child { border-bottom: 0; }
+.setting .chev { color: var(--muted-foreground); font-size: 10px; }
+.setting .what { color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setting .val { font: 12px var(--font-mono); color: var(--muted-foreground); white-space: nowrap; }
+.open { padding: 2px 14px 12px 38px; display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+.seg { display: inline-flex; border: 1px solid var(--input); border-radius: 6px; overflow: hidden; font-size: 12.5px; }
+.seg span { padding: 4px 10px; }
+.seg .on { background: var(--accent); }
+
+/* The repo list in a container. */
+.section-head { display: flex; align-items: center; gap: 6px; }
+.section-head svg { width: 12px; height: 12px; stroke: var(--warning); fill: none; stroke-width: 2; }
+.repo { padding: 6px 8px; border-radius: 6px; display: flex; justify-content: space-between; gap: 8px; }
+.repo .w { color: var(--warning); font-size: 12px; }
+.repo .c { color: var(--muted-foreground); font-size: 12px; }
+
+table.cmp { border-collapse: collapse; font-size: 14px; max-width: 1060px; }
+.cmp th, .cmp td { text-align: left; padding: 7px 18px 7px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+.cmp th { font: 500 11px/16px var(--font-mono); letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); }
+.cmp td:nth-child(3) { color: var(--success); }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; max-width: 1200px; }
+.notes div { border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; font-size: 14px; }
+.notes b { display: block; margin-bottom: 4px; }
+</style>
+
+<main class="page">
+  <section class="prose">
+    <span class="hud">Sessions · first start and every start</span>
+    <h1>First use: start where the work starts</h1>
+    <p class="lede">Today Trackwall opens on Home every time, also on the very first start, when Home has nothing to show and only sends the user on to "Get started" in Settings, from where "Start a session" leads on to Sessions. Next to it the supervisor panel takes a third of the window with a highlighted "Start my day", which cannot work before a projects folder is set. The proposal: open on Sessions, show the steps still missing right there, and keep the supervisor folded until the user starts it. Home stays one click away.</p>
+  </section>
+
+  <table class="cmp">
+    <tr><th>Measured on a new install, in the 1200 x 800 window it opens with</th><th>Today</th><th>Proposed</th></tr>
+    <tr><td>Screens to a first task</td><td>3: Home, Settings › Get started, Sessions</td><td>1: Sessions</td></tr>
+    <tr><td>Clicks to a first task, with a folder Trackwall finds</td><td>5 and the prompt: Get started, Use this folder, Trust folder, Start a session, Create task</td><td>3 and the prompt: Use this folder, Trust folder, Create task</td></tr>
+    <tr><td>Highlighted buttons on the first screen</td><td>2, and the brighter one, Start my day, fails with "set the projects folder first"</td><td>1 at a time, in the order of the steps</td></tr>
+    <tr><td>Width of the first task's terminal</td><td>416 px of 1200, next to a pinned supervisor panel of 432 px</td><td>800 px of 1200, the panel folded to its strip</td></tr>
+    <tr><td>The same on wider windows</td><td>467 px of 1280 (1920 x 1080 at 150 %), 570 px of 1440</td><td>880 px and 1040 px</td></tr>
+    <tr><td>What every start loads</td><td>the 3D scene: 683 KB more script, ten times the main-thread work in the first seconds (headless, software WebGL)</td><td>no 3D code until Home is opened</td></tr>
+    <tr><td>Where the main window opens at every start</td><td>Home, the view the user opens least</td><td>Sessions; extra windows keep the view they showed, as today</td></tr>
+  </table>
+
+  <section class="prose"><span class="hud">Variant A · proposed · 1 of 3</span><h2>The first start opens on Sessions, with what is left above the form</h2>
+    <p class="lede">The steps are the ones of "Get started" (ADR-262), read from the same run of the doctor, and only those still open; finished ones fold into one line. The form below waits for the projects folder, so the one highlighted button is always the next thing to do. The supervisor panel is folded to its strip at the right edge, with the crown and the bell; a click or Alt+0 unfolds it, as today.</p></section>
+  <div class="scroll"><div class="window">
+    <div class="rail" data-on="sessions"></div>
+    <div class="list"><span class="hud">Sessions <span style="color:var(--primary)">// 00</span></span><span class="muted">No sessions yet. Give the agent a task or start Copilot CLI in a repo from your projects folder.</span></div>
+    <div class="view"><div class="pad">
+      <div class="surface">
+        <header><span><b>Before your first session</b> <span class="muted">· 1 step needed, 1 recommended. Trackwall runs on this computer.</span></span><span class="btn ghost">Check again</span></header>
+        <div class="done-steps"><span>Git 2.47</span><span>Copilot CLI 1.0.110</span><span>Network for sessions</span></div>
+        <div class="step"><span class="mark todo">1</span><span class="k">Projects folder</span><span class="side">needed</span>
+          <span class="v">The folder with your git repos. Found <span class="mono">C:\Users\you\Dev</span> in your home folder.</span>
+          <span class="act"><span class="btn primary">Use this folder</span><span class="btn">Choose another…</span></span></div>
+        <div class="step"><span class="mark">2</span><span class="k">Copilot CLI trusts your projects folder</span><span class="side">recommended</span>
+          <span class="v">Checked once the projects folder is set. Without it Copilot CLI asks in every repo and task.</span></div>
+      </div>
+      <div class="form waiting">
+        <span class="hud">New task or session for the agent</span>
+        <div class="input" style="width:228px"><span>Choose a repo</span><span class="muted">&#9662;</span></div>
+        <div class="area empty">What the agent should do, e.g. "Add email validation to the sign-up form, with a test"</div>
+        <div class="row"><span class="pill">Own worktree</span><span class="fold">More options</span></div>
+        <div class="row"><span class="btn primary off">Create task</span><span class="muted small">Opens once the projects folder is set.</span></div>
+      </div>
+      <span class="muted small">Every step, and what is good to have later: <span class="btn link small">Settings › Get started</span></span>
+    </div></div>
+    <div class="strip"><span data-icon="panel"></span><span class="crown" data-icon="crown"></span></div>
+  </div></div>
+
+  <section class="prose"><span class="hud">Variant A · proposed · 2 of 3</span><h2>Two clicks later the form is the page</h2>
+    <p class="lede">With nothing needed left, the card shrinks to one line and goes away with the first session. The form is the one built in ADR-266, with the first repo chosen. A step that needs days, such as a proxy that IT has to open, keeps the card above the form, folded to its one line, until the doctor finds it fixed.</p></section>
+  <div class="scroll"><div class="window short">
+    <div class="rail" data-on="sessions"></div>
+    <div class="list"><span class="hud">Sessions <span style="color:var(--primary)">// 00</span></span><span class="muted">No sessions yet. Give the agent a task or start Copilot CLI in a repo from your projects folder.</span></div>
+    <div class="view"><div class="pad">
+      <div class="ready"><span><b>Ready.</b> <span class="muted">Projects folder <span class="mono">C:\Users\you\Dev</span>, 14 repos, trusted by Copilot CLI.</span></span><span class="btn ghost">Hide</span></div>
+      <div class="form">
+        <span class="hud">New task or session for the agent</span>
+        <div class="input" style="width:228px"><span>orders-api</span><span class="muted">&#9662;</span></div>
+        <span class="fold">Templates</span>
+        <div class="area">Add email validation to the sign-up form, with a test</div>
+        <span class="fold">Stack trace</span>
+        <div class="row"><span class="pill">Own worktree</span><span class="fold">More options</span></div>
+        <span class="fold" style="color:var(--muted-foreground)">Add a repo</span>
+        <div class="row"><span class="btn primary"><span data-icon="branch"></span>Create task</span></div>
+      </div>
+    </div></div>
+    <div class="strip"><span data-icon="panel"></span><span class="crown" data-icon="crown"></span></div>
+  </div></div>
+
+  <section class="prose"><span class="hud">Variant A · proposed · 3 of 3</span><h2>The first task gets the width of the window</h2>
+    <p class="lede">Today a pinned supervisor panel leaves a first task 416 px of the 1200 px window Trackwall first opens with, 467 px of a 1280 px one (1920 x 1080 at 150 %) and 570 px of a 1440 px one, for a supervisor the user has not started. Folded, the panel leaves the terminal 800, 880 and 1040 px, measured in the app. Showing the supervisor unfolds the panel and keeps it pinned, as it does today, so a user who works with it decides once.</p></section>
+  <div class="scroll"><div class="window short">
+    <div class="rail" data-on="sessions"></div>
+    <div class="list"><span class="hud">Sessions <span style="color:var(--primary)">// 01</span></span>
+      <div class="entry"><span class="t">orders-api</span><span class="muted small">Add email validation to the sign-up form</span><span class="state-working">working · 1 min</span></div></div>
+    <div class="view">
+      <div class="taskhead"><span><b>orders-api</b> <span class="muted small mono">trackwall/add-email-validation</span> <span class="state-working">· Working</span><br><span class="muted small">Add email validation to the sign-up form, with a test · just now</span></span>
+        <span class="row"><span class="btn">Verify</span><span class="btn">VS Code</span><span class="btn">More</span><span class="btn">Stop</span></span></div>
+      <div class="tabs"><span class="on">Terminal</span><span>Shell</span><span>Changes</span><span>Rounds</span><span>Impact</span><span>MCP calls</span></div>
+      <div class="term">
+        <div><span class="acc">&#9679;</span> Copilot CLI <span class="dim">1.0.110 · orders-api [trackwall/email-validation]</span></div><br>
+        <div><span class="acc">&gt;</span> Add email validation to the sign-up form, with a test</div><br>
+        <div><span class="ok">&#10003;</span> Read src/main/java/shop/orders/signup/SignUpForm.java</div>
+        <div><span class="ok">&#10003;</span> Edit 2 files (+38 -4)</div>
+        <div><span class="ok">&#10003;</span> trackwall-run_mise_task test: 42 passed</div><br>
+        <div class="dim">&#8756; Thinking… (14s · Esc to interrupt)</div>
+      </div>
+    </div>
+    <div class="strip"><span data-icon="panel"></span><span class="crown" data-icon="crown"></span></div>
+    <div class="measure" style="left:344px; width:800px"><span>terminal 800 px</span></div>
+  </div></div>
+
+  <section class="prose"><span class="hud">Variant A · the view bar</span><h2>The view Trackwall opens on comes first</h2>
+    <p class="lede">Sessions moves to the top and takes Ctrl+1; Home moves to the end. The macOS menu bar follows the same order. Opening a view in a new window (Ctrl+Shift + its digit) works as before, so Home can still live on a second monitor. The cost: four shortcuts change once, for users who learned them.</p></section>
+  <div class="bars">
+    <div class="bar"><span class="hud">Today</span><ol>
+      <li class="start"><span>Home</span><span class="key">Ctrl+1</span><span class="note">opens at start</span></li>
+      <li><span>Repos</span><span class="key">Ctrl+2</span><span></span></li>
+      <li><span>Sessions</span><span class="key">Ctrl+3</span><span></span></li>
+      <li><span>Overview</span><span class="key">Ctrl+4</span><span></span></li>
+      <li><span>Plan</span><span class="key">Ctrl+5</span><span></span></li>
+      <li><span>Flow</span><span class="key">Ctrl+6</span><span></span></li></ol></div>
+    <div class="bar"><span class="hud">Proposed</span><ol>
+      <li class="start"><span>Sessions</span><span class="key">Ctrl+1</span><span class="note">opens at start</span></li>
+      <li><span>Repos</span><span class="key">Ctrl+2</span><span></span></li>
+      <li><span>Overview</span><span class="key">Ctrl+3</span><span></span></li>
+      <li><span>Plan</span><span class="key">Ctrl+4</span><span></span></li>
+      <li><span>Flow</span><span class="key">Ctrl+5</span><span></span></li>
+      <li><span>Home</span><span class="key">Ctrl+6</span><span class="note">one click away</span></li></ol></div>
+  </div>
+
+  <section class="prose"><span class="hud">Variant A · in a dev container · not built</span><h2>Work that is only in the container moves to Repos, with a count on its icon</h2>
+    <p class="lede">"Only in this container" is on Home alone today, so every start shows it. Once Trackwall opens on Sessions, the repos whose commits, stashes or changes live only in the Docker volume head the repo list, and the Repos icon carries their number in the warning colour, from every view.</p>
+    <p class="lede">Built instead (ADR-287): Home keeps the section, and Home's icon carries the number of the container's warnings in every view, among them unpushed work whose last backup is old. In a container some work is nearly always unpushed, so a count of those repos would never go away.</p></section>
+  <div class="scroll"><div class="window short">
+    <div class="rail" data-on="repos" data-badge="repos:2"></div>
+    <div class="list">
+      <div class="row" style="justify-content:space-between"><span class="hud">Repos <span style="color:var(--primary)">// 14</span></span><span class="row"><span class="btn ghost">Add</span><span class="btn ghost">More</span></span></div>
+      <span class="btn" style="align-self:flex-start">Sync all</span>
+      <div class="section-head"><span data-icon="drive"></span><span class="hud" style="color:var(--warning)">Only in this container // 02</span></div>
+      <span class="muted small">Removing the volume deletes this work. Push it to keep it.</span>
+      <div class="repo"><span>orders-api</span><span class="w">2 commits, 1 stash</span></div>
+      <div class="repo"><span>shop-web</span><span class="w">3 changed files</span></div>
+      <span class="hud" style="margin-top:8px">All repos</span>
+      <div class="repo"><span>catalog</span><span class="c">main · clean</span></div>
+      <div class="repo"><span>inventory</span><span class="c">main · clean</span></div>
+      <div class="repo"><span>orders-api</span><span class="c">main · 2 to push</span></div>
+      <div class="repo"><span>payments</span><span class="c">main · clean</span></div>
+      <div class="repo"><span>shop-web</span><span class="c">main · changed</span></div>
+    </div>
+    <div class="view"><div class="pad"><span class="hud">Repo</span><h3>orders-api</h3><span class="muted">The repo's page, as today.</span></div></div>
+    <div class="strip"><span data-icon="panel"></span><span class="crown" data-icon="crown"></span></div>
+  </div></div>
+
+  <section class="prose"><span class="hud">Variant B · the smallest step</span><h2>Open on "Get started" until it is ready, then on Sessions</h2>
+    <p class="lede">The main window opens on Settings › Get started while a needed step is open or no session ever started, and on Sessions after that. It skips the Home hop and changes no view, but keeps three screens' worth of setup in two (Get started, then Sessions), four clicks, and the pinned supervisor panel with its Start my day.</p></section>
+
+  <section class="prose"><span class="hud">Variant C · not proposed</span><h2>Home off until turned on in Settings</h2>
+    <p class="lede">Home leaves the view bar and comes back with one switch on the Home scene row of Settings › App. It takes one icon off the bar, but adds a setting, hides the view the README opens with, and a new user would never find it. Once Trackwall no longer opens on Home, Home costs nothing until it is clicked.</p></section>
+  <div class="scroll"><div class="window" style="height:250px">
+    <div class="rail" data-on="settings" data-without="home"></div>
+    <div class="view"><div class="pad">
+      <span class="hud">App · how it looks</span>
+      <div class="surface">
+        <div class="setting"><span class="chev">&#9662;</span><span>Home</span><span class="what">The 3D view of your repos and sessions, in the view bar</span><span class="val">off</span></div>
+        <div class="open"><span class="seg"><span class="on">Off</span><span>Holograms</span><span>Orbs</span></span><span class="muted small">On: Home joins the view bar after Flow.</span></div>
+        <div class="setting"><span class="chev">&#9656;</span><span>Theme</span><span class="what">Dark, light or as your system is</span><span class="val">system</span></div>
+      </div>
+    </div></div>
+  </div></div>
+
+  <div class="notes">
+    <div><b>What stays</b>"Get started" in Settings with every step, Check again and Good to have; Home itself with its scene, queue and details; extra windows that come back with the view they showed; the supervisor, its start card and Alt+0.</div>
+    <div><b>What it costs at start</b>The setup card runs the doctor only while a step is open or the doctor never ran (the count ADR-268 keeps), so a computer that is set up never runs it on Sessions.</div>
+    <div><b>Start my day before a folder</b>The start card says "Set your projects folder first" with a link to the step, instead of buttons that answer with an error.</div>
+    <div><b>Two sections less on an empty Sessions view</b>"Copilot CLI asks to trust the folder?" only while the folder is not trusted, and "Routines" only once a routine exists; today both show on the first screen.</div>
+    <div><b>Not in this proposal</b>The unsigned download and its PowerShell steps (signing is planned), a check that Copilot CLI is signed in, the Layout switch and the six tabs of Sessions: each is a topic of its own.</div>
+  </div>
+</main>
+
+<script>
+// The view bar of every window above: the proposed order, Settings at the bottom, the active view and any count.
+const ICONS = {
+  sessions: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="m7 11 2-2-2-2"/><path d="M11 13h4"/>',
+  repos: '<path d="M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5"/><circle cx="13" cy="12" r="2"/><path d="M18 19c-2.8 0-5-2.2-5-5v8"/><circle cx="20" cy="19" r="2"/>',
+  overview: '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
+  plan: '<path d="M21 12h-8"/><path d="M21 6H8"/><path d="M21 18h-8"/><path d="M3 6v4c0 1.1.9 2 2 2h3"/><path d="M3 10v6c0 1.1.9 2 2 2h3"/>',
+  flow: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/>',
+  home: '<circle cx="12" cy="12" r="3"/><circle cx="19" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><path d="M10.4 21.9a10 10 0 0 0 9.941-15.416"/><path d="M13.5 2.1a10 10 0 0 0-9.841 15.416"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  crown: '<path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/>',
+  panel: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/>',
+  branch: '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  drive: '<line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+};
+const svg = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+const ORDER = ["sessions", "repos", "overview", "plan", "flow", "home"];
+for (const rail of document.querySelectorAll(".rail")) {
+  const badges = Object.fromEntries((rail.dataset.badge ?? "").split(",").filter(Boolean).map((b) => b.split(":")));
+  const shown = ORDER.filter((view) => view !== rail.dataset.without);
+  const icon = (view) => {
+    const badge = badges[view] ? `<span class="badge">${badges[view]}</span>` : "";
+    return `<span class="ico${view === rail.dataset.on ? " on" : ""}" title="${view}">${svg(view)}${badge}</span>`;
+  };
+  rail.innerHTML = `${shown.map(icon).join("")}<span class="gap"></span>${icon("settings")}`;
+}
+for (const slot of document.querySelectorAll("[data-icon]")) slot.innerHTML = svg(slot.dataset.icon);
+</script>
+</body>
+</html>

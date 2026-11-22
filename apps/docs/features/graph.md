@@ -49,7 +49,7 @@ Some connections do not show in the code, for example an address that only exist
 
 ## Use it
 
-1. Open "Overview" (Ctrl+4, ⌘4 on macOS).
+1. Open "Overview" (Ctrl+3, ⌘3 on macOS).
 2. Click a repo to see what it uses and who uses it.
 3. To make your repos ready for agents, close the repo panel and work through "Agent readiness" from the top: the gaps that block agents come first.
 4. To align versions, close the repo panel, find the subject under "Version drift" and choose "Align to …", check the repos and the prompt, and press Start.
