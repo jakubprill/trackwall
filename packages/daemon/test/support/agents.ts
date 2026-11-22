@@ -97,7 +97,7 @@ export function makeAgents(
       sandboxSettings: sandbox,
       removeRepo: () => Promise.reject(new Error("unused")),
     },
-    vcs: new Vcs(systemTempFolder),
+    vcs: new Vcs(systemTempFolder, tmpdir()),
     home,
     copilot: [process.execPath, fakeCopilot],
     version: "0.0.0-test",

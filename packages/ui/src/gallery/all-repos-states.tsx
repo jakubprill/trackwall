@@ -1,5 +1,5 @@
-import type { Repo, RepoStatusOk, SessionList, UnpushedWork } from "@trackwall/protocol";
-import { allReposRows } from "@/lib/all-repos";
+import type { Repo, RepoStatusOk, ServerCheckState, SessionList, UnpushedWork } from "@trackwall/protocol";
+import { allReposRows, newOnServerSince } from "@/lib/all-repos";
 import type { PullState } from "@/lib/use-pull";
 import type { SyncRunHandle } from "@/lib/use-sync-run";
 import { AllReposView } from "@/views/repos/AllRepos";
@@ -36,12 +36,14 @@ const CLEAN = ["admin-bff", "admin-web", "api-gateway", "auth", "customers", "no
 function AllReposOf({
   repos,
   unpushed,
+  serverCheck,
   sessions,
   all = repos.length,
   pulls,
 }: {
   repos: readonly Repo[];
   unpushed?: UnpushedWork;
+  serverCheck?: ServerCheckState;
   sessions?: SessionList;
   /** The repos before the tag filter, when it leaves fewer. */
   all?: number;
@@ -50,8 +52,9 @@ function AllReposOf({
   return (
     <AllReposView
       conn={NO_DAEMON}
-      rows={allReposRows(repos, unpushed, new Date())}
+      rows={allReposRows(repos, unpushed, newOnServerSince(repos, serverCheck), new Date())}
       inContainer={unpushed?.inContainer === true}
+      serverCheck={serverCheck}
       filter={{ shown: repos.length, all }}
       sessions={sessions}
       running={[]}
@@ -133,6 +136,43 @@ const pulls: GalleryState = {
   ),
 };
 
+/** Found by the server check without a fetch (ADR-295): a pull where nothing is in its way, Changes where a file is. */
+const newOnServer: GalleryState = {
+  name: "New commits on the server, found without a fetch",
+  render: () => (
+    <AllReposOf
+      repos={[
+        ok("catalog", { fetched: 3 * 60 }),
+        ok("orders-api", { changes: 1, fetched: 3 * 60 }),
+        ok("payments", { behind: 2 }),
+        ...CLEAN,
+      ]}
+      serverCheck={{
+        on: true,
+        last: {
+          endedAt: minutesAgo(4),
+          newCommits: [
+            { repo: "catalog", checkedAt: minutesAgo(4) },
+            { repo: "orders-api", checkedAt: minutesAgo(4) },
+          ],
+          unreached: [],
+        },
+      }}
+    />
+  ),
+};
+
+/** Without a VPN, the company's server does not answer: the header says so calmly, and the rows stay as of their fetch. */
+const unreached: GalleryState = {
+  name: "Servers out of reach",
+  render: () => (
+    <AllReposOf
+      repos={[ok("catalog", { behind: 2 }), ...CLEAN]}
+      serverCheck={{ on: true, last: { endedAt: minutesAgo(9), newCommits: [], unreached: ["catalog", ...CLEAN.map((r) => r.id)] } }}
+    />
+  ),
+};
+
 const clean: GalleryState = { name: "All clean", render: () => <AllReposOf repos={CLEAN} /> };
 
 const loading: GalleryState = {
@@ -142,4 +182,4 @@ const loading: GalleryState = {
   ),
 };
 
-export const ALL_REPOS_STATES: readonly GalleryState[] = [busy, outside, pulls, clean, loading];
+export const ALL_REPOS_STATES: readonly GalleryState[] = [busy, outside, pulls, newOnServer, unreached, clean, loading];

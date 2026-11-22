@@ -27,6 +27,8 @@ const DEFAULTS: WorkspaceSettings = {
   taskTokenBudgetProblem: null,
   runningTasksWarning: null,
   runningTasksWarningProblem: null,
+  serverCheck: true,
+  serverCheckProblem: null,
   alwaysAllow: [],
   alwaysAllowProblem: null,
   configFile: "/home/me/.trackwall/workspace.yaml",
@@ -44,8 +46,14 @@ describe("Settings as folded rows (ADR-263)", () => {
     const rows = (category: (typeof SETTINGS_CATEGORIES)[number]) => category.sections.filter((s) => s in SETTING_ROWS);
     for (const id of ["workspace", "agents", "app"] as const)
       expect(rows(settingsCategory(id))).toEqual([...settingsCategory(id).sections]);
-    for (const id of ["get-started", "repo-hosts", "usage", "files", "diagnostics"] as const)
-      expect(rows(settingsCategory(id))).toEqual([]);
+    for (const id of ["get-started", "usage", "files", "diagnostics"] as const) expect(rows(settingsCategory(id))).toEqual([]);
+  });
+
+  test("Repo hosts keeps the list of hosts open, with the check for new commits on the servers as a row under it (ADR-295)", () => {
+    expect(settingsParts(settingsCategory("repo-hosts").sections)).toEqual([
+      { kind: "section", section: "repo-hosts" },
+      { kind: "rows", group: "Servers", rows: ["server-check"] },
+    ]);
   });
 
   test("Agents shows its rows in three groups: Tasks, Supervisor, Model provider and other clients", () => {
@@ -122,6 +130,15 @@ describe("Settings as folded rows (ADR-263)", () => {
     expect(settingValue("theme", sources())).toEqual({ text: "Dark", state: "default" });
     expect(settingValue("theme", { ...sources(), theme: "light" })).toEqual({ text: "Light", state: "changed" });
     expect(settingValue("start-at-sign-in", sources())).toBeNull();
+  });
+
+  test("the check for new commits is on every 15 minutes until the user turns it off, and off is the change (ADR-295)", () => {
+    expect(settingValue("server-check", sources())).toEqual({ text: "every 15 minutes", state: "default" });
+    expect(settingValue("server-check", sources({ serverCheck: false }))).toEqual({ text: "off", state: "changed" });
+    expect(settingValue("server-check", sources({ serverCheck: false, serverCheckProblem: "serverCheck: expected boolean" }))).toEqual({
+      text: "cannot be read",
+      state: "problem",
+    });
   });
 
   test("Home's row says whether the view bar shows Home, hidden until the user shows it (ADR-294)", () => {

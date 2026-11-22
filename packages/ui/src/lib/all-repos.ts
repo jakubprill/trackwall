@@ -1,21 +1,21 @@
-import { type Repo, type RepoStatusOk, trackedChanges, type UnpushedWork } from "@trackwall/protocol";
-import { relativeTime, workingTreeLabel } from "./format.ts";
+import { type Repo, type RepoStatusOk, type ServerCheckState, trackedChanges, type UnpushedWork } from "@trackwall/protocol";
+import { clockTime, relativeTime, workingTreeLabel } from "./format.ts";
 import { branchLabel, type StatusTone, serverLabel } from "./repo-status.ts";
 import { type UnpushedRow, unpushedRows } from "./unpushed-work.ts";
-import { type UpstreamOffer, upstreamOffer } from "./upstream-pull.ts";
+import { type PullOffer, upstreamOffer } from "./upstream-pull.ts";
 
 /**
  * "All repos", the first entry of the repo list and the panel the "Repos" view opens on (ADR-293): every repo's state
  * against the server in one table, so a repo whose branch lacks commits of the remote, or whose work is only in this
  * container, shows without opening it. A row needs a look when git cannot read the repo, it has uncommitted files, its
- * branch lacks commits of the branch it tracks (as of the repo's last fetch), or, in a container, it has work on no
- * remote (ADR-162); the other repos fold into one line. Each row offers the one next step that already exists: the pull
+ * branch lacks commits of the branch it tracks (as of the repo's last fetch, or newer ones the server check found on the
+ * server since, ADR-295), or, in a container, it has work on no remote (ADR-162); the other repos fold into one line. Each row offers the one next step that already exists: the pull
  * of the Upstream tile (ADR-269), or the repo's tab where the way out is. What goes on in each repo (ADR-103) the panel
  * adds from the sessions and running mise tasks, which the repo list's entry does not need.
  */
 
 /** The row's next step: the pull itself, or the repo's tab where the way out is (`null`: the repo opens as it opens from the list). */
-type AllReposAction = Extract<UpstreamOffer, { kind: "pull" }> | { kind: "open"; tab: "changes" | "shell" | null };
+type AllReposAction = PullOffer | { kind: "open"; tab: "changes" | "shell" | null };
 
 interface RowBase {
   repo: string;
@@ -34,7 +34,10 @@ export type AllReposRow =
       branch: string;
       /** Uncommitted files: "2 changed, 1 new"; `null` for none. */
       changes: string | null;
-      /** What the branch lacks from the one it tracks: "15 to pull" or "diverged"; `null` for nothing. */
+      /**
+       * What the branch lacks from the one it tracks: "15 to pull" or "diverged", or "new on the server" when only the
+       * server check knows of commits to pull; `null` for nothing.
+       */
       server: string | null;
       /** The server cell's tooltip, also over an empty cell: what the branch is compared with, as of which fetch. */
       serverTitle: string;
@@ -42,8 +45,16 @@ export type AllReposRow =
       fetchedAt: string | null;
     });
 
-/** `unpushed`: `undefined` until the daemon answers, and outside a container it lists nothing. */
-export function allReposRows(repos: readonly Repo[], unpushed: UnpushedWork | undefined, now: Date): AllReposRow[] {
+/**
+ * `unpushed`: `undefined` until the daemon answers; outside a container it lists nothing. `newOnServer`: the repos whose
+ * server has commits they have not fetched (`newOnServerSince`).
+ */
+export function allReposRows(
+  repos: readonly Repo[],
+  unpushed: UnpushedWork | undefined,
+  newOnServer: ReadonlyMap<string, string>,
+  now: Date,
+): AllReposRow[] {
   const onlyHere = new Map(unpushedRows(unpushed).map((row) => [row.repo, row]));
   const toPush = new Set((unpushed?.repos ?? []).filter((r) => r.commits > 0 || r.stashes > 0).map((r) => r.repo));
   return repos.map((repo) => {
@@ -53,17 +64,35 @@ export function allReposRows(repos: readonly Repo[], unpushed: UnpushedWork | un
     // Opened, the repo says what git answered.
     if (status.kind === "unavailable")
       return { ...base, kind: "unavailable", message: status.message, action: { kind: "open", tab: null } };
+    const newSince = newOnServer.get(repo.id) ?? null;
     return {
       ...base,
       kind: "ok",
       branch: branchLabel(status),
       changes: workingTreeLabel(trackedChanges(status), status.untracked) ?? null,
-      server: serverLabel(status),
-      serverTitle: serverTitle(status, now),
+      server: serverLabel(status, newSince !== null),
+      serverTitle: serverTitle(status, newSince, now),
       fetchedAt: status.fetchedAt,
-      action: rowAction(status, base.onlyHere !== null, toPush.has(repo.id)),
+      action: rowAction(status, newSince !== null, base.onlyHere !== null, toPush.has(repo.id)),
     };
   });
+}
+
+/**
+ * The repos whose server has commits they have not fetched, for the table and the repo list (ADR-295): the ones the
+ * server check's last round found new commits in, each with the moment it read the repo (`checkedAt`), unless the repo
+ * fetched after that moment, which brought what the server had then.
+ */
+export function newOnServerSince(repos: readonly Repo[], serverCheck: ServerCheckState | undefined): ReadonlyMap<string, string> {
+  const found = new Map((serverCheck?.last?.newCommits ?? []).map((n) => [n.repo, n.checkedAt]));
+  return new Map(
+    repos.flatMap(({ id, status }): [string, string][] => {
+      const checkedAt = found.get(id);
+      if (checkedAt === undefined || status.kind !== "ok") return [];
+      const fetchedSince = status.fetchedAt !== null && Date.parse(status.fetchedAt) >= Date.parse(checkedAt);
+      return fetchedSince ? [] : [[id, checkedAt]];
+    }),
+  );
 }
 
 /**
@@ -92,11 +121,12 @@ export function splitRows(rows: readonly AllReposRow[], kept: ReadonlySet<string
 }
 
 /**
- * The pull when the Upstream tile would offer it; otherwise the tab with the way out: Changes for uncommitted files,
- * Shell for a diverged branch and for commits or stashes only here, and the repo itself for other work only here.
+ * The pull the Upstream tile offers, also for commits only the server check knows of; otherwise the tab with the way
+ * out: Changes for uncommitted files, Shell for a diverged branch and for commits or stashes only here, and the repo
+ * itself for other work only here.
  */
-function rowAction(status: RepoStatusOk, onlyHere: boolean, toPush: boolean): AllReposAction | null {
-  const offer = upstreamOffer(status);
+function rowAction(status: RepoStatusOk, newOnServer: boolean, onlyHere: boolean, toPush: boolean): AllReposAction | null {
+  const offer = upstreamOffer(status, newOnServer);
   if (offer.kind === "pull") return offer;
   if (offer.kind === "blocked") return { kind: "open", tab: offer.way };
   if (status.changes > 0) return { kind: "open", tab: "changes" };
@@ -104,12 +134,14 @@ function rowAction(status: RepoStatusOk, onlyHere: boolean, toPush: boolean): Al
   return onlyHere ? { kind: "open", tab: null } : null;
 }
 
-function serverTitle(status: RepoStatusOk, now: Date): string {
+/** `newSince`: when the server check found commits the repo has not fetched (`newOnServerSince`). */
+function serverTitle(status: RepoStatusOk, newSince: string | null, now: Date): string {
   const { upstream, fetchedAt } = status;
   if (upstream === null) return status.branch === null ? "A detached HEAD tracks no branch" : `${status.branch} tracks no remote branch`;
   const fetched = fetchedAt === null ? "not fetched since it was cloned" : `fetched ${relativeTime(fetchedAt, now)}`;
   const diverged = upstream.ahead > 0 && upstream.behind > 0 ? ` (${upstream.ahead} local, ${upstream.behind} remote)` : "";
-  return `Compared with ${upstream.name}${diverged}, ${fetched}`;
+  const news = newSince === null ? "" : `; the server had newer commits ${relativeTime(newSince, now)}`;
+  return `Compared with ${upstream.name}${diverged}, ${fetched}${news}`;
 }
 
 /** The state of all repos in one line, for the list's entry: "5 to pull · 2 changed · 4 only here", counting repos. */
@@ -135,6 +167,22 @@ export function fetchedLine(rows: readonly AllReposRow[], now: Date): string | n
   const oldest = relativeTime(new Date(Math.min(...times)).toISOString(), now);
   const newest = relativeTime(new Date(Math.max(...times)).toISOString(), now);
   return oldest === newest ? `Fetched from the server ${oldest}.` : `Fetched from the server between ${oldest} and ${newest}.`;
+}
+
+/**
+ * The server check's last round, for the panel's header (ADR-295): when it asked, or, calmly, which servers did not
+ * answer and when, with the repos in the tooltip; `null` while it is off or has not asked yet.
+ */
+export function serverCheckLine(serverCheck: ServerCheckState | undefined, now: Date): { text: string; title?: string } | null {
+  const last = serverCheck?.last;
+  if (!last) return null;
+  const { unreached, endedAt } = last;
+  if (unreached.length === 0) return { text: `Checked the servers for new commits ${relativeTime(endedAt, now)}.` };
+  const repos = unreached.length === 1 ? unreached[0] : `${unreached.length} repos`;
+  return {
+    text: `Could not reach the server of ${repos} at ${clockTime(endedAt)}.`,
+    title: `${unreached.join(", ")}\nSettings > Diagnostics says why git could not reach them.`,
+  };
 }
 
 /** The line under the table for the folded rows: "11 more repos: clean, nothing to pull"; `null` when none is folded. */

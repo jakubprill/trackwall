@@ -32,7 +32,7 @@ async function folderOfTwentyRepos() {
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
   // The status memo's clock stands still unless a test moves it, so a read takes no time and is reused for the shortest window.
   const clock = { ms: 0 };
-  const vcs = new Vcs(systemTempFolder, () => clock.ms);
+  const vcs = new Vcs(systemTempFolder, tmpdir(), () => clock.ms);
   const workspace = new Workspace({
     inContainer: false,
     file: new WorkspaceFile(join(home, "workspace.yaml")),
@@ -203,7 +203,7 @@ describe("the git budget of a task worktree's changes, read every few seconds wh
     const base = gitIn(repo, "rev-parse", "HEAD").trim();
     const worktree = join(mkdtempSync(join(tmpdir(), "trackwall-worktree-")), "task");
     gitIn(repo, "worktree", "add", "--quiet", "-b", "trackwall/task", worktree, base);
-    return { repo, base, worktree, vcs: new Vcs(systemTempFolder) };
+    return { repo, base, worktree, vcs: new Vcs(systemTempFolder, tmpdir()) };
   }
 
   test(

@@ -7,7 +7,7 @@ import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { withTempFolderGone } from "./support/temp-folder.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-const vcs = new Vcs(systemTempFolder);
+const vcs = new Vcs(systemTempFolder, tmpdir());
 
 describe("vcs on real git", () => {
   test(
@@ -351,7 +351,7 @@ describe("vcs on real git", () => {
       writeFileSync(join(dir, "a.txt"), "b\n");
       writeFileSync(join(dir, "new.txt"), "new\n");
       const scratch = join(mkdtempSync(join(tmpdir(), "trackwall-projects-")), "scratch");
-      const inProjects = new Vcs(async () => scratch);
+      const inProjects = new Vcs(async () => scratch, tmpdir());
       const gitDirBefore = readdirSync(join(dir, ".git"));
 
       const changes = await withTempFolderGone(() => inProjects.worktreeChanges(dir, base, 0, []));
@@ -367,7 +367,7 @@ describe("vcs on real git", () => {
     const dir = makeRepo({ "a.txt": "a\n" }, "projects-gone");
     const base = gitIn(dir, "rev-parse", "HEAD").trim();
     const projects = join(mkdtempSync(join(tmpdir(), "trackwall-gone-")), "Dev");
-    const inGoneProjects = new Vcs(async () => join(projects, "scratch"));
+    const inGoneProjects = new Vcs(async () => join(projects, "scratch"), tmpdir());
 
     await expect(inGoneProjects.worktreeChanges(dir, base, 0, [])).rejects.toThrow();
     expect(existsSync(projects)).toBe(false);

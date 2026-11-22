@@ -159,6 +159,7 @@
                       "!../../infra/keyed-queue.ts",
                       "!../../infra/terminal-screen.ts",
                       "!../../infra/map-limit.ts",
+                      "!../../infra/failure-log.ts",
                       "!../../infra/loopback.ts",
                       "!../../infra/env-key.ts",
                       "!../../infra/copilot-home.ts",

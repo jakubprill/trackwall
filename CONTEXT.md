@@ -202,12 +202,16 @@ The branch, the last commit, the number of changes in the working directory (of 
 _Avoid_: state (that is a task state or a service state), sync (that is a separate action)
 
 **All repos** (`AllReposView`, row `AllReposRow`, `allReposRows`; in the UI *All repos*):
-The first entry of the repo list and the panel the "Repos" view opens on: the state of every repo against the server in one table, with a row for each repo that needs a look (uncommitted files, commits to pull, a diverged branch, work only in this container, or a repo git cannot read) and its next step, the clean ones folded into one line, and "Sync all" above it (ADR-293).
+The first entry of the repo list and the panel the "Repos" view opens on: the state of every repo against the server in one table, with a row for each repo that needs a look (uncommitted files, commits to pull or new on the server, a diverged branch, work only in this container, or a repo git cannot read) and its next step, the clean ones folded into one line, and "Sync all" above it (ADR-293).
 _Avoid_: dashboard (that is Home), overview (that is the "Overview" view), status page
 
 **Repo watch** (`RepoWatch`, snapshot `RepoWatchState`, topic `repos.changed`):
 The daemon's comparison, every second, of the set of repos in the projects folder and of the HEAD and refs of each, read from the files of its git directory (ADR-63). A commit, checkout, pull, fetch or a new or removed repo bumps the revision; uncommitted changes do not. The UI fetches the list, tags and the graph again after every new revision.
 _Avoid_: file watcher (the daemon does not use file system notifications), working directory watch (the working directory is not watched)
+
+**Server check** (`ServerCheck`, snapshot `ServerCheckState`, `workspaceApi.serverCheck`, key `serverCheck`; in the UI "new on the server", and *Check for new commits* in Settings > Repo hosts):
+The daemon's question, every 15 minutes, to the server of each repo's checked-out branch: has that branch moved since the repo's last fetch? It asks with `git ls-remote` from outside the repo, with only the user's own sign-in, as the doctor does (ADR-195, ADR-295), and fetches nothing. A repo whose server has such commits reads "new on the server" in All repos and the repo list until a fetch counts them. On without the key; `serverCheck: false` turns it off.
+_Avoid_: background fetch, auto-fetch (nothing is fetched), remote watch (the repo watch reads only the repo's own files)
 
 **Changes** (working directory changes, `WorkingTreeChanges`, the `changes` action; the "Changes" tab in the UI):
 The files and diff of the working directory (with new files, without ignored ones) against a commit: a repo against HEAD in the repo details (ADR-34), a task's worktree against the base commit in the task changes (`TaskChanges`, ADR-31). Read-only. An agent gets a task's changes without the diff in `get_session` (`TaskChangesSummary`) and with it, narrowed to paths, in `get_task_changes` (`AgentTaskChanges`).

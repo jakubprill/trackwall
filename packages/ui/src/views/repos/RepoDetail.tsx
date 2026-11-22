@@ -37,6 +37,7 @@ export function RepoDetail({
   repo,
   initialTab = REPO_TABS[0].id,
   projectsDir,
+  newOnServer,
   sessions,
   runningLive,
   onOpenInSessions,
@@ -47,6 +48,8 @@ export function RepoDetail({
   initialTab?: RepoTab;
   /** The daemon's projects folder, for showing the repo through that folder on this computer (ADR-131); unknown until the list loads. */
   projectsDir: string | null | undefined;
+  /** The server check found commits the repo has not fetched (ADR-295): its Upstream tile offers the pull. */
+  newOnServer: boolean;
   /** `undefined` until the first session list arrives: the bar then shows only mise tasks. */
   sessions: SessionList | undefined;
   /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
@@ -87,6 +90,7 @@ export function RepoDetail({
             conn={conn}
             repo={repo.id}
             status={status}
+            newOnServer={newOnServer}
             workInFolder={workInRepoFolder(repo.id, sessions, running)}
             onShowChanges={() => setTab("changes")}
             onOpenShell={() => setTab("shell")}

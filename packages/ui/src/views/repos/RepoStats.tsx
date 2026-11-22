@@ -14,6 +14,7 @@ export function RepoStats({
   conn,
   repo,
   status,
+  newOnServer,
   workInFolder,
   onShowChanges,
   onOpenShell,
@@ -21,6 +22,8 @@ export function RepoStats({
   conn: Connection;
   repo: string;
   status: RepoStatusOk;
+  /** The server check found commits the repo has not fetched (ADR-295). */
+  newOnServer: boolean;
   workInFolder: readonly string[];
   onShowChanges: () => void;
   onOpenShell: () => void;
@@ -37,6 +40,7 @@ export function RepoStats({
         conn={conn}
         repo={repo}
         status={status}
+        newOnServer={newOnServer}
         workInFolder={workInFolder}
         onShowChanges={onShowChanges}
         onOpenShell={onOpenShell}

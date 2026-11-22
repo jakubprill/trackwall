@@ -10,7 +10,7 @@ function status(more: Partial<RepoStatusOk>): RepoStatusOk {
 
 describe("what the Upstream tile offers", () => {
   test("a clean branch behind its upstream gets a pull named with the number of commits", () => {
-    const offer = upstreamOffer(status({ upstream: { name: "origin/develop", ahead: 0, behind: 320 } }));
+    const offer = upstreamOffer(status({ upstream: { name: "origin/develop", ahead: 0, behind: 320 } }), false);
     expect(offer).toEqual({
       kind: "pull",
       behind: 320,
@@ -19,13 +19,31 @@ describe("what the Upstream tile offers", () => {
     expect(pullLabel(320)).toBe("Pull 320");
   });
 
+  test("commits only the server check knows of get the pull without a number, which its fetch counts, unless changed files are in the way (ADR-295)", () => {
+    expect(upstreamOffer(status({ upstream: { name: "origin/develop", ahead: 0, behind: 0 } }), true)).toEqual({
+      kind: "pull",
+      behind: null,
+      title: "Fetch, then fast-forward develop to origin/develop; the default branch is synced as in Sync all",
+    });
+    expect(pullLabel(null)).toBe("Pull");
+    // Commits of its own as well: the pull's fetch tells whether the two diverged.
+    expect(upstreamOffer(status({ upstream: { name: "origin/develop", ahead: 2, behind: 0 } }), true)).toMatchObject({
+      kind: "pull",
+      behind: null,
+    });
+    expect(upstreamOffer(status({ changes: 1, upstream: { name: "origin/develop", ahead: 0, behind: 0 } }), true)).toMatchObject({
+      kind: "blocked",
+      way: "changes",
+    });
+  });
+
   test("new untracked files do not stop a pull, because a fast-forward leaves them where they are", () => {
-    const offer = upstreamOffer(status({ changes: 2, untracked: 2, upstream: { name: "origin/develop", ahead: 0, behind: 3 } }));
+    const offer = upstreamOffer(status({ changes: 2, untracked: 2, upstream: { name: "origin/develop", ahead: 0, behind: 3 } }), false);
     expect(offer).toMatchObject({ kind: "pull", behind: 3 });
   });
 
   test("changed tracked files stop the pull and lead to putting them aside or to the Changes tab", () => {
-    const offer = upstreamOffer(status({ changes: 4, upstream: { name: "origin/develop", ahead: 0, behind: 320 } }));
+    const offer = upstreamOffer(status({ changes: 4, upstream: { name: "origin/develop", ahead: 0, behind: 320 } }), false);
     expect(offer).toEqual({
       kind: "blocked",
       message: "4 changed files on develop are in the way.",
@@ -34,7 +52,7 @@ describe("what the Upstream tile offers", () => {
   });
 
   test("a branch with commits on both sides is to merge by hand in the Shell tab", () => {
-    const offer = upstreamOffer(status({ changes: 1, upstream: { name: "origin/develop", ahead: 2, behind: 320 } }));
+    const offer = upstreamOffer(status({ changes: 1, upstream: { name: "origin/develop", ahead: 2, behind: 320 } }), false);
     expect(offer).toEqual({
       kind: "blocked",
       message: "develop and origin/develop have diverged (2 local, 320 remote). Merge or rebase by hand.",
@@ -43,9 +61,11 @@ describe("what the Upstream tile offers", () => {
   });
 
   test("nothing to pull, no upstream or a detached HEAD offer nothing", () => {
-    expect(upstreamOffer(status({ upstream: { name: "origin/develop", ahead: 2, behind: 0 } }))).toEqual({ kind: "none" });
-    expect(upstreamOffer(status({ upstream: null }))).toEqual({ kind: "none" });
-    expect(upstreamOffer(status({ branch: null, upstream: { name: "origin/develop", ahead: 0, behind: 5 } }))).toEqual({ kind: "none" });
+    expect(upstreamOffer(status({ upstream: { name: "origin/develop", ahead: 2, behind: 0 } }), false)).toEqual({ kind: "none" });
+    expect(upstreamOffer(status({ upstream: null }), false)).toEqual({ kind: "none" });
+    expect(upstreamOffer(status({ branch: null, upstream: { name: "origin/develop", ahead: 0, behind: 5 } }), false)).toEqual({
+      kind: "none",
+    });
   });
 });
 

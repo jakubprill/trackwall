@@ -594,7 +594,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
         sandboxSettings: () => ({ tasks: "off" }),
         removeRepo: () => Promise.reject(new Error("unused")),
       },
-      vcs: new Vcs(systemTempFolder),
+      vcs: new Vcs(systemTempFolder, tmpdir()),
       home: mkdtempSync(join(tmpdir(), "trackwall-agents-")),
       copilot: ["copilot-that-does-not-exist"],
       version: "0.0.0-test",

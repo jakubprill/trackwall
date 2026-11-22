@@ -1,5 +1,5 @@
 import type { RepoWatchState } from "@trackwall/protocol";
-import { messageOf } from "../../infra/errors.ts";
+import { failureLog } from "../../infra/failure-log.ts";
 import type { RepoEntry } from "./projects-dir.ts";
 
 /**
@@ -42,18 +42,19 @@ export class RepoWatch {
   #timer: NodeJS.Timeout | undefined;
   /** A slow drive must not stack comparisons: the next one starts only after the previous one ended. */
   #checking: Promise<void> | undefined;
-  /** The last error of a comparison, so that a missing folder does not write to the log every second. */
-  #failure: string | undefined;
+  /** A missing folder fails every comparison: the log gets its message once, not every second. */
+  readonly #report: (job: Promise<unknown>) => void;
 
   constructor(deps: RepoWatchDeps) {
     this.#deps = deps;
+    this.#report = failureLog("repo watch", deps.log);
   }
 
   /** The first comparison at once (it hands every repo over and sets revision 0), then every `intervalMs`. */
   start(intervalMs = CHECK_MS): void {
     if (this.#timer) return;
-    this.#tick();
-    this.#timer = setInterval(() => this.#tick(), intervalMs);
+    this.#report(this.check());
+    this.#timer = setInterval(() => this.#report(this.check()), intervalMs);
     this.#timer.unref();
   }
 
@@ -79,20 +80,6 @@ export class RepoWatch {
         this.#checking = undefined;
       });
     return this.#checking;
-  }
-
-  /** From a timer an exception would be an unhandled rejection, which ends the process under Node. */
-  #tick(): void {
-    this.check().then(
-      () => {
-        this.#failure = undefined;
-      },
-      (err: unknown) => {
-        const message = messageOf(err);
-        if (this.#failure !== message) this.#deps.log(`repo watch: ${message}`);
-        this.#failure = message;
-      },
-    );
   }
 
   /**

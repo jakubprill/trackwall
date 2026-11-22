@@ -21,7 +21,7 @@ test(
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     const projects = mkdtempSync(join(tmpdir(), "trackwall-demo-"));
     createDemoWorkspace(projects);
-    const vcs = new Vcs(systemTempFolder);
+    const vcs = new Vcs(systemTempFolder, tmpdir());
     const workspace = new Workspace({
       inContainer: false,
       file: new WorkspaceFile(join(home, "workspace.yaml")),
@@ -51,7 +51,7 @@ test(
   async () => {
     const projects = mkdtempSync(join(tmpdir(), "trackwall-demo-"));
     createDemoWorkspace(projects);
-    const vcs = new Vcs(systemTempFolder);
+    const vcs = new Vcs(systemTempFolder, tmpdir());
     const server = async (repo: string) => {
       const { upstream, fetchedAt } = await vcs.status(join(projects, repo), "fresh");
       return { upstream, fetched: fetchedAt !== null, remote: await vcs.remote(join(projects, repo)) };

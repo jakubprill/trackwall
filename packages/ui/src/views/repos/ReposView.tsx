@@ -6,7 +6,7 @@ import { Loading } from "@/components/Loading";
 import { MoreMenu } from "@/components/MoreMenu";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
-import { allReposRows } from "@/lib/all-repos";
+import { allReposRows, newOnServerSince } from "@/lib/all-repos";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime, twoDigits } from "@/lib/format";
@@ -21,6 +21,7 @@ import { listSyncBadge, type SyncBadge, syncedByPath } from "@/lib/sync-state";
 import { useBatchRun } from "@/lib/use-batch-run";
 import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
+import { useServerCheck } from "@/lib/use-server-check";
 import { type StarredReposHandle, useStarredRepos } from "@/lib/use-starred-repos";
 import { useSyncRun } from "@/lib/use-sync-run";
 import { useTagFilter } from "@/lib/use-tag-filter";
@@ -87,7 +88,9 @@ export function ReposView({
   const repos = starredFirst(filter.repos, stars.ids);
   const current = repos.find((r) => r.id === selected) ?? repos[0];
   const unpushed = useUnpushedWork(conn, repoWatch.options(REPO_LIST_PACE));
-  const rows = allReposRows(repos, unpushed.data, new Date());
+  const serverCheck = useServerCheck(conn, repoWatch.options(REPO_LIST_PACE));
+  const newOnServer = newOnServerSince(repos, serverCheck.data);
+  const rows = allReposRows(repos, unpushed.data, newOnServer, new Date());
   const openRepo = (id: string, tab?: RepoTab) => {
     setSelected(id);
     setOpenTab(tab);
@@ -148,6 +151,7 @@ export function ReposView({
               position={i + 1}
               syncBadge={syncedAgo ? listSyncBadge(synced.get(repo.path), syncedAgo) : undefined}
               tags={filter.tags.get(repo.id) ?? []}
+              newOnServer={newOnServer.has(repo.id)}
               active={shown === "repo" && repo.id === current?.id}
               stars={stars}
               onSelect={() => openRepo(repo.id)}
@@ -161,6 +165,7 @@ export function ReposView({
             conn={conn}
             rows={rows}
             inContainer={unpushed.data?.inContainer === true}
+            serverCheck={serverCheck.data}
             filter={{ shown: repos.length, all: allRepos.length }}
             sessions={sessions}
             runningLive={runningLive}
@@ -192,6 +197,7 @@ export function ReposView({
             repo={current}
             initialTab={openTab}
             projectsDir={list.data?.projectsDir}
+            newOnServer={newOnServer.has(current.id)}
             sessions={sessions}
             runningLive={runningLive}
             onOpenInSessions={onOpenInSessions}
@@ -337,7 +343,7 @@ function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
 
 /**
  * A list row in HUD style (ADR-16): the item number, name, branch, and the state dot and text, which also counts the
- * commits to pull (ADR-293); the active one has a glowing stroke on the left. The number is only the position in the
+ * commits to pull (ADR-293) or says the server has new ones (ADR-295); the active one has a glowing stroke on the left. The number is only the position in the
  * list, not the repo identifier. The star beside the row moves the repo to the top (ADR-192): always shown on a starred
  * repo, on the others only on hover. Under the state stands the result of the last sync (`listSyncBadge`) and the
  * repo's tags (reasons in the tooltip); the `no-mise` tag is warning text, because such a repo has nothing to run (ADR-34).
@@ -347,6 +353,7 @@ function RepoListItem({
   position,
   syncBadge: badge,
   tags,
+  newOnServer,
   active,
   stars,
   onSelect,
@@ -355,12 +362,14 @@ function RepoListItem({
   position: number;
   syncBadge: SyncBadge | undefined;
   tags: RepoTag[];
+  /** The server check found commits the repo has not fetched (ADR-295). */
+  newOnServer: boolean;
   active: boolean;
   stars: StarredReposHandle;
   onSelect: () => void;
 }) {
   const { status } = repo;
-  const state = repoListTone(status);
+  const state = repoListTone(status, newOnServer);
   const noMise = tags.some((t) => t.name === NO_MISE_TAG);
   const otherTags = tags.filter((t) => t.name !== NO_MISE_TAG);
   return (

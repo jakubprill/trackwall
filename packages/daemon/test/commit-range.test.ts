@@ -6,7 +6,7 @@ import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-const vcs = new Vcs(systemTempFolder);
+const vcs = new Vcs(systemTempFolder, tmpdir());
 const head = (dir: string) => gitIn(dir, "rev-parse", "HEAD").trim();
 const MISSING = "0123456789abcdef0123456789abcdef01234567";
 

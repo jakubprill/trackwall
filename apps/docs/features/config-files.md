@@ -30,6 +30,7 @@ Under `workspace.yaml` a table lists its keys:
 | `gitProgram` | which git Trackwall runs to read your repos, when starting the one on your `PATH` is slow | "Settings > Workspace" |
 | `repoHosts` | where the Repos view searches and clones from | "Settings > Repo hosts" |
 | `starredRepos` | the repos you starred, listed first in the Repos view | the star in "Repos" |
+| `serverCheck` | whether Trackwall asks your repos' servers every 15 minutes for commits you have not fetched | "Settings > Repo hosts" |
 | `toolPermissions` | which tools sessions may use without asking you | by hand |
 | `alwaysAllow` | the tools you always allow in a repo's tasks, from "Always allow" in an approval | "Settings > Agents" |
 | `sandbox` | which tasks run their commands in Copilot CLI's sandbox | "Settings > Agents" |

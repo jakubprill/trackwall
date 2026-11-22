@@ -866,7 +866,7 @@ describe("the graph and find_endpoint on real git", () => {
   async function setup(extra: readonly string[] = []) {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-    const vcs = new Vcs(systemTempFolder);
+    const vcs = new Vcs(systemTempFolder, tmpdir());
     const workspace = new Workspace({
       inContainer: false,
       file: new WorkspaceFile(join(home, "workspace.yaml")),
