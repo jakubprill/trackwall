@@ -72,6 +72,8 @@ Install [mise](https://mise.jdx.dev/getting-started.html) and restart Trackwall.
 
 The doctor's "Copilot CLI sandbox for tasks" line says why Copilot CLI's sandbox cannot run here. Either give the computer or container what it lacks (on Linux the `bubblewrap` package; see [Copilot CLI's sandbox](/guide/dev-container#copilot-cli-s-sandbox) for a dev container), or choose "No task" in "Settings > Agents > Sandbox".
 
+On Windows, a task in the sandbox whose every git command fails with "Access denied" cannot commit. The sandbox may only start programs that Windows apps (the group ALL APPLICATION PACKAGES) may run, and a Git for Windows installed with permissions of its own may leave them out. The doctor's line warns about it and names the folder: reinstall Git for Windows with its default permissions, or, as an administrator, run `icacls "<Git's folder>" /grant "*S-1-15-2-1:(OI)(CI)RX" /T`.
+
 ## Trackwall is slow
 
 - The doctor's "Antivirus scanning" line names the folders an antivirus slows down; have them left out of real-time scanning.
