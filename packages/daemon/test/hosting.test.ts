@@ -62,7 +62,7 @@ describe("repo hosts through gh and glab", () => {
     expect(call?.args.slice(0, 3)).toEqual(["api", "--hostname", "gitlab.example.com"]);
     expect(call?.args[3]).toContain("membership=true");
     expect(call?.args[3]).toContain("search=orders%20bff&search_namespaces=true");
-    expect(call?.env).toMatchObject({ GITLAB_HOST: "gitlab.example.com", NO_PROMPT: "1", GIT_TERMINAL_PROMPT: "0" });
+    expect(call?.env).toMatchObject({ GITLAB_HOST: "gitlab.example.com", GLAB_NO_PROMPT: "1", GIT_TERMINAL_PROMPT: "0" });
   });
 
   test("GitLab fetches the pages asked for, a full last page offers the next one, and Show more fetches only the new page", async () => {
@@ -241,7 +241,7 @@ describe("repo hosts through gh and glab", () => {
     expect(calls()).toEqual([
       {
         args: ["repo", "clone", "shop/orders-bff", dest],
-        env: { GITLAB_HOST: "gitlab.example.com", NO_PROMPT: "1", GIT_TERMINAL_PROMPT: "0" },
+        env: { GITLAB_HOST: "gitlab.example.com", GLAB_NO_PROMPT: "1", GIT_TERMINAL_PROMPT: "0" },
       },
     ]);
   });

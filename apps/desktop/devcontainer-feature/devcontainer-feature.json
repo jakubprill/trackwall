@@ -10,6 +10,11 @@
       "default": "7700",
       "description": "The port Trackwall listens on, which the container forwards to the same number on your computer."
     },
+    "publish": {
+      "type": "boolean",
+      "default": false,
+      "description": "Start a relay with the container that lets Docker publish Trackwall's port and the one after it (runArgs -p 127.0.0.1:7700:7700 -p 127.0.0.1:7701:7701), so the app reaches Trackwall without VS Code's port forwarding."
+    },
     "sandbox": {
       "type": "boolean",
       "default": false,
