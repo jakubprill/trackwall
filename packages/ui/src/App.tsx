@@ -18,6 +18,7 @@ import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { inDesktopShell, reportShown, START_PARAMS, startFromLocation } from "@/lib/app-window";
 import type { PaletteAction } from "@/lib/command-palette";
+import { containerAttentionCount } from "@/lib/container-health";
 import { DaemonPlaceContext, useDaemonPlace } from "@/lib/desktop";
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
@@ -37,6 +38,7 @@ import { ShowTrackwallTarget } from "@/lib/trackwall-link";
 import { useAppMenu } from "@/lib/use-app-menu";
 import { useAppUpdate } from "@/lib/use-app-update";
 import { useConnection } from "@/lib/use-connection";
+import { CONTAINER_HEALTH_PACE, useContainerHealth } from "@/lib/use-container-health";
 import { useDaemonEvents, useDaemonLost } from "@/lib/use-daemon-events";
 import { useFileDrop } from "@/lib/use-file-drop";
 import { useJumpRequest } from "@/lib/use-jump-request";
@@ -150,6 +152,8 @@ export function App() {
   const terminalsLive = useMemo(() => events?.feed("terminals.changed"), [events]);
   const outcomes = useTaskOutcomes(conn, events);
   const projectsDir = useProjectsDir(conn);
+  // Home lists the container health's warnings (ADR-280) and the view bar counts them on its icon (ADR-287): one read for both.
+  const containerHealth = useContainerHealth(conn, { pollMs: CONTAINER_HEALTH_PACE });
   const appUpdate = useAppUpdate(sessions.data && agentsInTurn(sessions.data.sessions));
   const tree = useSessionTree(sessions);
   const { rows } = tree;
@@ -249,7 +253,7 @@ export function App() {
                 active={view}
                 onSelect={setView}
                 newWindow={newWindow}
-                badges={{ sessions: attentionCount(sessions.data) }}
+                badges={{ home: containerAttentionCount(containerHealth.data), sessions: attentionCount(sessions.data) }}
               />
               <div className="flex min-w-0 flex-1 flex-col">
                 {appUpdate && <UpdateBanner handle={appUpdate} />}
@@ -299,6 +303,7 @@ export function App() {
                           eventsLost={eventsLost}
                           repoWatch={repoWatch}
                           sessions={sessions}
+                          containerWarnings={containerHealth.data?.warnings}
                           onOpenInSessions={openInSessions}
                           onOpenRepo={openRepos}
                           onOpenDaemon={() => openSettings("diagnostics")}
