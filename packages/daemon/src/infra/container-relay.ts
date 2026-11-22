@@ -20,6 +20,13 @@ export interface RelayRoute {
 
 const LOOPBACK = "127.0.0.1";
 
+/**
+ * Open connections per route: whatever reaches the container's network (another container on it) could otherwise open
+ * connections until the relay and the daemon run out of file descriptors, and then the app and task sessions, which
+ * reach the daemon on 127.0.0.1, could not either. The app keeps a few open; services opened through the proxy, more.
+ */
+const RELAY_MAX_CONNECTIONS = 256;
+
 /** The container's own IPv4 addresses, the ones Docker forwards published ports to; never the loopback. */
 export function containerAddresses(interfaces: ReturnType<typeof networkInterfaces> = networkInterfaces()): string[] {
   return Object.values(interfaces)
@@ -49,8 +56,9 @@ function pass(client: Socket, targetPort: number): void {
 }
 
 /** Listens on one route; an error after that (no file descriptors left, say) goes to `onError`, and the route keeps listening. */
-function listen(route: RelayRoute, onError: (msg: string) => void): Promise<Server> {
+function listen(route: RelayRoute, onError: (msg: string) => void, maxConnections: number): Promise<Server> {
   const server = createServer((client) => pass(client, route.targetPort));
+  server.maxConnections = maxConnections;
   return new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(route.listen.port, route.listen.host, () => {
@@ -65,13 +73,14 @@ function listen(route: RelayRoute, onError: (msg: string) => void): Promise<Serv
 export async function startRelay(
   routes: readonly RelayRoute[],
   onError: (msg: string) => void = () => {},
+  maxConnections = RELAY_MAX_CONNECTIONS,
 ): Promise<{ close(): Promise<void> }> {
   if (routes.length === 0) throw new Error("the container has no address besides 127.0.0.1 to listen on");
   const servers: Server[] = [];
   const close = () => Promise.all(servers.map((server) => new Promise<void>((r) => server.close(() => r())))).then(() => {});
   for (const route of routes) {
     try {
-      servers.push(await listen(route, onError));
+      servers.push(await listen(route, onError, maxConnections));
     } catch (err) {
       await close();
       throw new Error(`cannot listen on ${route.listen.host}:${route.listen.port}: ${messageOf(err)}`);

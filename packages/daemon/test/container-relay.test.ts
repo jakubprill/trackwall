@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createServer, type Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import { type AddressInfo, connect, type Socket } from "node:net";
 import { parseCommandLine } from "../src/infra/args.ts";
 import { containerAddresses, relayRoutes, startRelay } from "../src/infra/container-relay.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
@@ -79,6 +79,26 @@ describe("the relay for ports Docker publishes (ADR-288)", () => {
     ).rejects.toThrow(`cannot listen on 127.0.0.1:${taken}`);
     const again = await startRelay([{ listen: { host: "127.0.0.1", port: free }, targetPort: taken }]);
     relays.push(again);
+  });
+
+  test("a connection over the relay's limit is closed at once, so a neighbour cannot use up the daemon's connections", async () => {
+    const daemonPort = await daemonStandIn();
+    const relayPort = await freePort();
+    relays.push(await startRelay([{ listen: { host: "127.0.0.1", port: relayPort }, targetPort: daemonPort }], () => {}, 1));
+    const open = (): Promise<Socket> =>
+      new Promise((resolve) => {
+        const socket = connect({ host: "127.0.0.1", port: relayPort }, () => resolve(socket));
+      });
+    const closed = (socket: Socket): Promise<void> => new Promise((resolve) => socket.once("close", () => resolve()));
+
+    const first = await open();
+    const second = await open();
+    await closed(second);
+
+    expect(first.destroyed).toBe(false);
+    first.destroy();
+    const res = await loopbackRequest(relayPort, "/api/health", { headers: { host: `127.0.0.1:${daemonPort}` } });
+    expect(res.body).toBe(`host 127.0.0.1:${daemonPort}`);
   });
 
   test("a container without an address besides the loopback has nothing to relay", async () => {
