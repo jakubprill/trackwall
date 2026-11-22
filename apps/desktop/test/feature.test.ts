@@ -59,7 +59,7 @@ describe("the Dev Container Feature (ADR-164)", () => {
     );
   });
 
-  test("offers a relay for ports Docker publishes as an option, off unless the user asks, started by the entrypoint (ADR-287)", () => {
+  test("offers a relay for ports Docker publishes as an option, off unless the user asks, started by the entrypoint (ADR-288)", () => {
     const files = featureFiles(templates, values);
     expect(JSON.parse(files.json).options.publish).toMatchObject({ type: "boolean", default: false });
     expect(files.install).toContain(

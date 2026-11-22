@@ -30,7 +30,7 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-describe("the relay for ports Docker publishes (ADR-287)", () => {
+describe("the relay for ports Docker publishes (ADR-288)", () => {
   test("it listens on the container's own IPv4 addresses, never the loopback or IPv6", () => {
     expect(
       containerAddresses({

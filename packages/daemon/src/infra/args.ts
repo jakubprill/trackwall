@@ -105,7 +105,7 @@ export const CONTAINER_START = "start";
 export const CONTAINER_UPDATE = "update";
 /** The background process of an update (ADR-165), also how its process is recognised in `/proc/<pid>/cmdline`. */
 export const APPLY_UPDATE_COMMAND = "apply-update";
-/** The relay for ports Docker publishes (ADR-287), which the Feature's entrypoint starts with its `publish` option. */
+/** The relay for ports Docker publishes (ADR-288), which the Feature's entrypoint starts with its `publish` option. */
 export const CONTAINER_RELAY = "relay";
 const CONTAINER_ACTIONS = [CONTAINER_START, CONTAINER_UPDATE, SUPERVISE_COMMAND, APPLY_UPDATE_COMMAND, CONTAINER_RELAY] as const;
 const UPDATE_ACTIONS: readonly string[] = [CONTAINER_UPDATE, APPLY_UPDATE_COMMAND];

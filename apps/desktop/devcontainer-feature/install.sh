@@ -32,7 +32,7 @@ true | false) ;;
 *) fail "sandbox must be true or false, got '$SANDBOX'" ;;
 esac
 
-# The "publish" option (ADR-287): the entrypoint also starts the relay that lets Docker publish Trackwall's ports, which
+# The "publish" option (ADR-288): the entrypoint also starts the relay that lets Docker publish Trackwall's ports, which
 # listen on 127.0.0.1 in the container, so the app needs no port forwarding from VS Code.
 PUBLISH="${PUBLISH:-false}"
 case "$PUBLISH" in
@@ -161,7 +161,7 @@ chmod 755 /usr/local/bin/trackwall-container
 # Docker or Rancher Desktop, which run no postStartCommand (only the Dev Containers tooling does). In the background,
 # so the container's own command is not held up; the start is idempotent, so postStartCommand running it again is a no-op.
 # Its JSON goes nowhere, since nobody reads it here; the daemon's own log is logs/daemon.log. With the publish option it
-# starts the relay too (ADR-287), which runs until the container stops and writes to the same log.
+# starts the relay too (ADR-288), which runs until the container stops and writes to the same log.
 mkdir -p /usr/local/share/trackwall
 ENTRYPOINT_FILE=/usr/local/share/trackwall/entrypoint.sh
 cat > "$ENTRYPOINT_FILE" << 'ENTRYPOINT'

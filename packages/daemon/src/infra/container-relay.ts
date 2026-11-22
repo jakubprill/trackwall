@@ -5,7 +5,7 @@ import { appendNote } from "./container-log.ts";
 import { messageOf } from "./errors.ts";
 
 /**
- * The relay of a dev container whose ports Docker publishes (ADR-287): the daemon and the service proxy listen only on
+ * The relay of a dev container whose ports Docker publishes (ADR-288): the daemon and the service proxy listen only on
  * 127.0.0.1, which Docker cannot publish, so the relay listens on the container's own addresses on the same port numbers
  * and passes every connection on to 127.0.0.1, byte for byte. It reads nothing and adds nothing: the daemon's checks of
  * `Host`, `Origin` and the token still apply to every request. Started by the Feature's entrypoint with its `publish`
