@@ -10,7 +10,7 @@ import { NO_HOOKS } from "./no-hooks.ts";
 import { networkAddress } from "./remote.ts";
 
 /**
- * A repo the daemon itself writes to (§4.13, ADR-86): the local config store. An agent can write into its folder like
+ * A repo the daemon itself writes to (§4.13, ADR-86): the workspace store. An agent can write into its folder like
  * into any other, so nothing in it is trusted. The folder and its `.git` must be real directories, never a link or a
  * `gitdir:` file that would point at another repo, and its own `.git/config` may hold only the keys `git init`, `git
  * clone` and `git remote add` write (`STORE_CONFIG`): any other key could make git run a program (a filter, a
@@ -70,10 +70,17 @@ export async function ensureBackupRepo(dir: string): Promise<void> {
 }
 
 /**
- * Commits `files` on top of `main`; `false` when the tree stays the same. Call after `ensureBackupRepo`, and one at a
- * time. The user's index is updated after the commit, only for the backed-up paths; when that fails the commit stands.
+ * Commits `files` on top of `main` and takes the paths in `removed` out of it; `false` when the tree stays the same. Call
+ * after `ensureBackupRepo`, and one at a time. The user's index is updated after the commit, only for those paths; when
+ * that fails the commit stands.
  */
-export async function commitBackups(dir: string, files: readonly BackupFile[], message: string, scratchDir: string): Promise<boolean> {
+export async function commitBackups(
+  dir: string,
+  files: readonly BackupFile[],
+  removed: readonly string[],
+  message: string,
+  scratchDir: string,
+): Promise<boolean> {
   // Even `read-tree` and `update-index` run a hook (`post-index-change`), so no command here may see the store's hooks.
   const config = [NO_HOOKS];
   const parent = (await existingCommit(dir, BRANCH)) ?? null;
@@ -93,6 +100,7 @@ export async function commitBackups(dir: string, files: readonly BackupFile[], m
     if (parent !== null) await git(dir, ["read-tree", parent], { indexFile, config });
     entries = await Promise.all(files.map(async (f) => ({ path: f.path, oid: await hashOnce(f.content) })));
     for (const { path, oid } of entries) await git(dir, updateIndex(path, oid), { indexFile, config });
+    for (const path of removed) await git(dir, removeFromIndex(path), { indexFile, config });
     const tree = (await git(dir, ["write-tree"], { indexFile, config })).stdout.toString("utf8").trim();
     if (parent !== null && tree === (await treeOf(dir, parent))) return false;
     const parents = parent === null ? [] : ["-p", parent];
@@ -104,6 +112,7 @@ export async function commitBackups(dir: string, files: readonly BackupFile[], m
     await removeFolder(scratch, removeIfPresent).catch(() => undefined);
   }
   for (const { path, oid } of entries) await git(dir, updateIndex(path, oid), { config });
+  for (const path of removed) await git(dir, removeFromIndex(path), { config });
   return true;
 }
 
@@ -203,6 +212,10 @@ async function ensurePushRepo(pushDir: string, store: string): Promise<void> {
 
 function updateIndex(path: string, oid: string): string[] {
   return ["update-index", "--add", "--cacheinfo", `100644,${oid},${path}`];
+}
+
+function removeFromIndex(path: string): string[] {
+  return ["update-index", "--force-remove", "--", path];
 }
 
 async function hashBlob(dir: string, content: Buffer, config: string[]): Promise<string> {

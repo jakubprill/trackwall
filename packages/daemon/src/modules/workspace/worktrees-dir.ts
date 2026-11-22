@@ -18,7 +18,7 @@ export function defaultWorktreesDir(projectsDir: string): string {
  * Refuses a folder in which `<folder>/<repo>/<branch>` would land inside a repo of the projects folder: the projects folder
  * itself (a worktree would go into the repo of the same name) or a folder inside one of its repos (git would list the
  * worktrees as untracked files of that repo), and a folder of `.trackwall` other than its worktrees folder (a worktree
- * would go into the local config store's repo, or among Trackwall's own folders, ADR-125). A folder outside the projects
+ * would go into the workspace store's repo, or among Trackwall's own folders, ADR-125). A folder outside the projects
  * folder is the user's choice.
  */
 export async function checkWorktreesDir(dir: string, projectsDir: string | null): Promise<void> {

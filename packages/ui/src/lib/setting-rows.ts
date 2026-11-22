@@ -23,7 +23,7 @@ export const SETTING_ROWS = {
   "projects-folder": { title: "Projects folder", what: "The folder with your repos.", group: "Folders" },
   "worktrees-dir": { title: "Task worktrees folder", what: "Where each task gets its own copy of a repo.", group: "Folders" },
   "git-program": { title: "Git program", what: "The git that reads your repos.", group: "Folders" },
-  "local-config-store": { title: "Local config store", what: "Backs up the files your repos keep out of git.", group: "Backup" },
+  "workspace-store": { title: "Workspace store", what: "Backs up the files your repos keep out of git.", group: "Backup" },
   "work-backup": {
     title: "Container work backup",
     what: "One file with the commits and changes only this container has.",

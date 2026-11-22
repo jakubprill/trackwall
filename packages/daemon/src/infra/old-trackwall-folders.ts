@@ -8,7 +8,7 @@ import { ensureTrackwallDir, trackwallDir } from "./trackwall-dir.ts";
 /**
  * The folders Trackwall kept in the projects folder before ADR-125, each moved into `.trackwall` by a rename on the same
  * drive, so nothing is copied. A move that fails (on Windows a program can hold a file in the folder open) is logged and
- * tried again at the next start; until then the old store stays in use (`localConfigStoreDir`). The task worktrees
+ * tried again at the next start; until then the old store stays in use (`workspaceStoreDir`). The task worktrees
  * folder is not moved: a git worktree knows its path and a session may work in it, so each task keeps the folder it
  * remembers, and the old folder goes once it is empty. This file goes when no installation has the old folders left.
  */
@@ -34,10 +34,10 @@ export async function moveOldTrackwallFolders(projectsDir: string, log: (msg: st
 }
 
 /**
- * The local config store in the projects folder: in `.trackwall`, or in its old folder while that has not moved yet, so
+ * The workspace store in the projects folder: in `.trackwall`, or in its old folder while that has not moved yet, so
  * that a failed move does not leave the backups in one repo and start a second.
  */
-export function localConfigStoreDir(projectsDir: string): string {
+export function workspaceStoreDir(projectsDir: string): string {
   const dir = trackwallDir(projectsDir, "local");
   const old = join(projectsDir, OLD_NAMES.local);
   return !existsSync(dir) && existsSync(old) ? old : dir;

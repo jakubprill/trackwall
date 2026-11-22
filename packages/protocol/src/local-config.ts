@@ -5,7 +5,7 @@ import { Commit, RepoId } from "./workspace.ts";
 
 /**
  * Contract of the `local-config` module (§4.13, ADR-86): the files a repo keeps outside git on purpose, backed up into
- * the local config store, a git repo in the projects folder, and restored from it into a new clone. Every action is
+ * the workspace store, a git repo in the projects folder, and restored from it into a new clone. Every action is
  * `POST /api/local-config/<action>`.
  */
 
@@ -55,15 +55,15 @@ export const RepoLocalConfig = z.object({
 export type RepoLocalConfig = z.infer<typeof RepoLocalConfig>;
 
 /** The last push of the store to its remote since the daemon started. */
-export const LocalConfigPush = z.discriminatedUnion("kind", [
+export const WorkspaceStorePush = z.discriminatedUnion("kind", [
   /** No push yet: the store has no remote, or nothing was backed up since the daemon started. */
   z.object({ kind: z.literal("none") }),
   z.object({ kind: z.literal("ok"), at: z.string() }),
   z.object({ kind: z.literal("failed"), at: z.string(), message: z.string() }),
 ]);
-export type LocalConfigPush = z.infer<typeof LocalConfigPush>;
+export type WorkspaceStorePush = z.infer<typeof WorkspaceStorePush>;
 
-export const LocalConfigStore = z.object({
+export const WorkspaceStore = z.object({
   /** `null` while the projects folder is not set. */
   dir: z.string().nullable(),
   /** The newest commit in the store, the last backup; `null` before the first one. */
@@ -82,11 +82,11 @@ export const LocalConfigStore = z.object({
   remoteAllowed: z.boolean(),
   /** Why `remote` cannot be allowed (not HTTPS or SSH, several addresses); `null` when it can. */
   remoteProblem: z.string().nullable(),
-  push: LocalConfigPush,
+  push: WorkspaceStorePush,
   /** Why the last backup did not finish (a file that cannot be read, a git error); `null` when it did. */
   problem: z.string().nullable(),
 });
-export type LocalConfigStore = z.infer<typeof LocalConfigStore>;
+export type WorkspaceStore = z.infer<typeof WorkspaceStore>;
 
 /**
  * An address without the user and token an HTTP or HTTPS address may carry: `https://me:token@host/x` is
@@ -105,7 +105,7 @@ const endpoint = apiEndpoints("local-config");
 const RepoRequest = z.object({ repo: RepoId }).strict();
 
 export const localConfigApi = {
-  store: endpoint("store", z.object({}).strict(), LocalConfigStore),
+  store: endpoint("store", z.object({}).strict(), WorkspaceStore),
   repo: endpoint("repo", RepoRequest, RepoLocalConfig),
   /** Every repo that has a local config file or a backup of one, by identifier (ADR-108); repos with neither are left out. */
   repos: endpoint("repos", z.object({}).strict(), z.array(RepoLocalConfig)),
@@ -120,7 +120,7 @@ export const localConfigApi = {
    * Pushes the store to its remote from now on (ADR-127): `remote` is the address as the user saw it in `store`, so a
    * remote that changed meanwhile is refused. Only from the UI, never from MCP: an agent must not choose where the backups go.
    */
-  allowRemote: endpoint("allow-remote", z.object({ remote: z.string() }).strict(), LocalConfigStore),
+  allowRemote: endpoint("allow-remote", z.object({ remote: z.string() }).strict(), WorkspaceStore),
   /** Pushes the store nowhere from now on (removes `localConfigRemote`). Only from the UI, like `allowRemote`. */
-  stopPushing: endpoint("stop-pushing", z.object({}).strict(), LocalConfigStore),
+  stopPushing: endpoint("stop-pushing", z.object({}).strict(), WorkspaceStore),
 };

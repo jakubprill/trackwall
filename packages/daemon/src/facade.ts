@@ -127,7 +127,7 @@ export interface Facade {
   serverCheck: ServerCheck;
   cards: Cards;
   graph: Graph;
-  /** The local config files of the repos, backed up into the local config store every few seconds (ADR-86); `main.ts` starts it. */
+  /** The local config files of the repos, backed up into the workspace store every few seconds (ADR-86); `main.ts` starts it. */
   localConfig: LocalConfig;
   mise: Mise;
   procs: ProcessGroups;
@@ -247,8 +247,8 @@ export { HOSTING_CLIS } from "./modules/vcs/hosting.ts";
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
 const CARDS_DIR = "cards";
-/** The bare repo the local config store is pushed from (ADR-127). */
-const LOCAL_CONFIG_PUSH_DIR = "local-config-push";
+/** The repo the workspace store is pushed from (ADR-127); its folder keeps the name it had before the store was renamed (ADR-297), so an existing push repo stays in use. */
+const WORKSPACE_STORE_PUSH_DIR = "local-config-push";
 const DAY_START_FILE = "day-start.json";
 const ROUTINE_APPROVALS_FILE = "routine-approvals.json";
 const KNOWLEDGE_APPROVALS_FILE = "knowledge-approvals.json";
@@ -366,7 +366,7 @@ export function createFacade(o: FacadeOptions): Facade {
     afterClone: async (dir) => {
       try {
         const restored = await localConfig.restoreCloned(dir);
-        if (restored.length > 0) o.log(`restored ${restored.join(", ")} from the local config store into ${dir}`);
+        if (restored.length > 0) o.log(`restored ${restored.join(", ")} from the workspace store into ${dir}`);
       } catch (err) {
         o.log(`restoring local config into ${dir} failed: ${messageOf(err)}`);
       }
@@ -394,7 +394,7 @@ export function createFacade(o: FacadeOptions): Facade {
     now: () => new Date(),
     log: o.log,
   });
-  const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, LOCAL_CONFIG_PUSH_DIR) });
+  const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, WORKSPACE_STORE_PUSH_DIR) });
   const board = new Board({ projectsDir: () => workspace.projectsDir() });
   const routines = new Routines({
     projectsDir: () => workspace.projectsDir(),
@@ -608,7 +608,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "knowledge-approvals-file": join(o.home, KNOWLEDGE_APPROVALS_FILE),
       "cards-dir": join(o.home, CARDS_DIR),
       "logs-dir": join(o.home, LOGS_DIR),
-      "local-config-push-repo": join(o.home, LOCAL_CONFIG_PUSH_DIR),
+      "workspace-store-push-repo": join(o.home, WORKSPACE_STORE_PUSH_DIR),
       "legacy-worktrees-dir": join(o.home, LEGACY_WORKTREES_DIR),
       "state-backups-dir": join(o.home, STATE_BACKUPS_DIR),
       "work-backup-dir": join(o.home, WORK_BACKUP_DIR),
@@ -626,7 +626,7 @@ export function createFacade(o: FacadeOptions): Facade {
       const env = await mise.projectsEnv();
       return { variables: Object.keys(env.vars), secrets: env.secretNames, problem: env.problem };
     },
-    localConfigStore: () => localConfig.store(),
+    workspaceStore: () => localConfig.store(),
     openEditor: (path) => o.openUrl(vscodeUrl(path)),
     openFolder: o.openFolder,
   });

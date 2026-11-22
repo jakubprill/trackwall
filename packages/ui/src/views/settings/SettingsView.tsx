@@ -38,7 +38,6 @@ import { HomeSurface } from "./HomeSurface.tsx";
 import { JavaNavigationSurface } from "./JavaNavigationSurface.tsx";
 import { KeepScreenOnSurface } from "./KeepScreenOnSurface.tsx";
 import { LocalConfigReposSurface } from "./LocalConfigReposSurface.tsx";
-import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
 import { McpCallsSurface } from "./McpCallsSurface.tsx";
 import { ModelStatsSurface } from "./ModelStatsSurface.tsx";
 import { ProjectsFolderSurface } from "./ProjectsFolderSurface.tsx";
@@ -59,6 +58,7 @@ import { TipsSurface } from "./TipsSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
 import { VsCodeExtensionSurface } from "./VsCodeExtensionSurface.tsx";
 import { WorkBackupSurface } from "./WorkBackupSurface.tsx";
+import { WorkspaceStoreSurface } from "./WorkspaceStoreSurface.tsx";
 import { WorktreesDirSurface } from "./WorktreesDirSurface.tsx";
 
 type SettingsProps = {
@@ -183,8 +183,8 @@ function Section({
       return <WorktreesDirSurface conn={conn} settings={settings} />;
     case "git-program":
       return <GitProgramSurface conn={conn} settings={settings} />;
-    case "local-config-store":
-      return <LocalConfigStoreSurface conn={conn} />;
+    case "workspace-store":
+      return <WorkspaceStoreSurface conn={conn} />;
     case "work-backup":
       return <WorkBackupSurface conn={conn} />;
     case "repo-hosts":

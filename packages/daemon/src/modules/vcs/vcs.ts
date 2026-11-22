@@ -107,7 +107,7 @@ export const SERVER_QUESTIONS_DIR = "server-questions";
  * of the default branch and an update of the working directory when that branch is checked out, agent task worktrees
  * (ADR-31): a new branch with a worktree, its removal and the removal of the branch, the push of a task branch at the
  * user's request (ADR-77), and for local config (ADR-86) the lines it adds to a repo's `info/exclude` and the commits and
- * push of the local config store, a repo only the daemon writes to.
+ * push of the workspace store, a repo only the daemon writes to.
  */
 export class Vcs {
   /**
@@ -322,7 +322,7 @@ export class Vcs {
     return this.syncing.run(await this.commonDir(dir), () => pushBranch(dir, branch, source));
   }
 
-  // Local config (ADR-86): what a repo tracks or ignores, ignoring in one clone, and the local config store's commits and push.
+  // Local config (ADR-86): what a repo tracks or ignores, ignoring in one clone, and the workspace store's commits and push.
   readonly trackedPaths = trackedPaths;
   readonly ignoredPaths = ignoredPaths;
   readonly excludeLocally = excludeLocally;
@@ -330,8 +330,8 @@ export class Vcs {
   readonly backupRemote = backupRemote;
   readonly storeHead = storeHead;
 
-  async commitBackups(dir: string, files: readonly BackupFile[], message: string): Promise<boolean> {
-    return commitBackups(dir, files, message, await this.scratch());
+  async commitBackups(dir: string, files: readonly BackupFile[], removed: readonly string[], message: string): Promise<boolean> {
+    return commitBackups(dir, files, removed, message, await this.scratch());
   }
   readonly pushBackups = pushBackups;
 

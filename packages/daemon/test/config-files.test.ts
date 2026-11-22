@@ -186,8 +186,8 @@ describe("config files", () => {
     expect(file?.detail).toContain("workspace.yaml is invalid");
     expect(report.workspaceKeys).toEqual([]);
     expect(report.places.projects).toBeNull();
-    expect(report.entries.find((e) => e.id === "local-config-store")).toEqual({
-      id: "local-config-store",
+    expect(report.entries.find((e) => e.id === "workspace-store")).toEqual({
+      id: "workspace-store",
       name: ".trackwall/local",
       path: null,
       state: "missing",

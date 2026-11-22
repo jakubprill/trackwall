@@ -150,7 +150,7 @@ One directory on the user's disk, set in `workspace.yaml` or in the settings. Ea
 _Avoid_: workspace directory, root, folder (without qualification)
 
 **Trackwall folder** (`TRACKWALL_DIR` = `.trackwall`, `TrackwallFolder`, `trackwallDir`):
-The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the local config store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125), and `drops`, the dropped files (ADR-226). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
+The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the workspace store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125), and `drops`, the dropped files (ADR-226). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
 _Avoid_: data folder, `.trackwall-*` folders (their names before ADR-125)
 
 **Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
@@ -290,13 +290,13 @@ The sentence in the daemon's prompt that tells a session the user trusted the mi
 The files a repo keeps outside git on purpose, only for this clone: `mise.local.toml` (`MISE_LOCAL_CONFIG_FILE`, mise tasks, tools and variables mise reads on top of `mise.toml`), `mise.toml` (`MISE_CONFIG_FILE`) when the repo's commits do not have it (ADR-110), and `.worktreeinclude` (ADR-86). A file the repo's commits have is not local config. Each file's state against the store is `absent`, `tracked`, `backed_up`, `pending` or `missing` (`LocalConfigFileState`); "Restore from the store" copies a missing file back, and "Ignore locally" adds the files to the clone's `.git/info/exclude`.
 _Avoid_: overlay, local files (that is `.worktreeinclude`'s included files)
 
-**Local config store** (`TrackwallFolder` `local`: `.trackwall/local`, `LocalConfigStore`; UI "Local config store"):
-The git repo in the projects folder that holds the local config of every repo as `<repo folder>/<file>`, committed by Trackwall a few seconds after a file changes and pushed to the store's remote when the user added one (ADR-86). The repo list skips it.
-_Avoid_: backup repo, overlay folder
+**Workspace store** (`TrackwallFolder` `local`: `.trackwall/local`, `WorkspaceStore`, `workspaceStoreDir`; UI "Workspace store"):
+The git repo in the projects folder where Trackwall keeps what the user set up for the workspace, with its history: today the local config of every repo as `repos/<repo folder>/<file>` (ADR-297), committed by Trackwall a few seconds after a file changes and pushed only to the address the user allowed (ADR-86, ADR-127). The repo list skips it. Its folder and the `workspace.yaml` key of its remote (`localConfigRemote`) keep the names they had before ADR-297.
+_Avoid_: local config store (its name before ADR-297), backup repo, overlay folder
 
 **Work backup** (`WorkBackup`, module `work-backup`, `WorkBackupInfo`; UI "Container work backup"):
 One file, `trackwall-backup-<date>-<time>.tar.gz`, with everything that lives only in the container's volume: for each repo with unpushed work a `git bundle` of its branches, stashes and the uncommitted changes of each of its worktrees, and Trackwall's own files a new container lacks (ADR-275). Only where the daemon runs in a container; only the last one stays there, and the user downloads it to their computer. Files git ignores and sign-ins never go in. Restoring one (`WorkRestore`, `WorkBackupRestore`; UI "Restore from a backup…") brings it back into clones the user made and only adds: new branches, forward moves, stashes, `restored/` branches and missing `.trackwall` files.
-_Avoid_: snapshot (that is a copy of the whole volume), local config store (that is the files kept out of git)
+_Avoid_: snapshot (that is a copy of the whole volume), workspace store (that is the git repo of what the user set up)
 
 **Container health** (`ContainerHealth`, module `container-health`, `HealthWarning`; UI "Container health"):
 How the container Trackwall runs in is doing, read from its own control group: memory, processors and processes against the container's limits, the disk of Docker's virtual machine, the processes the kernel killed for memory (`OomKill`) and the daemon's restarts (`DaemonRestart`) in the last day, and the warnings they add up to (ADR-279). Only in a container.

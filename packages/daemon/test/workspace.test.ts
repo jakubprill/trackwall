@@ -501,7 +501,7 @@ describe("the task worktrees folder (ADR-84)", () => {
   );
 
   test(
-    "a folder of .trackwall other than its worktrees folder is refused, so no worktree lands in the local config store",
+    "a folder of .trackwall other than its worktrees folder is refused, so no worktree lands in the workspace store",
     async () => {
       const { workspace, projects } = await workspaceWithProjectsDir();
       mkdirSync(join(projects, ".trackwall", "local"), { recursive: true });
