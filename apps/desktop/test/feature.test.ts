@@ -37,8 +37,9 @@ describe("the Dev Container Feature (ADR-164)", () => {
   test("starts Trackwall at every start of the container, not only when VS Code runs postStartCommand", () => {
     const files = featureFiles(templates, values);
     expect(JSON.parse(files.json).entrypoint).toBe("/usr/local/share/trackwall/entrypoint.sh");
-    expect(files.install).toContain("cat > /usr/local/share/trackwall/entrypoint.sh << 'ENTRYPOINT'");
-    expect(files.install).toContain('/usr/local/bin/trackwall-container start > /dev/null &\nexec "$@"\n');
+    expect(files.install).toContain("cat > \"$ENTRYPOINT_FILE\" << 'ENTRYPOINT'");
+    expect(files.install).toContain("/usr/local/bin/trackwall-container start > /dev/null &\nENTRYPOINT\n");
+    expect(files.install).toContain('echo \'exec "$@"\' >> "$ENTRYPOINT_FILE"');
   });
 
   test("runs the container with an init process, so the stopped sessions' orphans are reaped and their group counts as stopped", () => {
@@ -56,6 +57,25 @@ describe("the Dev Container Feature (ADR-164)", () => {
     expect(featureFiles(templates, values).install).toContain(
       "apt-get install -y -qq --no-install-recommends bubblewrap slirp4netns iproute2 iptables util-linux",
     );
+  });
+
+  test("offers a relay for ports Docker publishes as an option, off unless the user asks, started by the entrypoint (ADR-291)", () => {
+    const files = featureFiles(templates, values);
+    expect(JSON.parse(files.json).options.publish).toMatchObject({ type: "boolean", default: false });
+    expect(files.install).toContain(
+      'if [ "$PUBLISH" = true ]; then\n  echo \'/usr/local/bin/trackwall-container relay > /dev/null 2>&1 &\' >> "$ENTRYPOINT_FILE"\nfi',
+    );
+    expect(files.install).toContain("start | update | relay)");
+  });
+
+  test.skipIf(process.platform === "win32")("stops the image build on a publish value that is not true or false", () => {
+    const install = join(mkdtempSync(join(tmpdir(), "trackwall-feature-")), "install.sh");
+    writeFileSync(install, featureFiles(templates, values).install);
+    const run = spawnSync("sh", [install], { env: { ...process.env, PUBLISH: "yes" }, encoding: "utf8" });
+    expect({ status: run.status, stderr: run.stderr }).toEqual({
+      status: 1,
+      stderr: "trackwall feature: publish must be true or false, got 'yes'\n",
+    });
   });
 
   test.skipIf(process.platform === "win32")(
