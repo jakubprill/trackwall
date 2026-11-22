@@ -32,6 +32,14 @@ true | false) ;;
 *) fail "sandbox must be true or false, got '$SANDBOX'" ;;
 esac
 
+# The "publish" option (ADR-287): the entrypoint also starts the relay that lets Docker publish Trackwall's ports, which
+# listen on 127.0.0.1 in the container, so the app needs no port forwarding from VS Code.
+PUBLISH="${PUBLISH:-false}"
+case "$PUBLISH" in
+true | false) ;;
+*) fail "publish must be true or false, got '$PUBLISH'" ;;
+esac
+
 # The user VS Code works as; Trackwall runs as that user, with its state in that user's home.
 USER_NAME="${_REMOTE_USER:-root}"
 case "$USER_NAME" in
@@ -136,9 +144,9 @@ case "\$current" in
 [0-9]*.[0-9]*.[0-9]*) if [ -x "\$bin_dir/\$current/trackwall-daemon" ]; then bin="\$bin_dir/\$current/trackwall-daemon"; fi ;;
 *) ;;
 esac
-# start and update on the Feature's port, which a --port of the caller's overrides; anything else, such as address, as it is.
+# start, update and relay on the Feature's port, which a --port of the caller's overrides; anything else, such as address, as it is.
 case "\${1:-}" in
-start | update)
+start | update | relay)
   action=\$1
   shift
   exec "\$bin" container "\$action" --port $PORT "\$@"
@@ -152,13 +160,18 @@ chmod 755 /usr/local/bin/trackwall-container
 # The Feature's entrypoint (ADR-184): every start of the container starts Trackwall, also `docker restart` and a start from
 # Docker or Rancher Desktop, which run no postStartCommand (only the Dev Containers tooling does). In the background,
 # so the container's own command is not held up; the start is idempotent, so postStartCommand running it again is a no-op.
-# Its JSON goes nowhere, since nobody reads it here; the daemon's own log is logs/daemon.log.
+# Its JSON goes nowhere, since nobody reads it here; the daemon's own log is logs/daemon.log. With the publish option it
+# starts the relay too (ADR-287), which runs until the container stops and writes to the same log.
 mkdir -p /usr/local/share/trackwall
-cat > /usr/local/share/trackwall/entrypoint.sh << 'ENTRYPOINT'
+ENTRYPOINT_FILE=/usr/local/share/trackwall/entrypoint.sh
+cat > "$ENTRYPOINT_FILE" << 'ENTRYPOINT'
 #!/bin/sh
 # Starts Trackwall with the container, written by the Trackwall Dev Container Feature.
 /usr/local/bin/trackwall-container start > /dev/null &
-exec "$@"
 ENTRYPOINT
-chmod 755 /usr/local/share/trackwall/entrypoint.sh
+if [ "$PUBLISH" = true ]; then
+  echo '/usr/local/bin/trackwall-container relay > /dev/null 2>&1 &' >> "$ENTRYPOINT_FILE"
+fi
+echo 'exec "$@"' >> "$ENTRYPOINT_FILE"
+chmod 755 "$ENTRYPOINT_FILE"
 echo "Trackwall $VERSION installed for $USER_NAME on port $PORT"

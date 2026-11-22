@@ -23,6 +23,10 @@ trackwall-daemon address [--home <dir>]
 trackwall-daemon container start [--port <n>] [--home <dir>]
                    in a dev container: make sure a daemon runs on the port (default 7700), restarted
                    after a crash, and print how it stands as JSON (trackwall-container start)
+trackwall-daemon container relay [--port <n>] [--home <dir>]
+                   in a dev container whose ports Docker publishes: pass connections to the container's
+                   addresses on the port and the one after it on to Trackwall on 127.0.0.1 (the Feature's
+                   publish option starts it with the container)
 trackwall-daemon container update <version> [--port <n>] [--home <dir>]
                    in a dev container: download that release, check its signature, switch to it and go
                    back if it does not start; prints JSON at once, the rest goes to logs/daemon.log
@@ -101,7 +105,9 @@ export const CONTAINER_START = "start";
 export const CONTAINER_UPDATE = "update";
 /** The background process of an update (ADR-165), also how its process is recognised in `/proc/<pid>/cmdline`. */
 export const APPLY_UPDATE_COMMAND = "apply-update";
-const CONTAINER_ACTIONS = [CONTAINER_START, CONTAINER_UPDATE, SUPERVISE_COMMAND, APPLY_UPDATE_COMMAND] as const;
+/** The relay for ports Docker publishes (ADR-287), which the Feature's entrypoint starts with its `publish` option. */
+export const CONTAINER_RELAY = "relay";
+const CONTAINER_ACTIONS = [CONTAINER_START, CONTAINER_UPDATE, SUPERVISE_COMMAND, APPLY_UPDATE_COMMAND, CONTAINER_RELAY] as const;
 const UPDATE_ACTIONS: readonly string[] = [CONTAINER_UPDATE, APPLY_UPDATE_COMMAND];
 /** The port VS Code forwards in the dev container guide. */
 const CONTAINER_DEFAULT_PORT = 7700;
@@ -120,7 +126,12 @@ export type CommandLine =
   | { command: typeof ADDRESS_COMMAND; home?: string }
   | ContainerCommandLine;
 export type ContainerCommandLine =
-  | { command: typeof CONTAINER_COMMAND; action: typeof CONTAINER_START | typeof SUPERVISE_COMMAND; port: number; home?: string }
+  | {
+      command: typeof CONTAINER_COMMAND;
+      action: typeof CONTAINER_START | typeof SUPERVISE_COMMAND | typeof CONTAINER_RELAY;
+      port: number;
+      home?: string;
+    }
   | {
       command: typeof CONTAINER_COMMAND;
       action: typeof CONTAINER_UPDATE | typeof APPLY_UPDATE_COMMAND;
@@ -155,7 +166,8 @@ function parseContainerCommand(argv: string[]): ContainerCommandLine {
   });
   const port = toInt(values.port, "--port");
   if (port < 1 || port > 65535) throw new Error("--port out of range 1-65535");
-  if (action === CONTAINER_START || action === SUPERVISE_COMMAND) return { command: CONTAINER_COMMAND, action, port, home: values.home };
+  if (action === CONTAINER_START || action === SUPERVISE_COMMAND || action === CONTAINER_RELAY)
+    return { command: CONTAINER_COMMAND, action, port, home: values.home };
   const [target, ...rest] = positionals;
   if (target === undefined || rest.length > 0 || !RELEASE_VERSION.test(target)) {
     throw new Error(`${CONTAINER_UPDATE} expects one version such as 1.2.3, got "${positionals.join(" ")}"`);
