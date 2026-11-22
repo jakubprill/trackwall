@@ -8,14 +8,13 @@ import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { daemonWork, homeDaemonRunning, homeHasObject, homeModel } from "@/lib/home-model";
-import { closeOutcome, closeTasks, tasksReadyToClose } from "@/lib/ready-to-close";
 import { listNeedsSettings } from "@/lib/repo-status";
 import { GRAPH_PACE, REPO_LIST_PACE } from "@/lib/repo-watch";
 import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
 import { DARK_ISLAND } from "@/lib/theme";
 import { unpushedRows } from "@/lib/unpushed-work";
-import { useAction } from "@/lib/use-action";
+import { useCloseAll } from "@/lib/use-close-all";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
@@ -28,14 +27,15 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
 import { ProjectsFolderNeeded } from "./ProjectsFolderNeeded.tsx";
 
 /**
- * The "Home" view (ADR-33, §5.5): the first screen. On the left the "Needs you" queue (sessions that are waiting or have
- * an error, task proposals waiting for a decision, tasks ready to close (ADR-282), and repos that are not clean), in the middle the 3D dashboard in the
- * "Orbit" layout, on the right the details of the selected object. A click selects; a double click or the button in the
- * details goes to the session or repo. The data is the same daemon responses as in other views (services polled as in the
- * repo's Service panel); sessions and running mise tasks come live from the events WebSocket (ADR-36), and `App` fetches
- * the sessions and the container's health, because their counts are also on the view bar (ADR-287). Outside the canvas
- * the view takes only `@trackwall/scene/model` from the scene (keys and snapshot types), so that three.js and Pawn stay
- * in the lazily loaded chunk.
+ * The "Home" view (ADR-33, §5.5): the dashboard, on the view bar once the user shows it there (ADR-294). On the left the
+ * "Needs you" queue (sessions that are waiting or have an error, task proposals waiting for a decision, tasks ready to
+ * close (ADR-282), and repos that are not clean), in the middle the 3D dashboard in the "Orbit" layout, on the right the
+ * details of the selected object. A click selects; a double click or the button in the details goes to the session or
+ * repo. The data is the same daemon responses as in other views (services polled as in the repo's Service panel);
+ * sessions and running mise tasks come live from the events WebSocket (ADR-36), and `App` fetches the sessions and the
+ * container's health, because their counts are also on the view bar (ADR-287, ADR-294). Outside the canvas the view
+ * takes only `@trackwall/scene/model` from the scene (keys and snapshot types), so that three.js and Pawn stay in the
+ * lazily loaded chunk.
  */
 
 /** The scene's own messages are for people developing Trackwall, so a failure shows a general text, as in `HomeCanvas`. */
@@ -83,7 +83,7 @@ export function HomeView({
   const [selected, setSelected] = useState<HomeKey | null>(null);
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();
-  const [closeResult, setCloseResult] = useState<string>();
+  const closeAll = useCloseAll(conn, sessions);
 
   const daemonRunning = homeDaemonRunning(repos.error, repos.errorCode, eventsLost);
   const repoList = repos.data?.repos;
@@ -92,14 +92,6 @@ export function HomeView({
     [eventsLost, sessions.data, running.data, services.data],
   );
   const sessionList = work.sessions;
-  const readyTasks = useMemo(() => tasksReadyToClose(sessions.data?.tasks ?? [], sessionList ?? []), [sessions.data, sessionList]);
-  const closeAll = useAction(
-    () => closeTasks(conn, readyTasks),
-    (results) => {
-      setCloseResult(closeOutcome(results));
-      sessions.reload();
-    },
-  );
   const model = useMemo(
     () =>
       homeModel({
@@ -155,8 +147,7 @@ export function HomeView({
         model={model}
         sessions={lookup.sessions}
         proposals={sessions.data?.proposals ?? []}
-        readyToClose={readyTasks}
-        closing={{ pending: closeAll.pending, outcome: closeAll.error ?? closeResult }}
+        closeAll={closeAll}
         unpushed={unpushedList}
         containerWarnings={containerWarnings ?? []}
         selected={current}
@@ -164,7 +155,6 @@ export function HomeView({
         onOpen={open}
         onOpenProposal={(id) => onOpenInSessions({ kind: "proposal", id })}
         onOpenTask={(id) => onOpenInSessions({ kind: "task", id })}
-        onCloseAll={closeAll.run}
         onOpenContainerHealth={() => onOpenSettings("diagnostics")}
       />
       {/* A dark island in the light theme (ADR-235): the scene's glow adds light, which vanishes on a light background. */}

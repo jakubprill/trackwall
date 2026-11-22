@@ -36,6 +36,7 @@ const sources = (settings: Partial<WorkspaceSettings> = {}): SettingSources => (
   settings: { ...DEFAULTS, ...settings },
   settingsFailed: false,
   theme: "dark",
+  homeOnBar: "hidden",
 });
 
 describe("Settings as folded rows (ADR-263)", () => {
@@ -112,7 +113,7 @@ describe("Settings as folded rows (ADR-263)", () => {
       text: "cannot be read",
       state: "problem",
     });
-    const failed: SettingSources = { settings: undefined, settingsFailed: true, theme: "dark" };
+    const failed: SettingSources = { settings: undefined, settingsFailed: true, theme: "dark", homeOnBar: "hidden" };
     expect(settingValue("projects-folder", failed)).toEqual({ text: "cannot be read", state: "problem" });
     expect(settingValue("git-program", failed)).toBeNull();
   });
@@ -121,6 +122,11 @@ describe("Settings as folded rows (ADR-263)", () => {
     expect(settingValue("theme", sources())).toEqual({ text: "Dark", state: "default" });
     expect(settingValue("theme", { ...sources(), theme: "light" })).toEqual({ text: "Light", state: "changed" });
     expect(settingValue("start-at-sign-in", sources())).toBeNull();
+  });
+
+  test("Home's row says whether the view bar shows Home, hidden until the user shows it (ADR-294)", () => {
+    expect(settingValue("home", sources())).toEqual({ text: "hidden", state: "default" });
+    expect(settingValue("home", { ...sources(), homeOnBar: "shown" })).toEqual({ text: "shown", state: "changed" });
   });
 
   test("a row is folded until the user opens it, except one whose value is a problem, which the user can still fold", () => {

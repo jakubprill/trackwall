@@ -21,10 +21,11 @@ export const GALLERY_SECTIONS: readonly GallerySection[] = [
   },
   {
     name: "Home · Needs you",
-    // The column shrinks from the sidebar width down to 12rem in a narrow window.
+    // The column shrinks from the sidebar width down to 12rem in a narrow window, and is as high as the window: 650 px on
+    // the small screen of the E2E tests (`SMALL_SCREEN`), which the longest states overfill.
     sizes: [
-      { name: "widest", className: "w-sidebar" },
-      { name: "narrowest", className: "w-48" },
+      { name: "widest", className: "h-[650px] w-sidebar" },
+      { name: "narrowest", className: "h-[650px] w-48" },
     ],
     states: HOME_STATES,
   },

@@ -24,6 +24,7 @@ import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
 import { FolderTerminalsLive } from "@/lib/folder-terminals";
 import { readOpenSteps } from "@/lib/get-started-memory";
+import type { HomeOnBar } from "@/lib/home-on-bar";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { IS_MAC } from "@/lib/platform";
 import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection } from "@/lib/session-entries";
@@ -41,6 +42,7 @@ import { useConnection } from "@/lib/use-connection";
 import { CONTAINER_HEALTH_PACE, useContainerHealth } from "@/lib/use-container-health";
 import { useDaemonEvents, useDaemonLost } from "@/lib/use-daemon-events";
 import { useFileDrop } from "@/lib/use-file-drop";
+import { useHomeOnBar } from "@/lib/use-home-on-bar";
 import { useJumpRequest } from "@/lib/use-jump-request";
 import { useNewWindow } from "@/lib/use-new-window";
 import { useRepoWatch } from "@/lib/use-repo-watch";
@@ -62,7 +64,8 @@ import { SettingsView } from "@/views/settings/SettingsView";
 
 /**
  * Order and shortcuts of the view bar: "Sessions", where the work happens and the view the main window opens on, is
- * first, and "Home", the dashboard, is the last of the work views (ADR-288); each work view takes the next digit.
+ * first, and "Home", the dashboard, is the last of the work views (ADR-288); each work view takes the next digit. Home
+ * has an icon only once the user shows it in Settings (`viewsOnBar`, ADR-294).
  */
 // The macOS menu bar has the same ids, labels and shortcuts (`app_menu.rs`); `apps/desktop/test/shell-events.test.ts`
 // compares them and reads each entry's keys in this order.
@@ -81,6 +84,11 @@ const VIEW_IDS = VIEWS.map((v) => v.id);
 const START_VIEW: View = "sessions";
 /** The views that show sessions or tasks, which keep the session list fresh while open. */
 const VIEWS_WITH_SESSIONS: readonly View[] = ["home", "sessions", "plan", "graph", "flow"];
+
+/** The views with an icon on the bar: Home only once the user shows it (ADR-294); its shortcut opens it either way. */
+function viewsOnBar(home: HomeOnBar): readonly ActivityView<View>[] {
+  return home === "shown" ? VIEWS : VIEWS.map((v) => (v.id === "home" ? { ...v, placement: "none" } : v));
+}
 
 export function App() {
   // A repo opened from the dashboard belongs to the navigation, not to the view: any other navigation to "Repos" starts without it;
@@ -159,8 +167,12 @@ export function App() {
   // The supervisor's start card and the Sessions view wait for the projects folder, and Sessions sets it (ADR-289).
   const workspace = useWorkspaceSettings(conn);
   const projectsDir = workspace.data?.projectsDir;
-  // Home lists the container health's warnings (ADR-280) and the view bar counts them on its icon (ADR-287): one read for both.
+  // Home lists the container health's warnings (ADR-280), and the view bar counts them on Settings' icon, which then
+  // opens on Diagnostics, where they are (ADR-294): one read for all.
   const containerHealth = useContainerHealth(conn, { pollMs: CONTAINER_HEALTH_PACE });
+  const containerWarnings = containerAttentionCount(containerHealth.data);
+  const homeOnBar = useHomeOnBar();
+  const barViews = useMemo(() => viewsOnBar(homeOnBar.value), [homeOnBar.value]);
   const appUpdate = useAppUpdate(sessions.data && agentsInTurn(sessions.data.sessions));
   const tree = useSessionTree(sessions);
   const { rows } = tree;
@@ -256,11 +268,11 @@ export function App() {
           <FolderTerminalsLive.Provider value={terminalsLive}>
             <div className="flex h-screen">
               <ActivityBar
-                views={VIEWS}
+                views={barViews}
                 active={view}
                 onSelect={setView}
                 newWindow={newWindow}
-                badges={{ home: containerAttentionCount(containerHealth.data), sessions: attentionCount(sessions.data) }}
+                badges={{ sessions: attentionCount(sessions.data), settings: containerWarnings }}
               />
               <div className="flex min-w-0 flex-1 flex-col">
                 {appUpdate && <UpdateBanner handle={appUpdate} />}
@@ -384,15 +396,17 @@ export function App() {
                             conn={conn}
                             initialCategory={
                               settingsCategory ??
-                              firstSettingsCategory(
-                                sessions.data?.sessions.length,
-                                readOpenSteps(() => window.localStorage),
-                              )
+                              firstSettingsCategory({
+                                sessions: sessions.data?.sessions.length,
+                                openSteps: readOpenSteps(() => window.localStorage),
+                                containerWarnings,
+                              })
                             }
                             update={appUpdate}
                             warmupLive={warmupLive}
                             mcpCallsLive={mcpCallsLive}
                             sessions={sessions.data}
+                            homeOnBar={homeOnBar}
                             onRetry={retry}
                             onSaved={() => setView("repos")}
                             onStart={() => setView("sessions")}

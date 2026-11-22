@@ -8,6 +8,7 @@ import {
   type TaskOutcome,
 } from "@trackwall/protocol";
 import { BellRing, Crown, Lightbulb, Plus } from "lucide-react";
+import { CloseAllButton } from "@/components/CloseAllButton";
 import { CopilotUsageMark } from "@/components/CopilotUsageMark";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { SessionStateLabel } from "@/components/SessionStateLabel";
@@ -39,6 +40,7 @@ import { ariaSessionShortcut, SUPERVISOR_SHORTCUT, sessionShortcutLabel } from "
 import { attentionCount, PROPOSAL_STATUS, SUPERVISOR } from "@/lib/session-state";
 import type { SupervisorSummary } from "@/lib/supervisor";
 import { outcomeMarks } from "@/lib/task-outcomes";
+import type { CloseAll } from "@/lib/use-close-all";
 import type { Remote } from "@/lib/use-remote";
 import { useSessionClose } from "@/lib/use-session-close";
 import { useTaskEnding } from "@/lib/use-task-ending";
@@ -49,8 +51,9 @@ import { TaskLine } from "./TaskLine.tsx";
 
 /**
  * The list on the left of the Sessions view (§4.4): the sessions, tasks and task proposals with their state, the jump
- * to the next entry waiting for you, and the supervisor heading above them. It takes everything it shows as props, so
- * that the gallery of view states (`src/gallery`) shows it in every state with the same code as the view.
+ * to the next entry waiting for you, "Close all" for the tasks ready to close (ADR-294), and the supervisor heading
+ * above them. It takes everything it shows as props, so that the gallery of view states (`src/gallery`) shows it in
+ * every state with the same code as the view.
  */
 export function SessionListPanel({
   conn,
@@ -65,6 +68,7 @@ export function SessionListPanel({
   onShowGroup,
   onSessionClosed,
   onTaskRemoved,
+  closeAll,
 }: {
   conn: Connection;
   sessions: Remote<SessionList> & { reload: () => void };
@@ -83,6 +87,8 @@ export function SessionListPanel({
   onShowGroup: (entry: SessionEntry) => void;
   onSessionClosed: (entry: SessionEntry) => void;
   onTaskRemoved: (task: string) => void;
+  /** The tasks whose agent said its work is over, and "Close all" for them (`useCloseAll`). */
+  closeAll: CloseAll;
 }) {
   const list = sessions.data?.sessions ?? [];
   const entries = rows.map((r) => r.entry);
@@ -113,6 +119,7 @@ export function SessionListPanel({
           </Button>
         </div>
       )}
+      <ReadyToCloseStrip closeAll={closeAll} />
       <nav aria-label="Session list" className="flex-1 overflow-y-auto px-2 pb-4">
         {sessions.error && <ErrorWithRetry message={sessions.error} onRetry={sessions.reload} />}
         {sessions.data && entries.length === 0 && (
@@ -138,6 +145,33 @@ export function SessionListPanel({
         ))}
       </nav>
     </aside>
+  );
+}
+
+/**
+ * The tasks whose agent says its work is over (ADR-282), counted above the list with "Close all", so that they close in
+ * one click without opening each; under it, what the last run closed and what it left open and why. Each of them also
+ * reads "Ready to close" on its row.
+ */
+function ReadyToCloseStrip({ closeAll }: { closeAll: CloseAll }) {
+  const count = closeAll.ready.length;
+  if (count === 0 && closeAll.outcome === undefined) return null;
+  return (
+    <div className="flex flex-col gap-1.5 px-4 pb-3">
+      {count > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+          <h3 className="hud-label">
+            Ready to close <span className="text-primary">{`// ${twoDigits(count)}`}</span>
+          </h3>
+          <CloseAllButton closeAll={closeAll} />
+        </div>
+      )}
+      {closeAll.outcome !== undefined && (
+        <p role="status" className="text-muted-foreground text-xs break-words">
+          {closeAll.outcome}
+        </p>
+      )}
+    </div>
   );
 }
 

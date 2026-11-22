@@ -45,7 +45,7 @@ A newer version of Trackwall from GitHub Releases, installed by the shell after 
 _Avoid_: upgrade, sync (that is the repo synchronization)
 
 **View** (`View`):
-A screen of the app in the UI (Sessions, Repos, Overview, Plan, Flow, Home, Settings, in the view bar's order; a window opens on Sessions, ADR-288), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut. A number at a view's icon counts what needs the user there: at Sessions the waiting sessions and task proposals (`attentionCount`), at Home the container's health warnings (`containerAttentionCount`, ADR-287).
+A screen of the app in the UI (Sessions, Repos, Overview, Plan, Flow, Home, Settings, in the view bar's order; a window opens on Sessions, ADR-288), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut. Home has an icon only once the user shows it in Settings › App › Home ("View bar": "Shown" or "Hidden", `HomeOnBar`, ADR-294); its shortcut and the command palette open it either way. A number at a view's icon counts what needs the user there: at Sessions the waiting sessions and task proposals (`attentionCount`), at Settings the container's health warnings (`containerAttentionCount`, ADR-287, ADR-294).
 _Avoid_: tab (for a whole screen)
 
 **Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
@@ -667,7 +667,7 @@ _Avoid_: orchestrator, planner (ADR-9: a human splits goals); and a session in a
 A top-level entry of the Sessions list with every task and proposal under it, at any depth. A group of two or more has its own colour on its rows and tiles, and the grid can show it alone (ADR-48).
 _Avoid_: workspace, cluster, family
 
-**Flow** (`views/flow/`, `flowGroups`, `FlowGroup`, `FlowCard`, `FlowColumn`; the "Flow" view, Ctrl+6):
+**Flow** (`views/flow/`, `flowGroups`, `FlowGroup`, `FlowCard`, `FlowColumn`; the "Flow" view, Ctrl+5):
 The view for a second monitor that shows every task, session and task proposal in a row per group of work (a project of Plan, a change, the supervisor, a session with the tasks it proposed, "No group") and a column per state: "Working", "Waits for you", "In review", "Stuck", "Idle" (ADR-224). It changes nothing; a card opens its task or session. Its rows are made from groups that already exist, not a kind of group of its own.
 _Avoid_: dashboard (that is Home), board (that is a project of Plan as columns), batch, epic
 
@@ -938,7 +938,7 @@ A task whose agent has handed its work over with `report_result` and got nothing
 _Avoid_: ready, finished, done (those are the user's), awaiting approval (that is a tool approval)
 
 **Ready to close** (`Task.readyToClose`, `report_result` argument `readyToClose`, `readyToClose`, `READY_TO_CLOSE`; actions `close-task` and `keep-task-open`; "Ready to close", "Close task", "Close all" and "Keep open" in the UI):
-A task in review whose agent said with `report_result` that its work is over: complete and committed, no question left, nothing more to do without new instructions (ADR-282). Only the user answers it: **Close** stops the task's session and ends it with its branch kept, as "End task" would, and makes its board item done once no task is left on it; "Keep open" leaves it in review. Work the agent gets again takes it back, as it takes the task out of review.
+A task in review whose agent said with `report_result` that its work is over: complete and committed, no question left, nothing more to do without new instructions (ADR-282). Only the user answers it: **Close** stops the task's session and ends it with its branch kept, as "End task" would, and makes its board item done once no task is left on it; "Keep open" leaves it in review. "Close all" closes every task ready to close, from the top of the Sessions list or Home's "Needs you" (`useCloseAll`, ADR-294). Work the agent gets again takes it back, as it takes the task out of review.
 _Avoid_: done, finished, completed (those say the task ended; a task ready to close has not), auto-close (nothing closes by itself)
 
 ## Plan
@@ -1037,7 +1037,7 @@ Replacing secret values with `***` before a record is written to the buffer, the
 The dashboard's 3D scene on Pawn. It does not know the daemon API: it gets successive `HomeModel` snapshots and keeps one entity per object.
 
 **Dashboard**:
-The first screen, the "Home" view (`HomeView`): the daemon state, sessions (especially those waiting for you), repos and the connections between them, in the "Orbit" layout (`orbitLayout`).
+The "Home" view (`HomeView`), on the view bar once the user shows it there (ADR-294): the daemon state, sessions (especially those waiting for you), repos and the connections between them, in the "Orbit" layout (`orbitLayout`).
 
 **"Needs you" queue** (`NeedsYouPanel`):
 The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), tasks ready to close with "Close all" (ADR-282), in a container the repos with unpushed work (ADR-162), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.

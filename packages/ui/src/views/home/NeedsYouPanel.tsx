@@ -1,18 +1,19 @@
-import { type HealthWarning, READY_TO_CLOSE, type Session, type Task, type TaskProposal } from "@trackwall/protocol";
+import { type HealthWarning, READY_TO_CLOSE, type Session, type TaskProposal } from "@trackwall/protocol";
 import { type HomeKey, type HomeModel, repoKey, repoNeedsYou, sessionKey } from "@trackwall/scene/model";
 import { Activity, CheckCheck, HardDrive, Lightbulb } from "lucide-react";
 import type { ReactNode } from "react";
+import { CloseAllButton } from "@/components/CloseAllButton";
 import { Loading } from "@/components/Loading";
 import { QueueItem } from "@/components/QueueItem";
 import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { StatusLabel } from "@/components/StatusLabel";
-import { Button } from "@/components/ui/button";
 import { HEALTH_WARNING_ROWS } from "@/lib/container-health";
 import { twoDigits } from "@/lib/format";
 import { HOME_SESSION_STATUS, homeRepoStatus } from "@/lib/home-model";
 import { proposalName, taskName } from "@/lib/session-entries";
 import { PROPOSAL_STATUS, sessionTitle } from "@/lib/session-state";
 import { UNPUSHED_NOTE, type UnpushedRow } from "@/lib/unpushed-work";
+import type { CloseAll } from "@/lib/use-close-all";
 
 /**
  * The queue on the left of the dashboard: first sessions that are waiting for you or ended with an error, then task
@@ -20,15 +21,15 @@ import { UNPUSHED_NOTE, type UnpushedRow } from "@/lib/unpushed-work";
  * then repos that are not clean.
  * Sessions and repos are the same objects as the labels on the scene, so the dashboard also works without WebGL.
  * Proposals are not on the scene, and the decision (with an edited prompt) is made in the Sessions view, so a click on a
- * proposal opens it there right away. Until the lists arrive it says it is loading, rather than counts of zero.
+ * proposal opens it there right away. Until the lists arrive it says it is loading, rather than counts of zero. The
+ * column scrolls as a whole, so that on a small screen no section is squeezed to nothing by those above it.
  */
 export function NeedsYouPanel({
   loading,
   model,
   sessions,
   proposals,
-  readyToClose,
-  closing,
+  closeAll,
   unpushed,
   containerWarnings,
   selected,
@@ -36,7 +37,6 @@ export function NeedsYouPanel({
   onOpen,
   onOpenProposal,
   onOpenTask,
-  onCloseAll,
   onOpenContainerHealth,
 }: {
   /** The repo or session list has not arrived yet. */
@@ -44,10 +44,8 @@ export function NeedsYouPanel({
   model: HomeModel;
   sessions: ReadonlyMap<string, Session>;
   proposals: readonly TaskProposal[];
-  /** Tasks whose agent said its work is over (`tasksReadyToClose`). */
-  readyToClose: readonly Task[];
-  /** "Close all" at work, and what its last run did (`closeOutcome`). */
-  closing: { pending: boolean; outcome: string | undefined };
+  /** The tasks whose agent said its work is over, and "Close all" for them (`useCloseAll`). */
+  closeAll: CloseAll;
   /** Empty outside a container and when everything is pushed. */
   unpushed: readonly UnpushedRow[];
   /** The container health's warnings; empty outside a container and when nothing needs the user. */
@@ -57,7 +55,6 @@ export function NeedsYouPanel({
   onOpen: (key: HomeKey) => void;
   onOpenProposal: (id: string) => void;
   onOpenTask: (id: string) => void;
-  onCloseAll: () => void;
   /** Settings › Diagnostics, where the container's health is. */
   onOpenContainerHealth: () => void;
 }) {
@@ -75,8 +72,12 @@ export function NeedsYouPanel({
     );
   }
 
+  const readyToClose = closeAll.ready;
   return (
-    <aside className="bg-card flex min-h-0 flex-col border-r">
+    // Every section keeps its height, and the column scrolls: a list that took only the height left over was squeezed to
+    // nothing on a small screen once the sections above it filled the column. The two lists with a height of their own
+    // scroll inside it, so that a long one does not push the rest far down.
+    <aside className="bg-card flex min-h-0 flex-col overflow-y-auto border-r">
       <h2 className="hud-label px-4 pt-3 pb-2">
         Needs you <span className="text-primary">{`// ${twoDigits(urgent.length)}`}</span>
       </h2>
@@ -109,7 +110,7 @@ export function NeedsYouPanel({
           </ul>
         </>
       )}
-      {(readyToClose.length > 0 || closing.outcome !== undefined) && (
+      {(readyToClose.length > 0 || closeAll.outcome !== undefined) && (
         <>
           <h2 className="hud-label flex items-center gap-1.5 px-4 pt-4 pb-2">
             <CheckCheck className="text-primary size-3" aria-hidden />
@@ -117,17 +118,15 @@ export function NeedsYouPanel({
           </h2>
           {readyToClose.length > 0 && (
             <div className="px-4 pb-1">
-              <Button variant="outline" size="sm" disabled={closing.pending} onClick={onCloseAll}>
-                <CheckCheck /> {closing.pending ? "Closing…" : "Close all"}
-              </Button>
+              <CloseAllButton closeAll={closeAll} />
             </div>
           )}
-          {closing.outcome !== undefined && (
+          {closeAll.outcome !== undefined && (
             <p role="status" className="text-muted-foreground px-4 pb-1 text-xs break-words">
-              {closing.outcome}
+              {closeAll.outcome}
             </p>
           )}
-          <ul aria-label="Tasks whose agent says its work is over" className="max-h-48 overflow-y-auto px-2">
+          <ul aria-label="Tasks whose agent says its work is over" className="max-h-48 shrink-0 overflow-y-auto px-2">
             {readyToClose.map((task) => (
               <QueueItem key={task.id} title={`${task.repo} · ${taskName(task)}`} active={false} onClick={() => onOpenTask(task.id)}>
                 <StatusLabel {...READY_TO_CLOSE} />
@@ -160,7 +159,7 @@ export function NeedsYouPanel({
             Only in this container <span className="text-primary">{`// ${twoDigits(unpushed.length)}`}</span>
           </h2>
           <p className="text-muted-foreground px-4 pb-1 text-xs">{UNPUSHED_NOTE}</p>
-          <ul aria-label="Repos with work only in this container" className="max-h-40 overflow-y-auto px-2">
+          <ul aria-label="Repos with work only in this container" className="max-h-40 shrink-0 overflow-y-auto px-2">
             {unpushed.map((u) => (
               <Row key={u.repo} id={repoKey(u.repo)} selected={selected} onSelect={onSelect} onOpen={onOpen} title={u.repo}>
                 <span title={u.detail}>
@@ -174,14 +173,14 @@ export function NeedsYouPanel({
       <h2 className="hud-label px-4 pt-4 pb-2">
         Repos <span className="text-primary">{`// ${twoDigits(repos.length)} of ${twoDigits(model.repos.length)}`}</span>
       </h2>
-      <ul aria-label="Repos that are not clean" className="min-h-0 flex-1 overflow-y-auto px-2">
+      <ul aria-label="Repos that are not clean" className="px-2">
         {repos.map((r) => (
           <Row key={r.id} id={repoKey(r.id)} selected={selected} onSelect={onSelect} onOpen={onOpen} title={r.id}>
             <StatusLabel {...homeRepoStatus(r)} />
           </Row>
         ))}
       </ul>
-      <p className="text-muted-foreground border-t px-4 py-2 font-mono text-xs">{`${twoDigits(working)} working`}</p>
+      <p className="text-muted-foreground mt-auto border-t px-4 py-2 font-mono text-xs">{`${twoDigits(working)} working`}</p>
     </aside>
   );
 }

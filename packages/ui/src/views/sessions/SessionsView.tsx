@@ -40,6 +40,7 @@ import { SHORTCUT_POSITIONS, sessionShortcut, sessionShortcutLabel } from "@/lib
 import { isLive, sessionPlace } from "@/lib/session-state";
 import type { SupervisorSummary } from "@/lib/supervisor";
 import { useAction } from "@/lib/use-action";
+import { useCloseAll } from "@/lib/use-close-all";
 import type { RemoteHandle } from "@/lib/use-remote";
 import { useSessionClose } from "@/lib/use-session-close";
 import type { SessionTree } from "@/lib/use-session-tree";
@@ -141,14 +142,19 @@ export function SessionsView({
     if (afterClose !== "keep") onSelect(afterClose);
     sessions.reload();
   };
-  // The ended task vanishes at once instead of after the list refresh, so that no panel shows it again without its worktree.
-  const taskRemoved = (task: string) => {
-    const removed = entries.find((entry) => entry.kind === "task" && entry.task.id === task);
-    const afterRemoval = removed ? selectionAfterRemoval(entries, latestSelected.current, removed) : "keep";
-    tree.hideTask(task);
+  // An ended task vanishes at once instead of after the list refresh, so that no panel shows it again without its
+  // worktree; so do the tasks "Close all" closed (ADR-294).
+  const tasksRemoved = (removedTasks: readonly string[]) => {
+    const removed = entries.filter((entry) => entry.kind === "task" && removedTasks.includes(entry.task.id));
+    const afterRemoval = selectionAfterRemoval(entries, latestSelected.current, removed);
+    for (const task of removedTasks) tree.hideTask(task);
     if (afterRemoval !== "keep") onSelect(afterRemoval);
+  };
+  const taskRemoved = (task: string) => {
+    tasksRemoved([task]);
     sessions.reload();
   };
+  const closeAll = useCloseAll(conn, sessions, tasksRemoved);
   const started = (selection: SessionSelection) => {
     select(selection);
     sessions.reload();
@@ -181,6 +187,7 @@ export function SessionsView({
         onShowGroup={showGroup}
         onSessionClosed={sessionClosed}
         onTaskRemoved={taskRemoved}
+        closeAll={closeAll}
       />
       <section className="flex min-h-0 min-w-0 flex-col">
         {!sessions.data && !sessions.error && (

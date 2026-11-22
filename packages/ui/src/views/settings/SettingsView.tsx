@@ -18,6 +18,7 @@ import { type SettingsCategory, type SettingsSection, settingsCategory } from "@
 import { useTheme } from "@/lib/theme-controller";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { useDoctorReport } from "@/lib/use-doctor-report";
+import type { HomeOnBarChoice } from "@/lib/use-home-on-bar";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 import { AlwaysAllowSurface } from "./AlwaysAllowSurface.tsx";
@@ -32,7 +33,7 @@ import { DoctorSurface } from "./DoctorSurface.tsx";
 import { ErrorJournalSurface } from "./ErrorJournalSurface.tsx";
 import { GetStartedSurface } from "./GetStartedSurface.tsx";
 import { GitProgramSurface } from "./GitProgramSurface.tsx";
-import { HomeSceneSurface } from "./HomeSceneSurface.tsx";
+import { HomeSurface } from "./HomeSurface.tsx";
 import { JavaNavigationSurface } from "./JavaNavigationSurface.tsx";
 import { KeepScreenOnSurface } from "./KeepScreenOnSurface.tsx";
 import { LocalConfigReposSurface } from "./LocalConfigReposSurface.tsx";
@@ -64,6 +65,8 @@ type SettingsProps = {
   mcpCallsLive: LiveFeed<McpAuditRevision> | undefined;
   /** The session list, to tell how many running sessions keep another session profile (ADR-178). */
   sessions: SessionList | undefined;
+  /** Whether the view bar shows Home (ADR-294), which `App` keeps, as the bar is its. */
+  homeOnBar: HomeOnBarChoice;
   /** Reconnects to the daemon, for a read that failed because the daemon is gone. */
   onRetry: () => void;
   /** After the projects folder is saved, so that the app can show its repos. */
@@ -92,7 +95,12 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
   const loadSettings = useCallback(() => post(props.conn, workspaceApi.settings, {}), [props.conn]);
   const settings = useRemote(loadSettings);
   const sectionProps = { ...props, doctor, settings, onOpenCategory: setCurrent };
-  const sources: SettingSources = { settings: settings.data, settingsFailed: settings.error !== undefined, theme: useTheme().choice };
+  const sources: SettingSources = {
+    settings: settings.data,
+    settingsFailed: settings.error !== undefined,
+    theme: useTheme().choice,
+    homeOnBar: props.homeOnBar.value,
+  };
   return (
     <div className="@container w-full max-w-6xl">
       <div className="flex flex-col gap-4 @3xl:flex-row @3xl:items-start @3xl:gap-6">
@@ -144,6 +152,7 @@ function Section({
   warmupLive,
   mcpCallsLive,
   sessions,
+  homeOnBar,
   onRetry,
   onSaved,
 }: SettingsProps & {
@@ -218,8 +227,8 @@ function Section({
       return <UpdatesSurface handle={update} />;
     case "theme":
       return <ThemeSurface />;
-    case "home-scene":
-      return <HomeSceneSurface />;
+    case "home":
+      return <HomeSurface onBar={homeOnBar} />;
     case "daemon":
       return <DaemonSurface conn={conn} warmupLive={warmupLive} onRetry={onRetry} />;
     case "config-files":

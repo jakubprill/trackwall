@@ -1,5 +1,6 @@
 import { countLabel, type WorkspaceSettings } from "@trackwall/protocol";
 import { tokenCount } from "./copilot-usage.ts";
+import type { HomeOnBar } from "./home-on-bar.ts";
 import { SANDBOX_CHOICES, sandboxChoice } from "./sandbox.ts";
 import type { SettingsSection } from "./settings-categories.ts";
 import { DEFAULT_THEME_CHOICE, THEME_CHOICE_LABELS, type ThemeChoice } from "./theme.ts";
@@ -62,7 +63,7 @@ export const SETTING_ROWS = {
   },
   "vscode-extension": { title: "VS Code extension", what: "Let the VS Code extension show your sessions.", group: "Browser and VS Code" },
   theme: { title: "Theme", what: "Dark, light or the same as the system.", group: "Look" },
-  "home-scene": { title: "Home scene", what: "How Home draws your repos and sessions.", group: "Look" },
+  home: { title: "Home", what: "The 3D view of your repos and sessions: on the view bar or not, and how it draws them.", group: "Look" },
 } as const satisfies Partial<Record<SettingsSection, SettingRowText>>;
 
 export type SettingRowId = keyof typeof SETTING_ROWS;
@@ -106,6 +107,8 @@ export interface SettingSources {
   /** The read of the workspace settings failed, for example on a `workspace.yaml` that cannot be parsed. */
   settingsFailed: boolean;
   theme: ThemeChoice;
+  /** Whether the view bar shows Home (ADR-294), a choice of this computer like the theme. */
+  homeOnBar: HomeOnBar;
 }
 
 const UNREADABLE = "cannot be read";
@@ -158,10 +161,11 @@ const WORKSPACE_VALUES: Partial<Record<SettingRowId, (settings: WorkspaceSetting
 };
 
 /** The value a row shows; `null` for a setting whose value only its form reads (the desktop shell, the browser, an install). */
-export function settingValue(row: SettingRowId, { settings, settingsFailed, theme }: SettingSources): SettingValue | null {
+export function settingValue(row: SettingRowId, { settings, settingsFailed, theme, homeOnBar }: SettingSources): SettingValue | null {
   // The form of the projects folder is where a broken `workspace.yaml` is explained and fixed, so its row opens for it.
   if (row === "projects-folder" && settingsFailed) return { text: UNREADABLE, state: "problem" };
   if (row === "theme") return { text: THEME_CHOICE_LABELS[theme], state: theme === DEFAULT_THEME_CHOICE ? "default" : "changed" };
+  if (row === "home") return { text: homeOnBar, state: homeOnBar === "hidden" ? "default" : "changed" };
   const read = WORKSPACE_VALUES[row];
   return read && settings ? read(settings) : null;
 }

@@ -238,7 +238,7 @@ table.cmp { border-collapse: collapse; font-size: 14px; max-width: 1060px; }
 
   <section class="prose"><span class="hud">Variant A · in a dev container · not built</span><h2>Work that is only in the container moves to Repos, with a count on its icon</h2>
     <p class="lede">"Only in this container" is on Home alone today, so every start shows it. Once Trackwall opens on Sessions, the repos whose commits, stashes or changes live only in the Docker volume head the repo list, and the Repos icon carries their number in the warning colour, from every view.</p>
-    <p class="lede">Built instead (ADR-287): Home keeps the section, and Home's icon carries the number of the container's warnings in every view, among them unpushed work whose last backup is old. In a container some work is nearly always unpushed, so a count of those repos would never go away.</p></section>
+    <p class="lede">Built instead (ADR-287): Home keeps the section, and Home's icon carries the number of the container's warnings in every view, among them unpushed work whose last backup is old. In a container some work is nearly always unpushed, so a count of those repos would never go away. Since ADR-294 the number is on the Settings icon, which opens Diagnostics.</p></section>
   <div class="scroll"><div class="window short">
     <div class="rail" data-on="repos" data-badge="repos:2"></div>
     <div class="list">
@@ -262,8 +262,9 @@ table.cmp { border-collapse: collapse; font-size: 14px; max-width: 1060px; }
   <section class="prose"><span class="hud">Variant B · the smallest step</span><h2>Open on "Get started" until it is ready, then on Sessions</h2>
     <p class="lede">The main window opens on Settings › Get started while a needed step is open or no session ever started, and on Sessions after that. It skips the Home hop and changes no view, but keeps three screens' worth of setup in two (Get started, then Sessions), four clicks, and the pinned supervisor panel with its Start my day.</p></section>
 
-  <section class="prose"><span class="hud">Variant C · not proposed</span><h2>Home off until turned on in Settings</h2>
-    <p class="lede">Home leaves the view bar and comes back with one switch on the Home scene row of Settings › App. It takes one icon off the bar, but adds a setting, hides the view the README opens with, and a new user would never find it. Once Trackwall no longer opens on Home, Home costs nothing until it is clicked.</p></section>
+  <section class="prose"><span class="hud">Variant C · not proposed then · built later (ADR-294)</span><h2>Home off until turned on in Settings</h2>
+    <p class="lede">Home leaves the view bar and comes back with one switch on the Home scene row of Settings › App. It takes one icon off the bar, but adds a setting, hides the view the README opens with, and a new user would never find it. Once Trackwall no longer opens on Home, Home costs nothing until it is clicked.</p>
+    <p class="lede">Built later (ADR-294), once "Repos" opened on "All repos" (ADR-293) and Home had little of its own left: "View bar", Shown or Hidden, on the Home row of Settings › App; the container's count on the Settings icon; "Close all" at the top of the Sessions list. Ctrl+6 and the command palette still open Home.</p></section>
   <div class="scroll"><div class="window" style="height:250px">
     <div class="rail" data-on="settings" data-without="home"></div>
     <div class="view"><div class="pad">
