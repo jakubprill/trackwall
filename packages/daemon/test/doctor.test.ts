@@ -7,7 +7,7 @@ import { createFacade } from "../src/facade.ts";
 import { defaultSandboxTasks } from "../src/modules/agents/copilot-sandbox.ts";
 import { trustedFolderOf } from "../src/modules/doctor/copilot-trust.ts";
 import { COPILOT_CONFIG_BACKUP, withTrustedFolder } from "../src/modules/doctor/copilot-trust-write.ts";
-import { copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
+import { copilotCliSource, copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
 import { FILES_PER_ROUND, folderCosts, measureFileWrites, writeCheckFile } from "../src/modules/doctor/file-scanning.ts";
 import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
 import type { TlsProbe } from "../src/modules/doctor/tls-probe.ts";
@@ -564,29 +564,57 @@ describe("program versions", () => {
   });
 
   test("a Copilot CLI older or newer than the tested version is a warning; only the tested one is ok", () => {
-    expect(copilotVersionOutcome("1.0.90", false)).toEqual({
+    expect(copilotVersionOutcome("1.0.90", "computer")).toEqual({
       status: "warn",
       summary: `Copilot CLI 1.0.90 is older than ${TESTED_COPILOT_CLI_VERSION}, the version Trackwall is tested with.`,
       fix: `Install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} the way you installed it (npm, Homebrew or WinGet).`,
     });
-    expect(copilotVersionOutcome(TESTED_COPILOT_CLI_VERSION, false)).toEqual({
+    expect(copilotVersionOutcome(TESTED_COPILOT_CLI_VERSION, "computer")).toEqual({
       status: "ok",
       summary: `Copilot CLI ${TESTED_COPILOT_CLI_VERSION}`,
       fix: null,
     });
-    expect(copilotVersionOutcome("9.0.0", false)).toEqual({
+    expect(copilotVersionOutcome("9.0.0", "computer")).toEqual({
       status: "warn",
       summary: `Copilot CLI 9.0.0 is newer than ${TESTED_COPILOT_CLI_VERSION}, the version Trackwall is tested with.`,
       fix: `Sessions usually work, but a change in Copilot CLI can make Trackwall show a session's state wrong. If one does, go back to the tested version, or update Trackwall when a version tested with 9.0.0 comes out. Install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} the way you installed it (npm, Homebrew or WinGet).`,
     });
-    expect(copilotVersionOutcome(null, false).status).toBe("warn");
+    expect(copilotVersionOutcome(null, "computer").status).toBe("warn");
   });
 
-  test("in a container the fix names the version and the mise command, since an update made another way is lost at a rebuild", () => {
-    expect(copilotVersionOutcome("1.0.105", true).fix).toBe(
-      `Install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} where the container gets it: run \`mise use -g npm:@github/copilot@${TESTED_COPILOT_CLI_VERSION}\` in the container, or put that version into its image and rebuild it. An update made any other way is lost at the next rebuild.`,
+  test("in a container the fix names the tested version and the way to it from where Copilot CLI comes: mise or the image", () => {
+    expect(copilotVersionOutcome("1.0.105", "container-mise").fix).toBe(
+      `Install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} with mise, which the container runs it from: \`mise use -g npm:@github/copilot@${TESTED_COPILOT_CLI_VERSION}\` in the container.`,
     );
-    expect(copilotVersionOutcome("9.0.0", true).fix).toContain(`mise use -g npm:@github/copilot@${TESTED_COPILOT_CLI_VERSION}`);
+    expect(copilotVersionOutcome("1.0.105", "container-image").fix).toBe(
+      `Copilot CLI comes with the container's image: install ${TESTED_COPILOT_CLI_VERSION} where the image installs it, for example \`npm i -g @github/copilot@${TESTED_COPILOT_CLI_VERSION}\` in its Dockerfile, and rebuild the container. An update made inside the container is lost at the next rebuild.`,
+    );
+  });
+
+  test("a Copilot CLI other than the tested one is named by the program that runs, so a fix reaches that copy", async () => {
+    const deps = fakeDeps({
+      inContainer: true,
+      resolveCopilot: () => ({ program: "/usr/local/bin/copilot", args: [] }),
+      run: async (command) => (command === "/usr/local/bin/copilot" ? "GitHub Copilot CLI 1.0.105" : ""),
+    });
+    const check = (await new Doctor(deps).run()).checks.find((c) => c.id === "copilot-cli");
+    expect(check?.summary).toBe(
+      `Copilot CLI 1.0.105 is older than ${TESTED_COPILOT_CLI_VERSION}, the version Trackwall is tested with. It runs from /usr/local/bin/copilot.`,
+    );
+    expect(check?.fix).toContain(`npm i -g @github/copilot@${TESTED_COPILOT_CLI_VERSION}`);
+  });
+
+  test("in a container, a Copilot CLI under mise's data folder, wherever MISE_DATA_DIR or XDG_DATA_HOME puts it, is mise's copy, and any other, such as npm's in /usr/local/bin, the image's", () => {
+    const home = "/home/vscode";
+    expect(copilotCliSource("/home/vscode/.local/share/mise/installs/npm-github-copilot/1.0.114/bin/copilot", true, {}, home)).toBe(
+      "container-mise",
+    );
+    expect(copilotCliSource("/home/vscode/.local/share/mise/shims/copilot", true, {}, home)).toBe("container-mise");
+    expect(copilotCliSource("/opt/tools/shims/copilot", true, { MISE_DATA_DIR: "/opt/tools" }, home)).toBe("container-mise");
+    expect(copilotCliSource("/data/mise/shims/copilot", true, { XDG_DATA_HOME: "/data" }, home)).toBe("container-mise");
+    expect(copilotCliSource("/srv/mise/bin/copilot", true, {}, home)).toBe("container-image");
+    expect(copilotCliSource("/usr/local/bin/copilot", true, {}, home)).toBe("container-image");
+    expect(copilotCliSource("/usr/local/bin/copilot", false, {}, home)).toBe("computer");
   });
 
   test("the version alone says where the Copilot CLI of sessions stands against the tested one", async () => {
@@ -595,7 +623,7 @@ describe("program versions", () => {
       version: "9.0.0",
       tested: TESTED_COPILOT_CLI_VERSION,
       relation: "newer",
-      inContainer: false,
+      source: "computer",
     });
     const older = doctorFacade({ copilot: true, mise: null, copilotConfig: null, copilotVersion: "1.0.1" });
     expect((await older.facade.doctor.copilotCliVersion()).relation).toBe("older");
@@ -604,14 +632,14 @@ describe("program versions", () => {
       version: TESTED_COPILOT_CLI_VERSION,
       tested: TESTED_COPILOT_CLI_VERSION,
       relation: "tested",
-      inContainer: false,
+      source: "computer",
     });
     const missing = doctorFacade({ copilot: false, mise: null, copilotConfig: null });
     expect(await missing.facade.doctor.copilotCliVersion()).toEqual({
       version: null,
       tested: TESTED_COPILOT_CLI_VERSION,
       relation: "unknown",
-      inContainer: false,
+      source: "computer",
     });
   });
 });

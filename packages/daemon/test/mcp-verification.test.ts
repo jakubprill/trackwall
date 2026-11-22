@@ -202,7 +202,8 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
 
       const run = await client.callTool({ name: "run_mise_task", arguments: { repo: "shop", task: shop.id, miseTask: "test" } });
       expect(run.isError).not.toBe(true);
-      expect(MiseTaskRunResult.parse(run.structuredContent).run.kind).toBeOneOf(["running", "exited"]);
+      // The fake mise ends at once: the run may already be over, or its leader over while the group is still checked.
+      expect(MiseTaskRunResult.parse(run.structuredContent).run.kind).toBeOneOf(["running", "stopping", "exited"]);
 
       expect(errorText(await verify(client, { repo: "shop", task: outsider.id }))).toBe(
         `bad_request: the session of a change can verify only the parts it works on (${warehouse.id}, ${shop.id}), not task ${outsider.id}`,
