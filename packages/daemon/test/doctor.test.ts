@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { type DoctorCheckId, type DoctorStatus, TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { createFacade } from "../src/facade.ts";
 import { defaultSandboxTasks } from "../src/modules/agents/copilot-sandbox.ts";
@@ -356,6 +356,40 @@ describe("doctor", () => {
     });
 
     expect(readdirSync(copilotHome)).toEqual([]);
+  });
+
+  test("whether Copilot CLI trusts the projects folder is no until Trust folder adds it, and yes after", async () => {
+    const { facade, projects } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: null });
+    await facade.workspace.setProjectsDir(projects);
+
+    expect(await facade.doctor.projectsFolderTrust()).toEqual({ folder: projects, trusted: false });
+    await facade.doctor.trustProjectsFolder();
+    expect(await facade.doctor.projectsFolderTrust()).toEqual({ folder: projects, trusted: true });
+  });
+
+  test("a trusted folder above the projects folder makes it trusted too", async () => {
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: null });
+    await facade.workspace.setProjectsDir(projects);
+    writeFileSync(join(copilotHome, "config.json"), JSON.stringify({ trustedFolders: [dirname(projects)] }));
+
+    expect(await facade.doctor.projectsFolderTrust()).toEqual({ folder: projects, trusted: true });
+  });
+
+  test("a config.json that is not Copilot CLI's trusts nothing, and is left as it is", async () => {
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: "{ not json" });
+    await facade.workspace.setProjectsDir(projects);
+
+    expect(await facade.doctor.projectsFolderTrust()).toEqual({ folder: projects, trusted: false });
+    expect(readFileSync(join(copilotHome, "config.json"), "utf8")).toBe("{ not json");
+  });
+
+  test("without a projects folder there is no folder whose trust to tell", async () => {
+    const { facade } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: trusting });
+
+    expect(facade.doctor.projectsFolderTrust()).rejects.toMatchObject({
+      code: "bad_request",
+      message: expect.stringContaining("No projects folder"),
+    });
   });
 
   test("gh not signed in to two repo hosts names both with their login commands; a kind without hosts is not checked", async () => {

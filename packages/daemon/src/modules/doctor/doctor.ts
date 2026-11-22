@@ -11,6 +11,7 @@ import {
   type DoctorReport,
   HOST_CLI,
   type JavaNavigationState,
+  type ProjectsFolderTrust,
   type RepoHost,
   type RepoHostKind,
   type SandboxState,
@@ -25,7 +26,7 @@ import {
 import { DomainError } from "../../infra/errors.ts";
 import { isInside } from "../../infra/path-inside.ts";
 import { type DiskSpace, gigabytes, LOW_DISK_BYTES, VERY_LOW_DISK_BYTES } from "../../platform/disk-space.ts";
-import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
+import { trustedFolders, trustingFolder } from "./copilot-trust.ts";
 import { trustFolder } from "./copilot-trust-write.ts";
 import { fileScanningOutcome, folderCosts, type ScanFolder } from "./file-scanning.ts";
 import { firstLine } from "./first-line.ts";
@@ -200,9 +201,23 @@ export class Doctor {
    * thing the doctor changes, and only when the user asks. The folder is the one of the workspace settings.
    */
   async trustProjectsFolder(): Promise<TrustedProjectsFolder> {
+    const folder = await this.projectsFolderToTrust();
+    return trustFolder(await this.deps.env(), folder);
+  }
+
+  /**
+   * The `copilot-trusted-folder` check alone, for the New session form (ADR-290): the projects folder and whether a trusted
+   * folder covers it. It reads Copilot CLI's `config.json` and nothing else.
+   */
+  async projectsFolderTrust(): Promise<ProjectsFolderTrust> {
+    const folder = await this.projectsFolderToTrust();
+    return { folder, trusted: trustingFolder(await trustedFolders(await this.deps.env()), folder) !== null };
+  }
+
+  private async projectsFolderToTrust(): Promise<string> {
     const dir = await this.deps.projectsDir();
     if (dir === null) throw new DomainError("bad_request", "No projects folder is set, so there is no folder to trust yet.");
-    return trustFolder(await this.deps.env(), dir);
+    return dir;
   }
 
   private async projectsFolder({ projectsDir }: CheckContext): Promise<Outcome> {
@@ -389,7 +404,7 @@ export class Doctor {
     const trust = await trustedFolders(env);
     const fix = `Add ${dir} to "trustedFolders" in ${trust.file}, so Copilot CLI stops asking for every repo and task.`;
     if (trust.kind === "unreadable") return warn(`Copilot CLI's ${trust.file} could not be read: ${trust.message}.`, fix);
-    const folder = trust.kind === "read" ? trustedFolderOf(dir, trust.folders) : null;
+    const folder = trustingFolder(trust, dir);
     if (folder === null) return warn("Copilot CLI does not trust the projects folder; it asks before working in each repo.", fix);
     return ok(`Copilot CLI trusts ${folder}.`);
   }

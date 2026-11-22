@@ -3,6 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
+import { TrustedFolderNote } from "@/components/TrustedFolderNote";
 import { Button } from "@/components/ui/button";
 import { type PlanPlace, placeOfSelected, startPrompt } from "@/lib/board-tree";
 import type { Connection } from "@/lib/connection";
@@ -122,6 +123,7 @@ export function PlanView({
                   onOpenInSessions(selection);
                 }}
                 onCancel={() => setStarting(undefined)}
+                note={<TrustedFolderNote conn={conn} />}
               />
             ) : (
               board.data && (
