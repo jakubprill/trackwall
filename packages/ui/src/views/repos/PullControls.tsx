@@ -5,7 +5,7 @@ import type { PullHandle } from "@/lib/use-pull";
 import { cn } from "@/lib/utils";
 
 /**
- * The parts of a pull (ADR-269) that the Upstream tile and a row of All repos (ADR-291) show alike: the button, the
+ * The parts of a pull (ADR-269) that the Upstream tile and a row of All repos (ADR-293) show alike: the button, the
  * question asked first when something works in the repo folder, and a failure with its retry.
  */
 

@@ -29,7 +29,7 @@ describe("repo state in the UI", () => {
   });
 });
 
-describe("repo state in the repo list (ADR-291)", () => {
+describe("repo state in the repo list (ADR-293)", () => {
   const behind = (count: number, ahead = 0) => ({ name: "origin/main", ahead, behind: count });
 
   test("a clean repo whose branch lacks commits of the branch it tracks no longer reads “clean”, and one with changes says both", () => {

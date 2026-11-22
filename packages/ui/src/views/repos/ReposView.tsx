@@ -35,7 +35,7 @@ import { SyncView } from "./SyncView.tsx";
 import { TagFilter } from "./TagFilter.tsx";
 
 /**
- * What the right side shows: All repos (ADR-291), the selected repo, the search for repos to clone, the sync, the batch
+ * What the right side shows: All repos (ADR-293), the selected repo, the search for repos to clone, the sync, the batch
  * command, or the shell of the projects folder.
  */
 type Panel = "all" | "repo" | "clone" | "sync" | "batch" | "shell";
@@ -239,7 +239,7 @@ function repoCount(shown: number, all: number): string {
 /**
  * What the list's header does less often than adding a repo (ADR-273), in its "More" menu: the projects folder's path,
  * its shell and the batch command, which need the folder, then another folder and a refresh of the list. "Sync all"
- * stands above the table of All repos (ADR-291).
+ * stands above the table of All repos (ADR-293).
  */
 function FolderMenu({
   projectsDir,
@@ -337,7 +337,7 @@ function ChangeProjectsDir({ onClick }: { onClick: () => void }) {
 
 /**
  * A list row in HUD style (ADR-16): the item number, name, branch, and the state dot and text, which also counts the
- * commits to pull (ADR-291); the active one has a glowing stroke on the left. The number is only the position in the
+ * commits to pull (ADR-293); the active one has a glowing stroke on the left. The number is only the position in the
  * list, not the repo identifier. The star beside the row moves the repo to the top (ADR-192): always shown on a starred
  * repo, on the others only on hover. Under the state stands the result of the last sync (`listSyncBadge`) and the
  * repo's tags (reasons in the tooltip); the `no-mise` tag is warning text, because such a repo has nothing to run (ADR-34).

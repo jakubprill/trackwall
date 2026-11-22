@@ -49,7 +49,7 @@ export function SyncView({ sync, canSync }: { sync: SyncRunHandle; canSync: bool
   );
 }
 
-/** "Sync all", with its progress while it runs; in the sync panel and in the header of All repos (ADR-291). */
+/** "Sync all", with its progress while it runs; in the sync panel and in the header of All repos (ADR-293). */
 export function SyncButton({ sync, canSync }: { sync: SyncRunHandle; canSync: boolean }) {
   const progress = sync.run && sync.running ? syncProgress(sync.run) : undefined;
   return (

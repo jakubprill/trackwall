@@ -52,7 +52,7 @@ export function fetchHeadFile(dirs: GitDirs): string {
 }
 
 /**
- * When the repo last fetched from a remote (ADR-291): the modification time of its `FETCH_HEAD`; `null` when it never
+ * When the repo last fetched from a remote (ADR-293): the modification time of its `FETCH_HEAD`; `null` when it never
  * fetched (a fresh clone has no such file) or has no git directory.
  */
 export async function lastFetch(repo: string): Promise<string | null> {

@@ -25,7 +25,7 @@ export interface PullHandle {
 }
 
 /**
- * The pull of one repo's checked-out branch (ADR-269), the same in the Upstream tile and in a row of All repos (ADR-291):
+ * The pull of one repo's checked-out branch (ADR-269), the same in the Upstream tile and in a row of All repos (ADR-293):
  * it asks first when something works in the repo folder (`workInRepoFolder`) and keeps its result until the next pull.
  * The new status comes with the repo list, which sees the moved HEAD. `initial` is the state it starts in: nothing pulled
  * in the app, any state in the gallery of view states.

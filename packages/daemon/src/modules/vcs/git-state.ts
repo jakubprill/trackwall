@@ -73,7 +73,7 @@ export class GitStateReader {
 /**
  * What `git status` depends on in the git directory (ADR-141): HEAD with its branch, the remote-tracking refs its upstream
  * is among, `packed-refs`, and the index, which staging, a commit and a `git status` that refreshes stat data rewrite;
- * and `FETCH_HEAD`, whose time the repo status carries as its last fetch (ADR-291), so a fetch that brought nothing shows too.
+ * and `FETCH_HEAD`, whose time the repo status carries as its last fetch (ADR-293), so a fetch that brought nothing shows too.
  * Not the other local branches: a task's commit in its worktree moves its own branch in the shared git directory, which
  * says nothing about the root's status, and every turn of a task commits (ADR-168). With reftable every ref lives in
  * one table list, so there a task's commit still counts. An upstream that is a local branch, or one set in `config`,

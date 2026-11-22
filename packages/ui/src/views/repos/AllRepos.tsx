@@ -19,7 +19,7 @@ import { PullButton, PullFailure, PullQuestion } from "./PullControls.tsx";
 import { SyncButton } from "./SyncView.tsx";
 
 /**
- * "All repos" (ADR-291): the first entry of the repo list and the panel the "Repos" view opens on, with every repo's
+ * "All repos" (ADR-293): the first entry of the repo list and the panel the "Repos" view opens on, with every repo's
  * state against the server in one table (`lib/all-repos.ts`) and "Sync all" above it. A wide panel has a column for each
  * part of the state; a narrow one, such as beside the pinned supervisor, stacks them in one.
  */

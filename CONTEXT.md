@@ -186,7 +186,7 @@ A fetch of every repo from the projects folder and a fast-forward of its default
 _Avoid_: pull, update (without qualification)
 
 **Pull** (`PullResult`, `workspaceApi.pull`, `usePull`, "Pull <n>" in the repo header's Upstream tile and in a row of All repos):
-The user's fetch of one repo from its header or its row in All repos (ADR-291): the sync of its default branch, then a fast-forward of the checked-out branch to the branch it tracks, under the same rules (ADR-269). It never merges, rebases, pushes or overwrites local changes; a skip has a reason (`PullSkipReason`). Only from the UI.
+The user's fetch of one repo from its header or its row in All repos (ADR-293): the sync of its default branch, then a fast-forward of the checked-out branch to the branch it tracks, under the same rules (ADR-269). It never merges, rebases, pushes or overwrites local changes; a skip has a reason (`PullSkipReason`). Only from the UI.
 _Avoid_: sync (that moves the default branch of every repo), update, `git pull` (which can merge or rebase)
 
 **Put aside** (`PutAside`, `PUT_ASIDE_MESSAGE`, `pull` with `putAside`, "Put aside and pull…", "Put aside by Trackwall" in the Changes tab):
@@ -198,11 +198,11 @@ Selected steps on selected repos with one button: sync (`sync`), tools from the 
 _Avoid_: bulk operation, workflow
 
 **Repo status** (`RepoStatus`):
-The branch, the last commit, the number of changes in the working directory (of which, separately, new untracked files, `untracked`), ahead/behind against the tracking branch, and when the repo last fetched (`fetchedAt`, the time of `FETCH_HEAD`, ADR-291), as of which "behind" counts the commits to pull, read from git on every request (`ok`), or `unavailable` with a message when git does not read it (a repo whose directory disappeared drops off the list). It is never stored.
+The branch, the last commit, the number of changes in the working directory (of which, separately, new untracked files, `untracked`), ahead/behind against the tracking branch, and when the repo last fetched (`fetchedAt`, the time of `FETCH_HEAD`, ADR-293), as of which "behind" counts the commits to pull, read from git on every request (`ok`), or `unavailable` with a message when git does not read it (a repo whose directory disappeared drops off the list). It is never stored.
 _Avoid_: state (that is a task state or a service state), sync (that is a separate action)
 
 **All repos** (`AllReposView`, row `AllReposRow`, `allReposRows`; in the UI *All repos*):
-The first entry of the repo list and the panel the "Repos" view opens on: the state of every repo against the server in one table, with a row for each repo that needs a look (uncommitted files, commits to pull, a diverged branch, work only in this container, or a repo git cannot read) and its next step, the clean ones folded into one line, and "Sync all" above it (ADR-291).
+The first entry of the repo list and the panel the "Repos" view opens on: the state of every repo against the server in one table, with a row for each repo that needs a look (uncommitted files, commits to pull, a diverged branch, work only in this container, or a repo git cannot read) and its next step, the clean ones folded into one line, and "Sync all" above it (ADR-293).
 _Avoid_: dashboard (that is Home), overview (that is the "Overview" view), status page
 
 **Repo watch** (`RepoWatch`, snapshot `RepoWatchState`, topic `repos.changed`):

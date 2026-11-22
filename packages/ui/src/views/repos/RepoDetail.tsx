@@ -43,7 +43,7 @@ export function RepoDetail({
 }: {
   conn: Connection;
   repo: Repo;
-  /** The tab the repo opens on: a row of All repos opens it where its way out is (ADR-291). */
+  /** The tab the repo opens on: a row of All repos opens it where its way out is (ADR-293). */
   initialTab?: RepoTab;
   /** The daemon's projects folder, for showing the repo through that folder on this computer (ADR-131); unknown until the list loads. */
   projectsDir: string | null | undefined;

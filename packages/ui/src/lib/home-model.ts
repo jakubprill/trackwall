@@ -56,7 +56,7 @@ export function homeModel({ repos, sessions, graph, running, services, daemonRun
 
 /**
  * Unavailable, then working directory changes (like `repoStatusTone`), then commits to pull, which are work to do too;
- * the repo list counts them as well (`repoListTone`, ADR-291).
+ * the repo list counts them as well (`repoListTone`, ADR-293).
  */
 function repoState(repo: Repo): { state: HomeRepoState; count: number } {
   const { status } = repo;

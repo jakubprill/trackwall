@@ -5,7 +5,7 @@ import { type UnpushedRow, unpushedRows } from "./unpushed-work.ts";
 import { type UpstreamOffer, upstreamOffer } from "./upstream-pull.ts";
 
 /**
- * "All repos", the first entry of the repo list and the panel the "Repos" view opens on (ADR-291): every repo's state
+ * "All repos", the first entry of the repo list and the panel the "Repos" view opens on (ADR-293): every repo's state
  * against the server in one table, so a repo whose branch lacks commits of the remote, or whose work is only in this
  * container, shows without opening it. A row needs a look when git cannot read the repo, it has uncommitted files, its
  * branch lacks commits of the branch it tracks (as of the repo's last fetch), or, in a container, it has work on no

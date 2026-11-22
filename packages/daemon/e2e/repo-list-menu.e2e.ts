@@ -13,7 +13,7 @@ describe("the head of the repo list", () => {
       .click();
     const list = page.getByRole("complementary").filter({ has: page.getByRole("navigation", { name: "Repo list" }) });
     await list.getByRole("button", { name: /^Tag filter/ }).waitFor();
-    // All repos (ADR-291): the first entry of the list, open, with "Sync all" above the state of every repo.
+    // All repos (ADR-293): the first entry of the list, open, with "Sync all" above the state of every repo.
     await list.locator('button[aria-current="true"]', { hasText: "All repos" }).waitFor();
     await page.getByRole("heading", { name: "The state of every repo" }).waitFor();
     await page.getByRole("main").getByRole("button", { name: "Sync all" }).waitFor();

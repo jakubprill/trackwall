@@ -17,7 +17,7 @@ export function repoStatusTone(status: RepoStatus): { tone?: StatusTone; label: 
 }
 
 /**
- * A repo's state in the repo list (ADR-291): the working directory as `repoStatusTone` says it, then what its branch lacks
+ * A repo's state in the repo list (ADR-293): the working directory as `repoStatusTone` says it, then what its branch lacks
  * from the branch it tracks as of the last fetch, so a clean repo with commits to pull no longer reads "clean".
  */
 export function repoListTone(status: RepoStatus): { tone?: StatusTone; label: string } {
