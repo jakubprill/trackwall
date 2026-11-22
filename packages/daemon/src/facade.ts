@@ -551,6 +551,7 @@ export function createFacade(o: FacadeOptions): Facade {
     worktreesDir: () => workspace.worktreesDir().catch(() => null),
     measureFileWrites: o.measureFileWrites ?? measureFileWrites,
     inContainer: o.inContainer,
+    platform: process.platform,
     workspaceFile: workspace.configFile(),
     workspaceKeys: () => workspace.workspaceKeys(),
     javaNavigation: javaNavigationReadiness,

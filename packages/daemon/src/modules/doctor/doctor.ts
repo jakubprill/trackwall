@@ -33,6 +33,7 @@ import { folderStorage } from "./folder-storage.ts";
 import { modelProviderOutcome, type ProfileEnvironment } from "./model-provider-check.ts";
 import { networkOutcome, sessionCertificates } from "./network-check.ts";
 import { type RemoteReachRead, remoteOutcome } from "./remote-check.ts";
+import { ALL_APPLICATION_PACKAGES, gitInstallFolder, sandboxGitBlocked } from "./sandbox-git.ts";
 import type { TlsProbe } from "./tls-probe.ts";
 import { compareVersions, versionIn } from "./version.ts";
 
@@ -98,6 +99,8 @@ export interface DoctorDeps {
   measureFileWrites: (folder: string, files: number) => Promise<number>;
   /** Trackwall runs in a container, whose disk is Docker's: the same `FacadeOptions.inContainer` that `unpushedWork` reads (ADR-162). */
   inContainer: boolean;
+  /** The daemon's system: on Windows the sandbox check also asks whether git can start in the sandbox (`sandbox-git.ts`). */
+  platform: NodeJS.Platform;
   /** `/proc/self/mountinfo` on Linux, `null` elsewhere: where the projects folder's files live. */
   mountTable: () => Promise<string | null>;
   /** The full path of `workspace.yaml`. */
@@ -133,6 +136,8 @@ type CopilotVersionRead =
 interface CheckContext {
   env: NodeJS.ProcessEnv;
   projectsDir: Settled<string | null>;
+  /** One `git --version` per run, for the git check and, on Windows, the sandbox check's git. */
+  gitVersion: Promise<Settled<Awaited<ReturnType<DoctorDeps["gitVersion"]>>>>;
 }
 
 /** A check's result without its id; `null` when the check does not apply here. */
@@ -152,12 +157,12 @@ export class Doctor {
       "file-scanning": (ctx) => this.fileScanning(ctx),
       "unpushed-work": (ctx) => this.unpushedWork(ctx),
       "workspace-file": () => this.workspaceFile(),
-      git: () => this.git(),
+      git: (ctx) => this.git(ctx),
       "git-remotes": async ({ projectsDir }) =>
         projectsDir.ok && projectsDir.value !== null ? remoteOutcome(await this.deps.remoteReach(), this.deps.inContainer) : null,
       "copilot-cli": (ctx) => this.copilotCli(ctx),
       "copilot-trusted-folder": (ctx) => this.copilotTrustedFolder(ctx),
-      "copilot-sandbox": () => this.copilotSandbox(),
+      "copilot-sandbox": (ctx) => this.copilotSandbox(ctx),
       network: ({ env }) => networkOutcome(env, { probe: this.deps.probeTls, systemCaFiles: this.deps.systemCaFiles }),
       "model-provider": () => this.modelProvider(),
       mise: (ctx) => this.mise(ctx),
@@ -175,7 +180,11 @@ export class Doctor {
   }
 
   async run(): Promise<DoctorReport> {
-    const ctx: CheckContext = { env: await this.deps.env(), projectsDir: await settle(this.deps.projectsDir()) };
+    const ctx: CheckContext = {
+      env: await this.deps.env(),
+      projectsDir: await settle(this.deps.projectsDir()),
+      gitVersion: settle(this.deps.gitVersion(CHECK_TIMEOUT_MS)),
+    };
     const outcomes = await Promise.all(
       DoctorCheckId.options.map(async (id) => {
         const outcome = await settle(this.checks[id](ctx));
@@ -341,8 +350,8 @@ export class Doctor {
     return ok(`workspace.yaml: ${summary.text}.`);
   }
 
-  private async git(): Promise<Outcome> {
-    const version = await settle(this.deps.gitVersion(CHECK_TIMEOUT_MS));
+  private async git(ctx: CheckContext): Promise<Outcome> {
+    const version = await ctx.gitVersion;
     if (!version.ok) return fail(`git: ${version.message}`, "Install Git (git-scm.com) and restart Trackwall.");
     const { output, program, source, chosen } = version.value;
     const git = `git ${versionIn(output) ?? firstLine(output)}`;
@@ -406,7 +415,7 @@ export class Doctor {
   }
 
   /** Where some task runs in the sandbox, or in a container where it is off by default because it cannot run there safely (ADR-219). */
-  private async copilotSandbox(): Promise<Outcome> {
+  private async copilotSandbox(ctx: CheckContext): Promise<Outcome> {
     const { tasks, problem, chosen } = await this.deps.sandbox();
     if (tasks === "off") {
       // Off by default in a container where the sandbox cannot run (ADR-219): the user may not know the container is
@@ -417,18 +426,33 @@ export class Doctor {
         `${CONTAINER_SANDBOX_FIX}, or choose "No task" in Settings › Agents › Sandbox to keep it so.`,
       );
     }
-    if (problem === null)
-      return ok(
-        tasks === "all"
-          ? "Every task runs its commands in Copilot CLI's sandbox."
-          : "Tasks without approvals run their commands in Copilot CLI's sandbox.",
+    if (problem === null) {
+      const runs = `${tasks === "all" ? "Every task runs its" : "Tasks without approvals run their"} commands in Copilot CLI's sandbox`;
+      const git = await this.sandboxBlockedGit(ctx);
+      if (git === null) return ok(`${runs}.`);
+      return warn(
+        `${runs}, but git cannot start there: ${git} does not let Windows apps (ALL APPLICATION PACKAGES) run it, so such a task cannot commit.`,
+        `Reinstall Git for Windows with its default permissions, or grant them as an administrator: icacls "${gitInstallFolder(git)}" /grant "*${ALL_APPLICATION_PACKAGES}:(OI)(CI)RX" /T`,
       );
+    }
     return fail(
       `Copilot CLI's sandbox cannot run here: ${problem}, so Trackwall refuses to start ${tasks === "all" ? "any task" : "tasks without approvals"}.`,
       this.deps.inContainer
         ? `${CONTAINER_SANDBOX_FIX}, or choose "No task" in Settings › Agents › Sandbox.`
         : `Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables, and the tun kernel module), or choose "No task" in Settings › Agents › Sandbox.`,
     );
+  }
+
+  /**
+   * On Windows, the daemon's git when Copilot CLI's sandbox cannot start it, `null` otherwise. A session's shell runs the
+   * `git` on its `PATH`, usually `cmd\git.exe` of the same install, so this is a strong sign, not proof.
+   */
+  private async sandboxBlockedGit(ctx: CheckContext): Promise<string | null> {
+    if (this.deps.platform !== "win32") return null;
+    const version = await ctx.gitVersion;
+    if (!version.ok) return null;
+    const { program } = version.value;
+    return (await sandboxGitBlocked(program, this.deps.run, ctx.env, CHECK_TIMEOUT_MS)) === true ? program : null;
   }
 
   /** Only for someone who set Java navigation up: a path that went missing greys it out on the New session form. */

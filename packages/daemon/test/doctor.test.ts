@@ -38,6 +38,7 @@ function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
     worktreesDir: async () => null,
     measureFileWrites: async () => 0.1,
     inContainer: false,
+    platform: "linux",
     unpushedWork: async () => ({ inContainer: false, repos: [], unreadable: [] }),
     remoteReach: async () => [],
     workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
@@ -468,6 +469,41 @@ describe("the check of Copilot CLI's sandbox (ADR-181)", () => {
         "Copilot CLI's sandbox cannot run here: bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH, so Trackwall refuses to start tasks without approvals.",
       fix: 'Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables, and the tun kernel module), or choose "No task" in Settings › Agents › Sandbox.',
     });
+  });
+
+  test("on Windows it warns when git leaves ALL APPLICATION PACKAGES out of its ACL, since a sandboxed task cannot commit", async () => {
+    const git = "C:\\Tools\\Git\\mingw64\\bin\\git.exe";
+    const windows = (acl: string) =>
+      fakeDeps({
+        platform: "win32",
+        sandbox: async () => ({ tasks: "auto", problem: null, chosen: true }),
+        gitVersion: async () => ({ output: "git version 2.47.1.windows.1", program: git, source: "path", chosen: null }),
+        run: async (command) => (command === "powershell.exe" ? acl : ""),
+      });
+    const check = async (acl: string) => (await new Doctor(windows(acl)).run()).checks.find((c) => c.id === "copilot-sandbox");
+    const ownAcl = "S-1-5-32-544|Allow|FullControl\r\nS-1-5-18|Allow|FullControl\r\nS-1-1-0|Allow|ReadAndExecute, Synchronize\r\n";
+
+    expect(await check(ownAcl)).toEqual({
+      id: "copilot-sandbox",
+      status: "warn",
+      summary: `Tasks without approvals run their commands in Copilot CLI's sandbox, but git cannot start there: ${git} does not let Windows apps (ALL APPLICATION PACKAGES) run it, so such a task cannot commit.`,
+      fix: 'Reinstall Git for Windows with its default permissions, or grant them as an administrator: icacls "C:\\Tools\\Git" /grant "*S-1-15-2-1:(OI)(CI)RX" /T',
+    });
+    expect((await check(`${ownAcl}S-1-15-2-1|Allow|ReadAndExecute, Synchronize\r\n`))?.status).toBe("ok");
+    expect((await check(""))?.status).toBe("ok");
+  });
+
+  test("on macOS and Linux it does not read git's ACL", async () => {
+    const commands: string[] = [];
+    const deps = fakeDeps({
+      sandbox: async () => ({ tasks: "auto", problem: null, chosen: true }),
+      run: async (command) => {
+        commands.push(command);
+        return "";
+      },
+    });
+    expect((await new Doctor(deps).run()).checks.find((c) => c.id === "copilot-sandbox")?.status).toBe("ok");
+    expect(commands).not.toContain("powershell.exe");
   });
 
   const refused = "bubblewrap cannot make the sandbox's namespaces here (bwrap: No permissions to create new namespace)";
