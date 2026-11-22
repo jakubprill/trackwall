@@ -14,13 +14,18 @@ export type SupervisorLayout = (typeof LAYOUTS)[number];
 const LAYOUT_KEY = "trackwall.supervisor.pinned";
 const STORED: Record<SupervisorLayout, string> = { folded: "false", pinned: "true", wide: "wide" };
 
-/** Pinned until the user folds it: the supervisor is the first thing to talk to. */
+/**
+ * A window where the user never chose (ADR-286): folded, so a new user starts with the whole window for the view and
+ * the first task's terminal, while the folded strip still shows when the supervisor waits.
+ */
+const UNCHOSEN: SupervisorLayout = "folded";
+
 export function readSupervisorLayout(storage: () => Pick<Storage, "getItem">): SupervisorLayout {
   try {
     const stored = storage().getItem(LAYOUT_KEY);
-    return LAYOUTS.find((layout) => STORED[layout] === stored) ?? "pinned";
+    return LAYOUTS.find((layout) => STORED[layout] === stored) ?? UNCHOSEN;
   } catch {
-    return "pinned";
+    return UNCHOSEN;
   }
 }
 

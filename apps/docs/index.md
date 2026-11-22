@@ -27,7 +27,7 @@ features:
     details: See which repo uses which, through shared packages and HTTP calls, with the line that proves it.
     link: /features/graph
   - title: Supervisor
-    details: Talk to one agent above all your repos, pinned on the right of every view, that plans the work and hands it to other agents.
+    details: Talk to one agent above all your repos, in a panel on the right of every view, that plans the work and hands it to other agents.
     link: /features/supervisor
   - title: Start my day
     details: One button syncs every repo and starts the supervisor with a briefing of what changed since your last day and what waits for you.
