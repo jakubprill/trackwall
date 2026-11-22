@@ -46,6 +46,7 @@ import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
 import { RetryModelSurface } from "./RetryModelSurface.tsx";
 import { RunningTasksWarningSurface } from "./RunningTasksWarningSurface.tsx";
 import { SandboxSurface } from "./SandboxSurface.tsx";
+import { ServerCheckSurface } from "./ServerCheckSurface.tsx";
 import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { SettingRow } from "./SettingRow.tsx";
 import { SettingsNav } from "./SettingsNav.tsx";
@@ -188,6 +189,8 @@ function Section({
       return <WorkBackupSurface conn={conn} />;
     case "repo-hosts":
       return <RepoHostsSurface conn={conn} />;
+    case "server-check":
+      return <ServerCheckSurface conn={conn} settings={settings} />;
     case "copilot-cli":
       return <ConnectCopilotSurface conn={conn} onRetry={onRetry} />;
     case "session-profile":

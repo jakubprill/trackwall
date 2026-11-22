@@ -26,8 +26,9 @@ export const SETTINGS_CATEGORIES = [
   {
     id: "repo-hosts",
     label: "Repo hosts",
-    description: "The GitLab and GitHub hosts the Repos view searches and clones from.",
-    sections: ["repo-hosts"],
+    description:
+      "The GitLab and GitHub hosts the Repos view searches and clones from, and how Trackwall asks your repos' servers for new commits.",
+    sections: ["repo-hosts", "server-check"],
     wide: false,
     group: "settings",
   },

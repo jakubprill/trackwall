@@ -1,9 +1,9 @@
-import type { RunningMiseTask, SessionList } from "@trackwall/protocol";
+import type { RunningMiseTask, ServerCheckState, SessionList } from "@trackwall/protocol";
 import { ArrowRight, ChevronDown, ChevronRight, FolderGit2, HardDrive } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
-import { type AllReposRow, allReposSummary, fetchedLine, foldedLine, needsLook, splitRows } from "@/lib/all-repos";
+import { type AllReposRow, allReposSummary, fetchedLine, foldedLine, needsLook, serverCheckLine, splitRows } from "@/lib/all-repos";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
 import { type RepoActivityItem, type RepoActivityTarget, repoActivity } from "@/lib/repo-activity";
@@ -60,6 +60,8 @@ interface AllReposProps {
   rows: readonly AllReposRow[];
   /** The daemon runs in a container: work on no remote gets its own column (ADR-162). */
   inContainer: boolean;
+  /** The server check's last round (ADR-295), for the header; `undefined` until the daemon answers. */
+  serverCheck: ServerCheckState | undefined;
   /** How many repos the tag filter left of all (ADR-25); the table shows only those. */
   filter: { shown: number; all: number };
   /** `undefined` until the first session list arrives. */
@@ -82,6 +84,7 @@ export function AllReposView({
   conn,
   rows,
   inContainer,
+  serverCheck,
   filter,
   sessions,
   running,
@@ -101,7 +104,9 @@ export function AllReposView({
   const { shown, folded } = splitRows(rows, kept);
   const visible = showFolded ? rows : shown;
   const line = foldedLine(folded, shown.length);
-  const fetched = fetchedLine(rows, new Date());
+  const now = new Date();
+  const fetched = fetchedLine(rows, now);
+  const checked = serverCheckLine(serverCheck, now);
   const openActivity = (repo: string, target: RepoActivityTarget) =>
     target.view === "mise" ? onOpenRepo(repo, "mise") : onOpenInSessions(target.selection);
 
@@ -111,7 +116,11 @@ export function AllReposView({
         <div className="flex min-w-0 flex-col gap-1">
           <span className="hud-label">All repos</span>
           <h1 className="text-xl font-semibold tracking-tight">The state of every repo</h1>
-          {fetched && <p className="text-muted-foreground text-sm">{fetched}</p>}
+          {(fetched || checked) && (
+            <p className="text-muted-foreground text-sm" title={checked?.title}>
+              {[fetched, checked?.text].filter(Boolean).join(" ")}
+            </p>
+          )}
           <p className="text-muted-foreground max-w-prose text-sm">{SYNC_NOTE}</p>
           {filter.shown < filter.all && (
             <p className="text-muted-foreground text-sm">{`The ${filter.shown} of ${filter.all} repos with the selected tags.`}</p>

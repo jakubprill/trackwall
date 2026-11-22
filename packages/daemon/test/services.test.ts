@@ -74,7 +74,7 @@ function setup(
     procs,
     repos: { repoPath, projectsDir: async () => home, sessionProfile: () => null },
     tasks: worktrees,
-    vcs: new Vcs(systemTempFolder),
+    vcs: new Vcs(systemTempFolder, tmpdir()),
     command: FAKE_MISE,
     env,
     onTrusted: () => {},

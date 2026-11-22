@@ -47,7 +47,8 @@ type StateEntryId =
   | "legacy-worktrees-dir"
   | "state-backups-dir"
   | "work-backup-dir"
-  | "container-health-dir";
+  | "container-health-dir"
+  | "server-questions-dir";
 
 /** Copilot CLI's `config.json` as the doctor reads it (`trustedFolders`); the facade's wiring checks the two agree. */
 type CopilotTrust =
@@ -166,6 +167,7 @@ export class ConfigFiles {
       case "state-backups-dir":
       case "work-backup-dir":
       case "container-health-dir":
+      case "server-questions-dir":
         return plainEntry(this.#deps.statePaths[id]);
       case "projects-mise-config":
         return this.#projectsMiseConfig(ctx.projectsDir, depth);

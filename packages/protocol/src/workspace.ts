@@ -161,6 +161,30 @@ export const RepoWatchState = z.object({ startedAt: z.iso.datetime(), revision: 
 export type RepoWatchState = z.infer<typeof RepoWatchState>;
 
 /**
+ * The server check (ADR-295): every 15 minutes the daemon asks the server of each repo's checked-out branch, without
+ * fetching, whether that branch moved since the repo's last fetch. `last` is the newest round; `null` while the check is
+ * off (`serverCheck: false` in `workspace.yaml`) and before its first round, a minute after the daemon starts or the
+ * check is turned on.
+ */
+export const ServerCheckState = z.object({
+  on: z.boolean(),
+  last: z
+    .object({
+      /** When the round ended. */
+      endedAt: z.iso.datetime(),
+      /**
+       * The repos whose server moved the branch, each with the moment before it was asked: a fetch after that moment
+       * (`RepoStatusOk.fetchedAt`) has brought what the server had then.
+       */
+      newCommits: z.array(z.object({ repo: RepoId, checkedAt: z.iso.datetime() })),
+      /** The repos whose server did not answer (or git could not read the repo); the doctor says why (ADR-195). */
+      unreached: z.array(RepoId),
+    })
+    .nullable(),
+});
+export type ServerCheckState = z.infer<typeof ServerCheckState>;
+
+/**
  * A Copilot CLI tool permission pattern (ADR-66), `kind` or `kind(argument)` as `copilot help permissions` describes
  * it: `shell(git push)`, `shell(mvn:*)`, `write`, `trackwall(get_repo)`. It reaches Copilot CLI as one argument
  * (`--allow-tool=<pattern>`), so it is one line without control characters.
@@ -384,6 +408,10 @@ export const WorkspaceSettings = z.object({
   runningTasksWarning: RunningTasksWarning.nullable(),
   /** Why `runningTasksWarning` in `workspace.yaml` cannot be read; the warning uses the computer's default until it is fixed. */
   runningTasksWarningProblem: z.string().nullable(),
+  /** `serverCheck` from `workspace.yaml` (ADR-295): whether the daemon asks the repos' servers for new commits; on without the key. */
+  serverCheck: z.boolean(),
+  /** Why `serverCheck` in `workspace.yaml` cannot be read; no server is asked until it is fixed or saved again. */
+  serverCheckProblem: z.string().nullable(),
   /** `alwaysAllow` from `workspace.yaml` (ADR-249): the tools always allowed in each repo's tasks. */
   alwaysAllow: AlwaysAllowedTools,
   /** Why `alwaysAllow` in `workspace.yaml` cannot be read; task sessions do not start until it is fixed or removed. */
@@ -564,6 +592,13 @@ export const workspaceApi = {
   changes: endpoint("changes", RepoRequest, WorkingTreeChanges),
   /** The work in the projects folder's repos that is on no remote, read only when the daemon runs in a container (ADR-162). */
   unpushedWork: endpoint("unpushed-work", z.object({}).strict(), UnpushedWork),
+  /** The last round of the server check (ADR-295), read from the daemon's memory: asking it starts no git. */
+  serverCheck: endpoint("server-check", z.object({}).strict(), ServerCheckState),
+  /**
+   * Turns the server check on or off (ADR-295); `on: true` removes `serverCheck` from `workspace.yaml`. No MCP tool sets
+   * it: it is the user's choice of what Trackwall connects to.
+   */
+  setServerCheck: endpoint("set-server-check", z.object({ on: z.boolean() }).strict(), WorkspaceSettings),
   /** Opens an address from the README in the default browser (ADR-35), instead of in the app window. */
   openLink: endpoint("open-link", z.object({ url: ExternalLink }).strict(), Done),
   /** Opens `vscode://` in the system; the daemon does not know whether anything handled the address. */

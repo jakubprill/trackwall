@@ -1,8 +1,9 @@
 import type { PullBranchOutcome, PullResult, PullSkipReason } from "@trackwall/protocol";
-import { git, knownDefaultBranch, revParse, symbolicRef } from "./git.ts";
+import { knownDefaultBranch, revParse, symbolicRef } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
 import { bringBack, changedTrackedFiles, describePutAside, putAside } from "./put-aside.ts";
 import { fastForward, fetchRemote, syncDefaultBranch, workingTree } from "./sync.ts";
+import { trackedBranch } from "./tracked-branch.ts";
 
 /**
  * A pull of one repo from its header (§4.5, ADR-269): the sync of the default branch exactly as "Sync all" does it
@@ -56,17 +57,6 @@ async function pullCheckedOut(dir: string): Promise<PullBranchOutcome | null> {
   if ((await revParse(dir, upstream.ref)) === undefined)
     return skipped("no-upstream", `${upstream.short}, which ${branch} tracks, is gone`);
   return fastForward(dir, { branch, remoteRef: upstream.ref, remoteBranch: upstream.short }, network);
-}
-
-/**
- * The branch `head` tracks: its full ref, short name and remote (`.` for a local branch), read from the branch's
- * configuration, so also when the ref is gone, which `@{upstream}` would only report as an error.
- */
-async function trackedBranch(dir: string, head: string): Promise<{ ref: string; short: string; remote: string } | undefined> {
-  const { stdout } = await git(dir, ["for-each-ref", "--format=%(upstream)%00%(upstream:short)%00%(upstream:remotename)", "--", head]);
-  const [ref = "", short = "", remote = ""] = stdout.toString("utf8").replace(/\n$/, "").split("\0");
-  if (ref === "") return undefined;
-  return { ref, short, remote: remote === "" ? "." : remote };
 }
 
 function skipped(reason: PullSkipReason, message: string): PullBranchOutcome {

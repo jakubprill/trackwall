@@ -101,12 +101,13 @@ import { TestReports } from "./modules/test-results/test-reports.ts";
 import { UsageReport } from "./modules/usage-report/usage-report.ts";
 import type { KnownPlaces } from "./modules/usage-report/work-place.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
-import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
+import { SERVER_QUESTIONS_DIR, systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
 import { VERIFICATIONS_FILE, VERIFICATIONS_FORMAT, Verifications } from "./modules/verification/verifications.ts";
 import { ViewerAccess } from "./modules/viewer-access/viewer-access.ts";
 import { WORK_BACKUP_DIR, WORK_BACKUP_INFO_FILE, WORK_BACKUP_INFO_FORMAT, WorkBackup } from "./modules/work-backup/work-backup.ts";
 import { WorkRestore } from "./modules/work-backup/work-restore.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
+import { ServerCheck } from "./modules/workspace/server-check.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
 import { type DiskSpace, diskSpace, LOW_DISK_BYTES } from "./platform/disk-space.ts";
@@ -122,6 +123,8 @@ export interface Facade {
   workspace: Workspace;
   /** HEAD and refs of the repos in the projects folder, compared every second (ADR-63); `main.ts` starts it. */
   repoWatch: RepoWatch;
+  /** The repos' servers asked for new commits every 15 minutes, without a fetch (ADR-295); `main.ts` starts it. */
+  serverCheck: ServerCheck;
   cards: Cards;
   graph: Graph;
   /** The local config files of the repos, backed up into the local config store every few seconds (ADR-86); `main.ts` starts it. */
@@ -342,11 +345,13 @@ export function createErrorJournal(
 
 export function createFacade(o: FacadeOptions): Facade {
   // `workspace` is set right below, before any git command asks for the folder.
-  const vcs: Vcs = new Vcs(() =>
-    workspace.projectsDir().then(
-      (projects: string) => ensureTrackwallDir(projects, "scratch"),
-      () => systemTempFolder(),
-    ),
+  const vcs: Vcs = new Vcs(
+    () =>
+      workspace.projectsDir().then(
+        (projects: string) => ensureTrackwallDir(projects, "scratch"),
+        () => systemTempFolder(),
+      ),
+    join(o.home, SERVER_QUESTIONS_DIR),
   );
   const hosting = new Hosting(o.hostingClis);
   const openEditor = (path: string, line?: number) => o.openUrl(vscodeUrl(path, line));
@@ -382,6 +387,13 @@ export function createFacade(o: FacadeOptions): Facade {
   const cards = new Cards({ vcs, repos: workspace, cache, log: o.log });
   // A new repo or one whose HEAD moved gets its card in the background, so the next graph does not wait for it (ADR-63).
   const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
+  const serverCheck = new ServerCheck({
+    repos: workspace,
+    vcs,
+    on: () => workspace.serverCheckOn(),
+    now: () => new Date(),
+    log: o.log,
+  });
   const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, LOCAL_CONFIG_PUSH_DIR) });
   const board = new Board({ projectsDir: () => workspace.projectsDir() });
   const routines = new Routines({
@@ -601,6 +613,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "state-backups-dir": join(o.home, STATE_BACKUPS_DIR),
       "work-backup-dir": join(o.home, WORK_BACKUP_DIR),
       "container-health-dir": join(o.home, CONTAINER_HEALTH_DIR),
+      "server-questions-dir": join(o.home, SERVER_QUESTIONS_DIR),
     },
     // A projects folder that is not set or cannot be read is a state the view shows, not an error of the whole list.
     projectsDir: () => workspace.projectsDir().catch(() => null),
@@ -708,6 +721,7 @@ export function createFacade(o: FacadeOptions): Facade {
   return {
     workspace,
     repoWatch,
+    serverCheck,
     cards,
     graph,
     localConfig,

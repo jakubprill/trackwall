@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
+import { NEW_ON_SERVER } from "@/lib/repo-status";
 import { pullResultLine, type UpstreamOffer, upstreamOffer } from "@/lib/upstream-pull";
 import { usePull } from "@/lib/use-pull";
 import { cn } from "@/lib/utils";
@@ -12,12 +13,14 @@ import { PutAsideConfirm } from "./PutAsideConfirm.tsx";
 /**
  * The Upstream tile of the repo header (ADR-269): the checked-out branch against the branch it tracks, and the pull that
  * moves it there. When it will not pull, it says why and leads to the tab that gets the user out (Changes or Shell).
+ * Commits only the server check knows of (ADR-295) get the pull too, without a number: the counts are the last fetch's.
  * The new status comes with the repo list, which sees the moved HEAD.
  */
 export function UpstreamTile({
   conn,
   repo,
   status,
+  newOnServer,
   workInFolder,
   onShowChanges,
   onOpenShell,
@@ -25,6 +28,8 @@ export function UpstreamTile({
   conn: Connection;
   repo: string;
   status: RepoStatusOk;
+  /** The server check found commits the repo has not fetched (`newOnServerSince`). */
+  newOnServer: boolean;
   /** What works in the repo folder itself (`workInRepoFolder`); the pull asks first when it is not empty. */
   workInFolder: readonly string[];
   onShowChanges: () => void;
@@ -32,7 +37,7 @@ export function UpstreamTile({
 }) {
   const pull = usePull(conn, repo, workInFolder);
   const { state } = pull;
-  const offer = upstreamOffer(status);
+  const offer = upstreamOffer(status, newOnServer);
 
   return (
     <div className={cn("surface flex min-w-0 flex-col gap-1 px-3 py-2", state.kind === "putting-aside" && "col-span-full")}>
@@ -53,6 +58,7 @@ export function UpstreamTile({
         ) : (
           <span className="text-muted-foreground">none</span>
         )}
+        {offer.kind === "pull" && offer.behind === null && <StatusLabel tone="warning" label={NEW_ON_SERVER} className="text-xs" />}
         {offer.kind === "pull" && state.kind !== "asking" && <PullButton offer={offer} pull={pull} className="self-start" />}
         {offer.kind === "blocked" && state.kind !== "running" && state.kind !== "putting-aside" && (
           <BlockedOffer offer={offer} onPutAside={pull.putAside} onShowChanges={onShowChanges} onOpenShell={onOpenShell} />

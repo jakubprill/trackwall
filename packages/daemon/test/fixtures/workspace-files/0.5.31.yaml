@@ -1,0 +1,58 @@
+# Every key of workspace.yaml as Trackwall 0.5.31 reads it, each set to a value the user could have written.
+# <projects> and <tools> stand for full paths the test puts in, since a full path differs between systems.
+projectsDir: <projects>
+worktreesDir: <projects>/.trackwall/worktrees
+gitProgram: <tools>/git
+repoHosts:
+  - kind: gitlab
+    host: gitlab.example.com
+  - kind: github
+    host: github.com
+starredRepos:
+  - orders-service
+serverCheck: false
+toolPermissions:
+  - allow: ["shell(git status)"]
+    deny: ["shell(git push)"]
+  - repos: [orders-service]
+    allow: ["shell(mvn test)"]
+alwaysAllow:
+  - repo: orders-service
+    tool: shell(npm run build)
+sandbox:
+  tasks: auto
+agentSecrets:
+  - TRACKER_TOKEN
+sessionProfile: byok
+autoReview:
+  afterReport: true
+  rulesAfterReport: false
+supervisorModel: claude-sonnet-4.5
+retryModel: gpt-5
+taskTokenBudget: 2000000
+runningTasksWarning: 4
+taskBranchPrefix: feature/
+javaNavigation:
+  jdtls: <tools>/jdtls
+  java: <tools>/java
+  lombok: <tools>/lombok.jar
+  runtimes:
+    - <tools>/jdk-21
+localConfigRemote: https://git.example.com/me/local-config.git
+supervisor:
+  changesCode: false
+repoTags:
+  payments:
+    - orders-service
+dayStart:
+  prompt: Start with the merge requests that wait for review.
+graph:
+  packages:
+    com.example:orders-api: orders-service
+  apps:
+    orders: orders-service
+  edges:
+    - from: shop-web
+      to: orders-service
+      note: HTTP /api/orders
+      kind: calls

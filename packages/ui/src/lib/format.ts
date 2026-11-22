@@ -18,6 +18,11 @@ export function relativeTime(iso: string, now: Date): string {
   return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+/** The time of day on a 24-hour clock in the user's time zone: "10:05". */
+export function clockTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
 /** How long something has been as it is, for a card on the wall (ADR-224): "just now", "12 min", "2 h 5 min", "3 days". */
 export function elapsedLabel(since: string, now: Date): string {
   const minutes = Math.floor((now.getTime() - new Date(since).getTime()) / 60_000);

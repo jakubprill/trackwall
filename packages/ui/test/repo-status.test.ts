@@ -40,7 +40,7 @@ describe("repo state in the repo list (ADR-293)", () => {
       { ...ok, changes: 0, upstream: behind(0, 4) },
       { ...ok, changes: 0, upstream: null },
     ];
-    expect(statuses.map(repoListTone)).toEqual([
+    expect(statuses.map((status) => repoListTone(status, false))).toEqual([
       { tone: "warning", label: "15 to pull" },
       { tone: "warning", label: "2 changed · 15 to pull" },
       { tone: "warning", label: "diverged" },
@@ -50,7 +50,7 @@ describe("repo state in the repo list (ADR-293)", () => {
   });
 
   test("an unavailable or loading repo reads as in the repo header", () => {
-    expect([repoListTone({ kind: "unavailable", message: "no directory" }), repoListTone({ kind: "loading" })]).toEqual([
+    expect([repoListTone({ kind: "unavailable", message: "no directory" }, false), repoListTone({ kind: "loading" }, false)]).toEqual([
       { tone: "error", label: "unavailable" },
       { label: "loading" },
     ]);
@@ -58,11 +58,25 @@ describe("repo state in the repo list (ADR-293)", () => {
 
   test("the server part alone: commits to pull, “diverged” when the branch has its own too, nothing when it lacks none or tracks none", () => {
     expect([
-      serverLabel({ ...ok, changes: 0, upstream: behind(1) }),
-      serverLabel({ ...ok, changes: 0, upstream: behind(1, 1) }),
-      serverLabel({ ...ok, changes: 0, upstream: behind(0, 1) }),
-      serverLabel({ ...ok, changes: 0, upstream: null }),
+      serverLabel({ ...ok, changes: 0, upstream: behind(1) }, false),
+      serverLabel({ ...ok, changes: 0, upstream: behind(1, 1) }, false),
+      serverLabel({ ...ok, changes: 0, upstream: behind(0, 1) }, false),
+      serverLabel({ ...ok, changes: 0, upstream: null }, false),
     ]).toEqual(["1 to pull", "diverged", null, null]);
+  });
+
+  test("new commits only the server check knows of read “new on the server” in the list too, unless the last fetch already counts some (ADR-295)", () => {
+    expect([
+      repoListTone({ ...ok, changes: 0, upstream: behind(0) }, true),
+      repoListTone({ ...ok, changes: 2, upstream: behind(0) }, true),
+      repoListTone({ ...ok, changes: 0, upstream: behind(15) }, true),
+      repoListTone({ ...ok, changes: 0, upstream: null }, true),
+    ]).toEqual([
+      { tone: "warning", label: "new on the server" },
+      { tone: "warning", label: "2 changed · new on the server" },
+      { tone: "warning", label: "15 to pull" },
+      { tone: "ok", label: "clean" },
+    ]);
   });
 });
 

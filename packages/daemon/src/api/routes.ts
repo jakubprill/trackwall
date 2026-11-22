@@ -88,6 +88,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.setRetryModel, (f, b) => f.workspace.setRetryModel(b.model)),
   route(workspaceApi.setTaskTokenBudget, (f, b) => f.workspace.setTaskTokenBudget(b.budget)),
   route(workspaceApi.setRunningTasksWarning, (f, b) => f.workspace.setRunningTasksWarning(b.above)),
+  route(workspaceApi.setServerCheck, (f, b) => f.workspace.setServerCheck(b.on)),
   route(workspaceApi.removeAlwaysAllowed, (f, b) => f.workspace.removeAlwaysAllowed(b)),
   route(workspaceApi.setAutoReview, (f, b) => f.workspace.setAutoReview(b)),
   route(workspaceApi.setSupervisor, (f, b) => f.workspace.setSupervisor(b)),
@@ -99,6 +100,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.file, (f, b) => f.workspace.file(b.repo, b.path)),
   route(workspaceApi.changes, (f, b) => f.workspace.changes(b.repo)),
   route(workspaceApi.unpushedWork, (f) => f.workspace.unpushedWork()),
+  route(workspaceApi.serverCheck, (f) => f.serverCheck.state()),
   route(workspaceApi.openLink, (f, b) => {
     f.openLink(b.url);
     return null;

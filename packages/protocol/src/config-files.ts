@@ -35,6 +35,7 @@ export const ConfigEntryId = z.enum([
   "state-backups-dir",
   "work-backup-dir",
   "container-health-dir",
+  "server-questions-dir",
   "projects-mise-config",
   "local-config-store",
   "task-worktrees-dir",
@@ -263,6 +264,15 @@ export const CONFIG_ENTRIES: Record<ConfigEntryId, ConfigEntryInfo> = {
     purpose: "A reading of the container's memory, processors and processes every 30 seconds, kept for a day. Only in a dev container.",
     docs: "container-health",
   },
+  "server-questions-dir": {
+    place: "state",
+    kind: "folder",
+    writer: "trackwall",
+    internal: true,
+    purpose:
+      "Where git asks your repos' servers for new commits and whether they answer, outside every repo, so only your own git configuration applies; empty between questions.",
+    docs: "repos",
+  },
   "projects-mise-config": {
     place: "projects",
     kind: "file",
@@ -377,6 +387,7 @@ export const WorkspaceKey = z.enum([
   "gitProgram",
   "repoHosts",
   "starredRepos",
+  "serverCheck",
   "toolPermissions",
   "alwaysAllow",
   "sandbox",
@@ -410,6 +421,11 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   gitProgram: { purpose: "Which git Trackwall runs to read your repos.", docs: "repos", settings: "workspace" },
   repoHosts: { purpose: "Where the Repos view searches and clones from.", docs: "repos", settings: "repo-hosts" },
   starredRepos: { purpose: "The repos you starred, listed first in the Repos view.", docs: "repos", settings: "repos" },
+  serverCheck: {
+    purpose: "Whether Trackwall asks your repos' servers every 15 minutes for commits you have not fetched.",
+    docs: "repos",
+    settings: "repo-hosts",
+  },
   toolPermissions: { purpose: "Which tools sessions may use without asking you.", docs: "approvals", settings: null },
   alwaysAllow: { purpose: "Tools you always allow in a repo's tasks, from Always allow.", docs: "approvals", settings: "agents" },
   sandbox: { purpose: "Which tasks run their commands in Copilot CLI's sandbox.", docs: "approvals", settings: "agents" },

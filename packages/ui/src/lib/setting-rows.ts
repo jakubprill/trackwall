@@ -29,6 +29,11 @@ export const SETTING_ROWS = {
     what: "One file with the commits and changes only this container has.",
     group: "Backup",
   },
+  "server-check": {
+    title: "Check for new commits",
+    what: "Ask your repos' servers every 15 minutes whether they have commits you have not fetched.",
+    group: "Servers",
+  },
   sandbox: { title: "Sandbox", what: "Which tasks run their commands closed inside their own worktree.", group: "Tasks" },
   "auto-review": { title: "Automatic review", what: "Review a task's changes when its agent reports its result.", group: "Tasks" },
   "always-allow": { title: "Always allowed in tasks", what: 'The tools you chose "Always allow" for, by repo.', group: "Tasks" },
@@ -145,6 +150,11 @@ const WORKSPACE_VALUES: Partial<Record<SettingRowId, (settings: WorkspaceSetting
   "projects-folder": (s) => (s.projectsDir === null ? { text: "not set", state: "problem" } : { text: s.projectsDir, state: "default" }),
   "worktrees-dir": (s) => chosen(s.worktreesDir, s.worktreesDirProblem, "default"),
   "git-program": (s) => chosen(s.gitProgram, s.gitProgramProblem, "git from PATH"),
+  // On by default, so turning it off is the change.
+  "server-check": (s) => {
+    if (s.serverCheckProblem !== null) return { text: UNREADABLE, state: "problem" };
+    return s.serverCheck ? { text: "every 15 minutes", state: "default" } : { text: "off", state: "changed" };
+  },
   sandbox: sandboxValue,
   "auto-review": autoReviewValue,
   "always-allow": (s) =>
