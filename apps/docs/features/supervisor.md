@@ -1,16 +1,16 @@
 ---
 title: Supervisor
-description: Talk to one agent above all your repos, pinned on the right of every view, that plans the work and hands it to other agents.
+description: Talk to one agent above all your repos, in a panel on the right of every view, that plans the work and hands it to other agents.
 status: stable
 ---
 
 # Supervisor
 
-Talk to one agent above all your repos, pinned on the right of every view, that plans the work and hands it to other agents.
+Talk to one agent above all your repos, in a panel on the right of every view, that plans the work and hands it to other agents.
 
 ## What you get
 
-- One place to describe what you want done across repos, visible next to Home, Repos, Sessions and every other view.
+- One place to describe what you want done across repos, on the right of Home, Repos, Sessions and every other view, folded to a strip until you open it.
 - An agent that splits the work into proposals, a [change](/features/changes) for work that spans several repos and a task for work in one repo, and follows the agents that run them.
 - A supervisor that knows what is going on, also with the work you started yourself, wakes up when one of its tasks finishes a turn, reports or gets a verification verdict, and can send that task's agent a correction or an answer.
 - Everything it delegated, with its state, right under it: in its panel and at the top of "Sessions".
@@ -26,12 +26,12 @@ Once a task runs, the supervisor does not have to keep checking on it. When the 
 
 Whatever you write to the supervisor, Trackwall adds a short list of the work under way to your message, without showing it to you: every task with who started it (you, the supervisor, or another task) and what its agent is doing (working, waiting for your approval, done with its turn, or stopped), every proposal still waiting for you, and the sessions you opened yourself. So "what is going on?" or "what is waiting for me?" gets an answer at once, about everything and not just the supervisor's own tasks, and the supervisor sees the task you started by hand before it proposes the same work again. The list is taken fresh with each message, so it is never older than what you just asked. It holds only names and states; the supervisor still opens a task when it needs the details.
 
-The panel can be folded to a narrow strip at the right edge, which keeps a bell when something waits for you, or widened with the arrows in its header when you want to read what the supervisor wrote; the view next to it keeps enough room for the dashboard and a task's terminal, so in a small window the panel widens only a little. The panel stays as you left it the next time you open Trackwall. The supervisor keeps its answers short, with the conclusion first, and gives the details when you ask. In a small window the panel is narrower, and the views next to it narrow their side panels, so a task's terminal and the Home dashboard keep their room.
+The panel starts folded to a narrow strip at the right edge, which keeps a bell when something waits for you. Click the strip or press Alt+0 to pin it open, fold it again from its header, or widen it with the arrows in its header when you want to read what the supervisor wrote; the view next to it keeps enough room for the dashboard and a task's terminal, so in a small window the panel widens only a little. The panel stays as you left it the next time you open Trackwall. The supervisor keeps its answers short, with the conclusion first, and gives the details when you ask. In a small window the panel is narrower, and the views next to it narrow their side panels, so a task's terminal and the Home dashboard keep their room.
 
 ## Use it
 
 1. Set your projects folder in "Settings", if you have not yet.
-2. Open the panel on the right (Alt+0 gets you there) and pick how to start: "Start my day" begins with a briefing (see [Start my day](/features/start-my-day)), "Continue" goes on with the last conversation where you stopped, "New conversation" starts a clean one. Each says in one sentence what it does, and the one you most likely want is first and highlighted: "Start my day" until you have started your day today, then "Continue". Under them, "Show as" picks a terminal or the chat view.
+2. Click the strip on the right to open the panel (Alt+0 does the same) and pick how to start: "Start my day" begins with a briefing (see [Start my day](/features/start-my-day)), "Continue" goes on with the last conversation where you stopped, "New conversation" starts a clean one. Each says in one sentence what it does, and the one you most likely want is first and highlighted: "Start my day" until you have started your day today, then "Continue". Under them, "Show as" picks a terminal or the chat view.
 3. Tell it what you want done.
 4. Review its proposals in "Sessions" or from "Delegated" in the panel, and start the ones you want.
 
