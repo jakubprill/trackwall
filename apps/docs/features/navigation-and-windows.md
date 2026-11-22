@@ -20,7 +20,7 @@ Move between views with the keyboard, and spread Trackwall over several windows 
 
 ## How it works
 
-The bar at the left edge of the window switches views, as in VS Code: "Home", "Repos", "Sessions", "Overview", "Plan" and "[Flow](/features/flow)" at the top, "Settings" at the bottom. Hover over an icon to see the view's name and key.
+The bar at the left edge of the window switches views, as in VS Code: "Home", "Repos", "Sessions", "Overview", "Plan" and "[Flow](/features/flow)" at the top, "Settings" at the bottom. Hover over an icon to see the view's name and key. A number on an icon counts what needs you there: on "Sessions" the sessions and task proposals waiting for you, on "Home" what the [container's health](/features/container-health) warns of when Trackwall runs in a dev container.
 
 "Settings" lists its categories on the left: "[Get started](/features/get-started)", "Workspace" (the projects folder, the task worktrees folder and the local config backup), "Repo hosts", "Agents" (how tasks, the supervisor and sessions start, and installing [Java navigation](/features/java-navigation)), "Usage" ([Copilot usage](/features/copilot-usage), [Model statistics](/features/model-stats) and the [MCP calls](/features/mcp-calls) agents made), "App" (start at sign-in, updates, the theme and how the Home scene looks), "Files" (every file Trackwall reads or writes, see [Config files](/features/config-files)) and "Diagnostics" (the doctor, the state of the daemon and Trackwall's own errors). Click a category to see its settings. In a narrow window the categories sit in a row above them.
 

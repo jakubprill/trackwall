@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ContainerHealth } from "@trackwall/protocol";
-import { healthEvents, healthTiles, healthUptime, memoryBars } from "../src/lib/container-health.ts";
+import { containerAttentionCount, healthEvents, healthTiles, healthUptime, memoryBars } from "../src/lib/container-health.ts";
 
 const GIB = 1024 ** 3;
 const NOW = new Date("2026-11-18T12:00:00.000Z");
@@ -62,5 +62,39 @@ describe("the container's health panel", () => {
 
   test("the uptime names the container and the daemon", () => {
     expect(healthUptime(HEALTH, NOW)).toBe("The container started 4 h ago, Trackwall's daemon 30 min ago.");
+  });
+});
+
+describe("the number on Home's icon", () => {
+  test("counts the container's warnings, which no other view lists", () => {
+    const warns: ContainerHealth = {
+      ...HEALTH,
+      warnings: [
+        { id: "oom-kill", text: "The kernel killed a process for lack of memory in the last hour." },
+        { id: "disk-low", text: "The disk has 2.0 GB free." },
+      ],
+    };
+    expect(containerAttentionCount(warns)).toBe(2);
+  });
+
+  test("work only in the container counts while its last backup is old, once, as that warning", () => {
+    const freshBackup: ContainerHealth = {
+      ...HEALTH,
+      backup: { lastAt: "2026-11-18T09:00:00.000Z", reposWithUnpushedWork: 3 },
+      warnings: [],
+    };
+    expect(containerAttentionCount(freshBackup)).toBe(0);
+
+    const oldBackup: ContainerHealth = {
+      ...HEALTH,
+      backup: { lastAt: null, reposWithUnpushedWork: 3 },
+      warnings: [{ id: "backup-old", text: "3 repos have work on no remote, and the last backup is not made yet." }],
+    };
+    expect(containerAttentionCount(oldBackup)).toBe(1);
+  });
+
+  test("is zero outside a container and until the daemon answers", () => {
+    expect(containerAttentionCount({ ...HEALTH, inContainer: false })).toBe(0);
+    expect(containerAttentionCount(undefined)).toBe(0);
   });
 });
