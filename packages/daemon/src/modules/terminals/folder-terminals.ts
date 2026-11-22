@@ -21,7 +21,7 @@ const INITIAL_COLS = 120;
 const INITIAL_ROWS = 30;
 
 /** The first line of a shell the daemon opened again after a restart: the old shell's screen, variables and jobs are gone. */
-const REOPENED_NOTE = "\x1b[2m[Trackwall restarted: this is a new shell in the same folder]\x1b[0m\r\n";
+const REOPENED_LINE = "[Trackwall restarted: this is a new shell in the same folder]";
 
 /** What `procs` gives a folder terminal (§4.2). */
 export interface TerminalProcs {
@@ -44,8 +44,11 @@ export interface FolderTerminalsDeps {
   folder: (place: TerminalPlace) => Promise<string>;
   /** The environment of processes started for the user (`userEnv`). */
   env: () => Promise<NodeJS.ProcessEnv>;
-  /** The command of the user's shell in that environment (`userShell`). */
-  shell: (env: NodeJS.ProcessEnv) => readonly string[];
+  /**
+   * The user's shell in that environment (`userShell`) with `firstLine` above its first prompt (`shellStart`): the
+   * command, and the line still to write onto the screen when the shell does not print it itself.
+   */
+  shell: (env: NodeJS.ProcessEnv, firstLine: string | null) => { command: readonly string[]; screenLine: string | null };
   /** The places whose shell runs, for the next daemon (ADR-283). */
   places: ShellPlacesStore;
   log: (msg: string) => void;
@@ -266,12 +269,13 @@ export class FolderTerminals {
 
   /** Starts the entry's shell in `cwd` and follows its place; a shell `reopened` after a restart says so on its first line. */
   async #spawn(entry: Entry, cwd: string, reopened: boolean): Promise<void> {
-    if (reopened) entry.screen.write(new TextEncoder().encode(REOPENED_NOTE));
     const env = { ...(await this.#deps.env()), TERM: "xterm-256color", COLORTERM: "truecolor" };
+    const shell = this.#deps.shell(env, reopened ? REOPENED_LINE : null);
+    if (shell.screenLine !== null) entry.screen.write(new TextEncoder().encode(`\x1b[2m${shell.screenLine}\x1b[0m\r\n`));
     try {
       const { terminal } = await this.#deps.procs.startTerminal({
         owner: terminalOwner(entry.id),
-        command: this.#deps.shell(env),
+        command: shell.command,
         cwd,
         env,
         cols: entry.screen.cols,

@@ -27,6 +27,24 @@ export function userShell(
   return platform === "darwin" ? [shell, "-l"] : [shell];
 }
 
+/** A shell's command, and the line the caller writes onto its screen above the first prompt (`null`: none to write). */
+export interface ShellStart {
+  command: readonly string[];
+  screenLine: string | null;
+}
+
+/**
+ * The shell's start with `firstLine` above its first prompt. ConPTY on Windows clears the screen when the console
+ * starts, so a line written onto the screen before it is gone by the first prompt; there `cmd.exe /K echo` prints it
+ * inside the console instead. On macOS and Linux the PTY passes the screen through, and the caller writes the line.
+ * The line is the daemon's own text, never a request's: `echo` would run whatever `&` or `|` follows in it.
+ */
+export function shellStart(shell: readonly string[], firstLine: string | null, platform: NodeJS.Platform = process.platform): ShellStart {
+  if (firstLine === null) return { command: shell, screenLine: null };
+  if (platform === "win32") return { command: [...shell, "/K", `echo ${firstLine}`], screenLine: null };
+  return { command: shell, screenLine: firstLine };
+}
+
 function executable(path: string): boolean {
   try {
     accessSync(path, constants.X_OK);
