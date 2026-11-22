@@ -1,6 +1,7 @@
 import type { Session, WorkspaceSettings } from "@trackwall/protocol";
 import { useContext, useState } from "react";
 import { getStartedStepAction } from "@/components/GetStartedSteps";
+import { TrustedFolderNote } from "@/components/TrustedFolderNote";
 import type { Connection } from "@/lib/connection";
 import { DaemonPlaceContext } from "@/lib/desktop";
 import { getStartedInSessions, getStartedPlace, getStartedPlan } from "@/lib/get-started";
@@ -62,7 +63,14 @@ export function NewSessionPane({
       )}
       {offersForm && (
         <>
-          <NewSession conn={conn} sessions={sessions} onStarted={onStarted} onCancel={onCancel} />
+          <NewSession
+            conn={conn}
+            sessions={sessions}
+            onStarted={onStarted}
+            onCancel={onCancel}
+            // While the card shows, its trusted folder step asks the same (ADR-290).
+            note={check ? undefined : <TrustedFolderNote conn={conn} />}
+          />
           <RoutineList conn={conn} onStarted={onStarted} />
           <WorktreeCleanup conn={conn} onRemoved={onWorktreesRemoved} />
         </>

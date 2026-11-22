@@ -66,6 +66,14 @@ export const TrustedProjectsFolder = z.object({
 });
 export type TrustedProjectsFolder = z.infer<typeof TrustedProjectsFolder>;
 
+/** The projects folder, and whether Copilot CLI trusts it without asking, itself or through a folder above it (ADR-290). */
+export const ProjectsFolderTrust = z.object({
+  /** The projects folder of the workspace settings. */
+  folder: z.string(),
+  trusted: z.boolean(),
+});
+export type ProjectsFolderTrust = z.infer<typeof ProjectsFolderTrust>;
+
 /**
  * How the Copilot CLI sessions start compares with `TESTED_COPILOT_CLI_VERSION` (ADR-274): `older` may lack what the daemon
  * relies on, `newer` may have changed it, `unknown` when Copilot CLI is missing, did not answer or said no version.
@@ -118,6 +126,12 @@ export const doctorApi = {
    * changed safely; the message says why.
    */
   trustProjectsFolder: endpoint("trust-projects-folder", z.object({}).strict(), TrustedProjectsFolder),
+  /**
+   * Only whether Copilot CLI trusts the projects folder, without the other checks (ADR-290): the New session form asks it
+   * so that it offers "Trust folder" only while Copilot CLI would ask. Reads Copilot CLI's `config.json` and nothing else;
+   * a missing or unreadable `config.json` trusts nothing. `bad_request` when no projects folder is set.
+   */
+  projectsFolderTrust: endpoint("projects-folder-trust", z.object({}).strict(), ProjectsFolderTrust),
   /**
    * Only the version of the Copilot CLI sessions start, without the other checks (ADR-274): the window asks for it when it
    * connects and every hour, and warns about a version Trackwall is not tested with. Runs `copilot --version` and nothing else.
