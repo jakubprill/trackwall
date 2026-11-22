@@ -1,8 +1,8 @@
 import { Button } from "@/components/ui/button";
 
 /**
- * A view with nothing to offer before a projects folder is set (Home, Sessions): what it needs the folder for, and
- * "Get started", the view's one bright button, which opens the steps that set it (ADR-262).
+ * Home before a projects folder is set, with nothing to offer: what it needs the folder for, and "Get started", the
+ * view's one bright button, which opens the steps that set it (ADR-262).
  */
 export function ProjectsFolderNeeded({ needs, onOpenGetStarted }: { needs: string; onOpenGetStarted: () => void }) {
   return (

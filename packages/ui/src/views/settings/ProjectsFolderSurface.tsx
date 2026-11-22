@@ -1,7 +1,7 @@
 import type { WorkspaceSettings } from "@trackwall/protocol";
+import { ProjectsFolderForm } from "@/components/ProjectsFolderForm";
 import type { Connection } from "@/lib/connection";
 import type { RemoteHandle } from "@/lib/use-remote";
-import { ProjectsFolderForm } from "./ProjectsFolderForm.tsx";
 
 /** The projects folder (ADR-18) in "Settings > Workspace": what it is for, and the form "Get started" shows too. */
 export function ProjectsFolderSurface(props: {

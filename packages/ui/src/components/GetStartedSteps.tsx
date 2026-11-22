@@ -1,28 +1,37 @@
-import type { TrustedProjectsFolder } from "@trackwall/protocol";
+import type { TrustedProjectsFolder, WorkspaceSettings } from "@trackwall/protocol";
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
 import { CopyableCode } from "@/components/CopyableCode";
 import { Surface } from "@/components/Surface";
 import { TrustFolderButton } from "@/components/TrustFolderButton";
-import { fixCommand, type GetStartedPlan, type GetStartedStep, type GoodToHave, goodToHaveSummary } from "@/lib/get-started";
+import type { Connection } from "@/lib/connection";
+import {
+  fixCommand,
+  type GetStartedPlan,
+  type GetStartedStep,
+  type GoodToHave,
+  getStartedHeadline,
+  goodToHaveSummary,
+  TRUST_FOLDER_STEP,
+} from "@/lib/get-started";
+import { trustProjectsFolder } from "@/lib/trust-folder";
+import type { RemoteHandle } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
+import { ProjectsFolderForm } from "./ProjectsFolderForm.tsx";
+
+/** What settles an open step where it shows, or `null` for a step that only says what to do. */
+type StepAction = (step: GetStartedStep) => ReactNode;
 
 /**
  * The steps of "Get started" (ADR-262) for a plan: each with its state, what was found and what to do, and the tools
  * that are good to have folded under them. It reads nothing itself, so the gallery of view states draws it too; the
  * form of an open step (the projects folder) comes from `action`.
  */
-export function GetStartedSteps({ plan, action }: { plan: GetStartedPlan; action?: (step: GetStartedStep) => ReactNode }) {
+export function GetStartedSteps({ plan, action }: { plan: GetStartedPlan; action?: StepAction }) {
   return (
     <>
       <Surface>
-        <ol>
-          {plan.steps.map((step, i) => (
-            <Step key={step.id} step={step} number={i + 1}>
-              {action?.(step)}
-            </Step>
-          ))}
-        </ol>
+        <GetStartedStepList steps={plan.steps} action={action} />
       </Surface>
       {plan.goodToHave.length > 0 && (
         <Surface>
@@ -41,6 +50,52 @@ export function GetStartedSteps({ plan, action }: { plan: GetStartedPlan; action
       )}
     </>
   );
+}
+
+/**
+ * The first line of "Get started", in Settings and in the card above the Sessions form: how far setup is, and where
+ * Trackwall runs (`getStartedPlace`), which decides what the steps find.
+ */
+export function GetStartedSummary({ plan, place }: { plan: Pick<GetStartedPlan, "neededOpen" | "open">; place: string }) {
+  return (
+    <p className="text-sm">
+      {getStartedHeadline(plan)} <span className="text-muted-foreground">Trackwall runs {place}.</span>
+    </p>
+  );
+}
+
+/** Steps numbered in the order given, each with its state and, for an open one, what settles it (`action`). */
+export function GetStartedStepList({ steps, action }: { steps: readonly GetStartedStep[]; action?: StepAction }) {
+  return (
+    <ol>
+      {steps.map((step, i) => (
+        <Step key={step.id} step={step} number={i + 1}>
+          {action?.(step)}
+        </Step>
+      ))}
+    </ol>
+  );
+}
+
+/**
+ * What settles an open step right where the steps show, in Settings and above the Sessions form (ADR-289): the projects
+ * folder's form, or "Trust folder"; `null` for the other steps, which say the doctor's fix. `onChanged` runs the doctor
+ * again once the step is done.
+ */
+export function getStartedStepAction(
+  step: GetStartedStep,
+  {
+    conn,
+    settings,
+    onRetry,
+    onChanged,
+  }: { conn: Connection; settings: RemoteHandle<WorkspaceSettings>; onRetry: () => void; onChanged: () => void },
+): ReactNode {
+  if (step.state !== "todo") return null;
+  if (step.id === "projects-folder") return <ProjectsFolderForm conn={conn} settings={settings} onRetry={onRetry} onSaved={onChanged} />;
+  if (step.id === TRUST_FOLDER_STEP)
+    return <TrustFolderStep fix={step.fix} trust={() => trustProjectsFolder(conn)} onTrusted={onChanged} />;
+  return null;
 }
 
 /** The open trusted folder step: the button first, and the doctor's sentence for doing the same by hand under it. */

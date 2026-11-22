@@ -1,20 +1,18 @@
 import type { DoctorReport, WorkspaceSettings } from "@trackwall/protocol";
 import { useContext } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
+import { GetStartedSteps, GetStartedSummary, getStartedStepAction } from "@/components/GetStartedSteps";
 import { Loading } from "@/components/Loading";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { DaemonPlaceContext } from "@/lib/desktop";
-import { getStartedHeadline, getStartedPlace, getStartedPlan, TRUST_FOLDER_STEP } from "@/lib/get-started";
-import { trustProjectsFolder } from "@/lib/trust-folder";
+import { getStartedPlace, getStartedPlan } from "@/lib/get-started";
 import type { RemoteHandle } from "@/lib/use-remote";
-import { GetStartedSteps, TrustFolderStep } from "./GetStartedSteps.tsx";
-import { ProjectsFolderForm } from "./ProjectsFolderForm.tsx";
 
 /**
  * "Get started" (ADR-262): what is left before a first session, from the doctor's report, with the projects folder set
- * right here. The report is the one Settings or Home already runs, handed in, so the number next to the category and
- * this list come from the same run.
+ * right here. The report is the one Settings already runs for its categories, handed in, so the number next to the
+ * category and this list come from the same run.
  */
 export function GetStartedSurface({
   conn,
@@ -43,9 +41,7 @@ export function GetStartedSurface({
       {plan && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm">
-              {getStartedHeadline(plan)} <span className="text-muted-foreground">Trackwall runs {place}.</span>
-            </p>
+            <GetStartedSummary plan={plan} place={place} />
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={report.reload}>
                 Check again
@@ -59,14 +55,7 @@ export function GetStartedSurface({
           </div>
           <GetStartedSteps
             plan={plan}
-            action={(step) => {
-              if (step.state !== "todo") return null;
-              if (step.id === "projects-folder")
-                return <ProjectsFolderForm conn={conn} settings={settings} onRetry={onRetry} onSaved={report.reload} />;
-              if (step.id === TRUST_FOLDER_STEP)
-                return <TrustFolderStep fix={step.fix} trust={() => trustProjectsFolder(conn)} onTrusted={report.reload} />;
-              return null;
-            }}
+            action={(step) => getStartedStepAction(step, { conn, settings, onRetry, onChanged: report.reload })}
           />
           {plan.otherProblems > 0 && (
             <p className="text-muted-foreground text-xs">

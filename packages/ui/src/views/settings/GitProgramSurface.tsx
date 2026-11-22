@@ -1,10 +1,10 @@
 import { type WorkspaceSettings, workspaceApi } from "@trackwall/protocol";
+import { PathForm } from "@/components/PathForm";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { useDesktop } from "@/lib/desktop";
 import { daemonExamplePaths } from "@/lib/platform";
 import type { RemoteHandle } from "@/lib/use-remote";
-import { PathForm } from "./PathForm.tsx";
 import { SettingsRead } from "./SettingsRead.tsx";
 
 /** The git the daemon starts for local git calls (ADR-112); empty means git from `PATH`. */

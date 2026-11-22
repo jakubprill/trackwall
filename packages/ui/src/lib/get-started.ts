@@ -112,6 +112,27 @@ export function getStartedHeadline({ neededOpen, open }: Pick<GetStartedPlan, "n
   return "Ready. Everything Trackwall needs to start a session is in place.";
 }
 
+/**
+ * Whether the Sessions view shows what is left before a first session above its form (ADR-289): while no projects folder
+ * is set (`undefined` is not known yet), and after that, until a session exists, while the doctor's last run in this
+ * browser left a step open. Not on every new task after that: the card runs the doctor, which ADR-262 keeps off every
+ * start, and the steps still open stay a line under "Get started" in Settings (ADR-268).
+ */
+export function getStartedInSessions(projectsDir: string | null | undefined, sessionCount: number, openSteps: number | null): boolean {
+  return projectsDir === null || (sessionCount === 0 && openSteps !== null && openSteps > 0);
+}
+
+/** The steps a short list shows one by one: those not done, which keep their order. */
+export function stepsLeft(plan: Pick<GetStartedPlan, "steps">): GetStartedStep[] {
+  return plan.steps.filter((s) => s.state !== "done");
+}
+
+/** The done steps in one line, for a list that shows only the steps left; `null` while none is done. */
+export function doneStepsLine(plan: Pick<GetStartedPlan, "steps">): string | null {
+  const done = plan.steps.filter((s) => s.state === "done").map((s) => s.title);
+  return done.length === 0 ? null : `Done: ${done.join(", ")}.`;
+}
+
 /** Where Trackwall runs, which decides what the steps find; Trackwall knows it, so the user is never asked. */
 export function getStartedPlace(place: Pick<DaemonPlace, "container">): string {
   return place.container === null ? "on this computer" : "in a container";

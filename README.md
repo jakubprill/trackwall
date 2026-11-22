@@ -59,8 +59,8 @@ More in [How Trackwall works](https://jakubprill.github.io/trackwall/guide/how-i
 
 1. Download the build for Windows or macOS from [Releases](https://github.com/jakubprill/trackwall/releases). The builds are not signed yet, so follow the [installation steps](https://jakubprill.github.io/trackwall/guide/install) to get past SmartScreen and Gatekeeper.
 2. Install [GitHub Copilot CLI](https://github.com/github/copilot-cli) and sign in to it once (`copilot`, then `/login`).
-3. Start Trackwall and follow "Get started" in "Settings": it sets your projects folder and checks what else a first session needs. [Troubleshooting](https://jakubprill.github.io/trackwall/guide/troubleshooting) explains a step that does not turn green.
-4. Start a session from "Sessions". To give a Copilot CLI you start in your own terminal Trackwall's tools too, [connect it](https://jakubprill.github.io/trackwall/guide/connect-copilot-cli) to Trackwall's MCP server.
+3. Start Trackwall and follow the steps of "Get started" at the top of "Sessions", where it opens: they set your projects folder and check what else a first session needs. [Troubleshooting](https://jakubprill.github.io/trackwall/guide/troubleshooting) explains a step that does not turn green.
+4. Start a task or session from the form under the steps. To give a Copilot CLI you start in your own terminal Trackwall's tools too, [connect it](https://jakubprill.github.io/trackwall/guide/connect-copilot-cli) to Trackwall's MCP server.
 
 To run Trackwall in a container instead, see [Run in a dev container](https://jakubprill.github.io/trackwall/guide/dev-container). To build it from source, see [docs/development.md](docs/development.md).
 
