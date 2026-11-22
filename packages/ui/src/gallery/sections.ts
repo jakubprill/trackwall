@@ -1,6 +1,7 @@
 import { ALL_REPOS_STATES } from "./all-repos-states.tsx";
 import type { GallerySection } from "./gallery-state.ts";
 import { GET_STARTED_CARD_STATES, GET_STARTED_STATES } from "./get-started-states.tsx";
+import { HOME_DETAILS_STATES } from "./home-details-states.tsx";
 import { HOME_STATES } from "./home-states.tsx";
 import { SESSION_LIST_STATES } from "./session-list-states.tsx";
 import { SETTING_ROWS_STATES } from "./setting-rows-states.tsx";
@@ -14,7 +15,8 @@ export const GALLERY_SECTIONS: readonly GallerySection[] = [
   { name: "Sessions · the list", sizes: [{ name: "fixed width", className: "w-sidebar" }], states: SESSION_LIST_STATES },
   {
     name: "Tips",
-    // A tip is as wide as its place: the Sessions list, the narrowest, and a task's panel or the New session form.
+    // A tip is as wide as its place: the Sessions list, and a task's panel or the New session form. The narrowest, an
+    // approval in Home's details, is drawn in its place in "Home · the details".
     sizes: [
       { name: "the Sessions list", className: "w-sidebar" },
       { name: "a view", className: "w-3xl" },
@@ -48,6 +50,15 @@ export const GALLERY_SECTIONS: readonly GallerySection[] = [
       { name: "narrowest", className: "h-[650px] w-48" },
     ],
     states: HOME_STATES,
+  },
+  {
+    name: "Home · the details",
+    // The column beside the scene, as wide as the "Needs you" column on the other side: from the sidebar width down to 12rem.
+    sizes: [
+      { name: "widest", className: "w-sidebar" },
+      { name: "narrowest", className: "w-48" },
+    ],
+    states: HOME_DETAILS_STATES,
   },
   {
     name: "Repos · All repos",

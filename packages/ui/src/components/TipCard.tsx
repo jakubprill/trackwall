@@ -41,7 +41,8 @@ export function TipCard({
       <p className="text-sm font-medium">{title}</p>
       <p className="text-muted-foreground text-sm">{text(IS_MAC)}</p>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1">
-        <Button variant="ghost" size="sm" onClick={onDocs}>
+        {/* The page's title wraps, since a tip is as narrow as its place, down to an approval in Home's details. */}
+        <Button variant="ghost" size="sm" className="h-auto min-h-8 max-w-full py-1.5 text-left whitespace-normal" onClick={onDocs}>
           <BookOpen /> {docs.title}
         </Button>
         <span className="flex-1" />

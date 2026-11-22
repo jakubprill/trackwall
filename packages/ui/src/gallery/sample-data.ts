@@ -1,4 +1,5 @@
 import type {
+  AgentApproval,
   CopilotUsage,
   FollowedMergeRequest,
   PipelineState,
@@ -39,6 +40,20 @@ export function sampleId(n: number): string {
 }
 
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
+/** A task's approval of a long Maven command, with Trackwall's "Always allow" for it (ADR-249). */
+export const MVNW_APPROVAL: AgentApproval = {
+  id: "dialog",
+  kind: "approval",
+  title: "Run shell command",
+  detail: ["./mvnw -pl orders-api -am verify -Dsurefire.failIfNoSpecifiedTests=false -Dtest=DiscountRulesTest,CartPricingTest"],
+  question: "Do you want to run this command?",
+  options: [
+    { key: "1", label: "Yes" },
+    { key: "2", label: "Yes, and don't ask again for ./mvnw in this repo" },
+  ],
+  alwaysAllow: "shell(./mvnw)",
+};
 
 /** A running process group, the most common `run`. */
 const RUNNING: Session["run"] = { kind: "running", runId: "run", startedAt: minutesAgo(90), pid: 4242 };

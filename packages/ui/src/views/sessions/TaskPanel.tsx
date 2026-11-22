@@ -16,6 +16,7 @@ import { SessionNotices } from "@/components/SessionNotices";
 import { SessionScreen } from "@/components/SessionScreen";
 import { TabBar } from "@/components/TabBar";
 import { TaskStateLabel } from "@/components/TaskStateLabel";
+import { Tip } from "@/components/Tip";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
@@ -142,6 +143,7 @@ export function TaskPanel({
           />
         </div>
       </header>
+      <Tip conn={conn} tip="verify" className="mx-4 my-2" />
       <SessionEnvironment environment={session?.environment} />
       <PausedNotice task={task} stopped={stopped?.task === task.id ? stopped.what : undefined} />
       {changingModel && (
