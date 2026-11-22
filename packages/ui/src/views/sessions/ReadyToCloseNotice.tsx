@@ -1,5 +1,6 @@
 import { agentsApi, readyToClose, type Session, type Task } from "@trackwall/protocol";
 import { CheckCheck } from "lucide-react";
+import { Tip } from "@/components/Tip";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
@@ -47,6 +48,7 @@ export function ReadyToCloseNotice({
           Keep open
         </Button>
       </span>
+      <Tip conn={conn} tip="ready-to-close" className="mb-1 basis-full" />
     </section>
   );
 }

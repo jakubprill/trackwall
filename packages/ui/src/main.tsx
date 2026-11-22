@@ -8,6 +8,7 @@ import { ErrorWithRetry } from "./components/ErrorWithRetry.tsx";
 import "./index.css";
 import { LastScreens, LastScreensContext } from "./lib/last-screens.ts";
 import { startTheme, ThemeContext } from "./lib/theme-controller.ts";
+import { startTips, TipsContext } from "./lib/tips-controller.ts";
 import { isTrayPanel } from "./lib/tray-panel.ts";
 import { reportUiErrors } from "./lib/ui-error-report.ts";
 import { TrayPanel } from "./views/tray-panel/TrayPanel.tsx";
@@ -19,6 +20,8 @@ if (!root) throw new Error("missing #root in index.html");
 const trayPanel = isTrayPanel(window.location.hash);
 // For the whole life of the window, across views and reconnects to the daemon (ADR-117).
 const lastScreens = new LastScreens();
+// Which tip the window shows, and where (ADR-296); the tray panel has none.
+const tips = trayPanel ? null : startTips();
 // The last line of defence against a blank window: an error no inner boundary caught leaves a message and a way out.
 createRoot(root, reportUiErrors(trayPanel ? "tray-panel" : "window")).render(
   <StrictMode>
@@ -34,7 +37,9 @@ createRoot(root, reportUiErrors(trayPanel ? "tray-panel" : "window")).render(
           <TrayPanel />
         ) : (
           <LastScreensContext.Provider value={lastScreens}>
-            <App />
+            <TipsContext.Provider value={tips}>
+              <App />
+            </TipsContext.Provider>
           </LastScreensContext.Provider>
         )}
       </ErrorBoundary>

@@ -1,6 +1,7 @@
 import { taskEvidenceApi } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { StatusLabel } from "@/components/StatusLabel";
+import { Tip } from "@/components/Tip";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { type EvidenceSource, evidenceRows, taskEvidencePollMs } from "@/lib/task-evidence";
@@ -39,6 +40,7 @@ export function TaskEvidenceCard({ conn, task, patch }: { conn: Connection; task
           </div>
         ))}
       </dl>
+      <Tip conn={conn} tip="evidence" />
     </section>
   );
 }

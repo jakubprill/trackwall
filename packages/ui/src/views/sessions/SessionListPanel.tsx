@@ -15,6 +15,7 @@ import { SessionStateLabel } from "@/components/SessionStateLabel";
 import { StatusLabel } from "@/components/StatusLabel";
 import { TaskOutcomeMarks } from "@/components/TaskOutcomeMarks";
 import { TaskStateLabel } from "@/components/TaskStateLabel";
+import { Tip } from "@/components/Tip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
@@ -104,7 +105,7 @@ export function SessionListPanel({
       </div>
       <ListedUsage sessions={list} />
       {next && (
-        <div className="px-4 pb-3">
+        <div className="flex flex-col gap-2 px-4 pb-3">
           <Button
             variant="outline"
             size="sm"
@@ -117,6 +118,7 @@ export function SessionListPanel({
             <BellRing /> <span className="min-w-0">{nextWaitingLabel(next, waiting)}</span>
             <span className="text-muted-foreground ml-auto shrink-0 font-mono text-2xs">{sessionShortcutLabel(NEXT_WAITING, IS_MAC)}</span>
           </Button>
+          <Tip conn={conn} tip="next-waiting" />
         </div>
       )}
       <ReadyToCloseStrip closeAll={closeAll} />

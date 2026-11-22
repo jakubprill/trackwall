@@ -1,5 +1,7 @@
 import { type ComponentProps, useState } from "react";
 import { FoldButton } from "@/components/FoldButton";
+import { Tip } from "@/components/Tip";
+import type { Connection } from "@/lib/connection";
 import { chosenOptions, moreOptionsOpen } from "@/lib/start-options";
 import { StartOptions } from "./StartOptions.tsx";
 
@@ -7,10 +9,11 @@ type Options = ComponentProps<typeof StartOptions>;
 
 /**
  * The options of the New session form (ADR-266): the worktree pill, which decides between a task and a session, stays
- * in sight, and the other pills of `StartOptions` stand folded under "More options". Folded, the button names the
- * options that differ from a plain start; they open on a click, and at once when one of them already differs.
+ * in sight, with its tip under it (ADR-296), and the other pills of `StartOptions` stand folded under "More options".
+ * Folded, the button names the options that differ from a plain start; they open on a click, and at once when one of
+ * them already differs.
  */
-export function FoldedStartOptions({ worktree, disabled, ...more }: Options) {
+export function FoldedStartOptions({ conn, worktree, disabled, ...more }: Options & { conn: Connection }) {
   const [toggled, setToggled] = useState<boolean>();
   const chosen = chosenOptions({
     approvals: more.approvals?.value,
@@ -35,6 +38,7 @@ export function FoldedStartOptions({ worktree, disabled, ...more }: Options) {
             ))}
         </FoldButton>
       </div>
+      {worktree && <Tip conn={conn} tip="own-worktree" />}
       {open && <StartOptions {...more} disabled={disabled} />}
     </div>
   );

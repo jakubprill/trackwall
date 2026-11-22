@@ -5,11 +5,31 @@ import { HOME_STATES } from "./home-states.tsx";
 import { SESSION_LIST_STATES } from "./session-list-states.tsx";
 import { SETTING_ROWS_STATES } from "./setting-rows-states.tsx";
 import { SETTINGS_NAV_STATES } from "./settings-nav-states.tsx";
+import { TIP_STATES } from "./tips-states.tsx";
 import { TRAY_PANEL_STATES } from "./tray-panel-states.tsx";
+import { WHATS_NEW_STATES } from "./whats-new-states.tsx";
 
 /** The parts of views the gallery shows, in the order of the page, each at the sizes it takes in the app. */
 export const GALLERY_SECTIONS: readonly GallerySection[] = [
   { name: "Sessions · the list", sizes: [{ name: "fixed width", className: "w-sidebar" }], states: SESSION_LIST_STATES },
+  {
+    name: "Tips",
+    // A tip is as wide as its place: the Sessions list, the narrowest, and a task's panel or the New session form.
+    sizes: [
+      { name: "the Sessions list", className: "w-sidebar" },
+      { name: "a view", className: "w-3xl" },
+    ],
+    states: TIP_STATES,
+  },
+  {
+    name: "What's new",
+    // Above the views, beside the view bar and the folded supervisor panel: a wide window, and the smallest the desktop app opens.
+    sizes: [
+      { name: "wide window", className: "w-6xl" },
+      { name: "smallest window", className: "w-xl" },
+    ],
+    states: WHATS_NEW_STATES,
+  },
   {
     name: "Sessions · Get started above the form",
     // The card's widest, and the view next to the list and a pinned supervisor panel in a 1024 px window.

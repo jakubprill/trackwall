@@ -54,11 +54,11 @@ describe("Settings categories", () => {
     expect(settingsCategory("app").sections).toContain("home");
   });
 
-  test("the theme is under App, right before Home, the other way this computer's Trackwall looks", () => {
-    expect(settingsCategory("app").sections.slice(-2)).toEqual(["theme", "home"]);
+  test("the theme is under App, right before Home, the other way this computer's Trackwall looks, and tips and What's new end it", () => {
+    expect(settingsCategory("app").sections.slice(-3)).toEqual(["theme", "home", "tips"]);
   });
 
-  test("App starts with the desktop app (sign-in, the screen, where the daemon runs, updates), then the browser and VS Code, then how it looks", () => {
+  test("App starts with the desktop app (sign-in, the screen, where the daemon runs, updates), then the browser and VS Code, then how it looks and helps", () => {
     expect(settingsCategory("app").sections).toEqual([
       "start-at-sign-in",
       "keep-screen-on",
@@ -68,6 +68,7 @@ describe("Settings categories", () => {
       "vscode-extension",
       "theme",
       "home",
+      "tips",
     ]);
   });
 
