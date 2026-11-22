@@ -1,9 +1,10 @@
 import { type UnpushedWork, unpushedSummary } from "@trackwall/protocol";
 
 /**
- * The Home section "Only in this container" (ADR-162): the repos whose work is on no remote while the daemon runs in a
- * container, where removing the Docker volume or resetting Docker deletes it. Trackwall cannot stop that, so Home keeps
- * saying what is at stake. Outside a container and when everything is pushed the daemon lists nothing.
+ * "Only in this container" (ADR-162), a section of Home and a column of All repos (ADR-293): the repos whose work is on
+ * no remote while the daemon runs in a container, where removing the Docker volume or resetting Docker deletes it.
+ * Trackwall cannot stop that, so both keep saying what is at stake. Outside a container and when everything is pushed
+ * the daemon lists nothing.
  */
 
 export interface UnpushedRow {

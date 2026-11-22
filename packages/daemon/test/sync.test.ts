@@ -90,6 +90,27 @@ describe("sync of all repos", () => {
   );
 
   test(
+    "after the sync the repo list says every repo was just fetched, also one that was up to date and had never fetched since its clone",
+    async () => {
+      const { workspace, projects, remotes } = await setup();
+      cloned(projects, remotes, "api");
+      const fetchedAt = async () => {
+        const [repo] = (await workspace.list("recent")).repos;
+        return repo?.status.kind === "ok" ? repo.status.fetchedAt : `status ${repo?.status.kind}`;
+      };
+      expect(await fetchedAt()).toBeNull();
+
+      const before = Date.now();
+      await workspace.sync();
+      await finished(workspace);
+
+      // File times are as coarse as two seconds on some file systems.
+      expect(Date.parse((await fetchedAt()) ?? "")).toBeGreaterThanOrEqual(before - 2000);
+    },
+    GIT_HEAVY_MS,
+  );
+
+  test(
     "syncing one repo by identifier moves only that repo, and an unknown repo is not_found",
     async () => {
       const { workspace, projects, remotes } = await setup();

@@ -167,6 +167,28 @@ describe("vcs on real git", () => {
   );
 
   test(
+    "the status says when the repo last fetched: never for a fresh clone, and then the time of a fetch, also one that brought nothing",
+    async () => {
+      const remote = makeRepo({ "a.txt": "1" }, "remote");
+      const parent = join(remote, "..");
+      gitIn(parent, "clone", "-q", remote, "clone");
+      const clone = join(parent, "clone");
+      expect((await vcs.status(clone, "recent")).fetchedAt).toBeNull();
+
+      const before = Date.now();
+      gitIn(clone, "fetch", "-q");
+      // Read within a second of the last one, which the memo reuses unless the fetch changed its key (ADR-141).
+      const fetchedAt = (await vcs.status(clone, "recent")).fetchedAt;
+
+      expect(fetchedAt).not.toBeNull();
+      // File times are as coarse as two seconds on some file systems.
+      expect(Date.parse(fetchedAt ?? "")).toBeGreaterThanOrEqual(before - 2000);
+      expect(Date.parse(fetchedAt ?? "")).toBeLessThanOrEqual(Date.now() + 1000);
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+
+  test(
     "tree lists a directory from the last commit, without uncommitted files",
     async () => {
       const dir = makeRepo({ "src/a.ts": "aa", "src/lib/b.ts": "b", "README.md": "r" });

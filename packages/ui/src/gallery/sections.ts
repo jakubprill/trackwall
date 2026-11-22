@@ -1,3 +1,4 @@
+import { ALL_REPOS_STATES } from "./all-repos-states.tsx";
 import type { GallerySection } from "./gallery-state.ts";
 import { GET_STARTED_CARD_STATES, GET_STARTED_STATES } from "./get-started-states.tsx";
 import { HOME_STATES } from "./home-states.tsx";
@@ -26,6 +27,15 @@ export const GALLERY_SECTIONS: readonly GallerySection[] = [
       { name: "narrowest", className: "w-48" },
     ],
     states: HOME_STATES,
+  },
+  {
+    name: "Repos · All repos",
+    // The panel beside the repo list in a wide window, and what is left of it beside the pinned supervisor panel.
+    sizes: [
+      { name: "wide", className: "w-5xl" },
+      { name: "narrowest", className: "w-80" },
+    ],
+    states: ALL_REPOS_STATES,
   },
   // The size of the panel's window (`PANEL` in apps/desktop/src-tauri/src/tray_panel.rs).
   { name: "Tray panel", sizes: [{ name: "its window", className: "h-[420px] w-[340px]" }], states: TRAY_PANEL_STATES },

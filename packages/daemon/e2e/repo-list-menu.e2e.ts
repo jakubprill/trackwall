@@ -5,15 +5,18 @@ import { useTrackwall } from "./support/trackwall-ui.ts";
 const trackwall = useTrackwall(ONE_REPO);
 
 describe("the head of the repo list", () => {
-  test("it shows Add, More and Sync all; More leads to the batch command and the shell, and the folded tag filter keeps a chosen tag in sight", async () => {
+  test("it shows Add and More, the view opens on All repos with Sync all above its table; More leads to the batch command and the shell, and the folded tag filter keeps a chosen tag in sight", async () => {
     const page = await trackwall().open();
     await page
       .getByRole("navigation", { name: "Views" })
       .getByRole("button", { name: /^Repos/ })
       .click();
     const list = page.getByRole("complementary").filter({ has: page.getByRole("navigation", { name: "Repo list" }) });
-    await list.getByRole("button", { name: "Sync all" }).waitFor();
     await list.getByRole("button", { name: /^Tag filter/ }).waitFor();
+    // All repos (ADR-293): the first entry of the list, open, with "Sync all" above the state of every repo.
+    await list.locator('button[aria-current="true"]', { hasText: "All repos" }).waitFor();
+    await page.getByRole("heading", { name: "The state of every repo" }).waitFor();
+    await page.getByRole("main").getByRole("button", { name: "Sync all" }).waitFor();
 
     // What stands above the rows of the list.
     const names = await list
@@ -22,7 +25,7 @@ describe("the head of the repo list", () => {
       .evaluateAll((buttons) =>
         buttons.filter((b) => b.closest("nav") === null).map((b) => b.getAttribute("aria-label") ?? b.textContent?.trim()),
       );
-    expect(names).toEqual(["Add a repo from GitLab or GitHub", "More actions on the projects folder", "Sync all", "Tag filter 1"]);
+    expect(names).toEqual(["Add a repo from GitLab or GitHub", "More actions on the projects folder", "Tag filter 1"]);
 
     const more = list.getByRole("button", { name: "More actions on the projects folder" });
     const menu = page.getByRole("group", { name: "More actions on the projects folder" });

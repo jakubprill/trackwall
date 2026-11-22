@@ -18,6 +18,7 @@ function repoWith(id: string, changes: number, behind = 0): Repo {
     changes,
     untracked: 0,
     upstream: { name: "origin/main", ahead: 0, behind },
+    fetchedAt: null,
   });
 }
 

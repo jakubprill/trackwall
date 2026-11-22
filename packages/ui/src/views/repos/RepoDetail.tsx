@@ -35,6 +35,7 @@ import { RepoStats } from "./RepoStats.tsx";
 export function RepoDetail({
   conn,
   repo,
+  initialTab = REPO_TABS[0].id,
   projectsDir,
   sessions,
   runningLive,
@@ -42,6 +43,8 @@ export function RepoDetail({
 }: {
   conn: Connection;
   repo: Repo;
+  /** The tab the repo opens on: a row of All repos opens it where its way out is (ADR-293). */
+  initialTab?: RepoTab;
   /** The daemon's projects folder, for showing the repo through that folder on this computer (ADR-131); unknown until the list loads. */
   projectsDir: string | null | undefined;
   /** `undefined` until the first session list arrives: the bar then shows only mise tasks. */
@@ -50,7 +53,7 @@ export function RepoDetail({
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   onOpenInSessions: (selection: SessionSelection) => void;
 }) {
-  const [tab, setTab] = useState<RepoTab>(REPO_TABS[0].id);
+  const [tab, setTab] = useState(initialTab);
   const running = useRunningMiseTasks(conn, runningLive).data ?? [];
   const openActivity = (target: RepoActivityTarget) => {
     if (target.view === "mise") setTab("mise");

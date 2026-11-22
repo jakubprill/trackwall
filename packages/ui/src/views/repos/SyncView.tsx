@@ -49,32 +49,11 @@ export function SyncView({ sync, canSync }: { sync: SyncRunHandle; canSync: bool
   );
 }
 
-/** Under the header of the repo list: starting the sync and the way to its results; a start shows them at once. */
-export function SyncBar({ sync, onShow }: { sync: SyncRunHandle; onShow: () => void }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
-      <SyncButton sync={sync} canSync onStart={onShow} />
-      {sync.run && (
-        <Button variant="ghost" size="sm" onClick={onShow}>
-          Results
-        </Button>
-      )}
-    </div>
-  );
-}
-
-function SyncButton({ sync, canSync, onStart }: { sync: SyncRunHandle; canSync: boolean; onStart?: () => void }) {
+/** "Sync all", with its progress while it runs; in the sync panel and in the header of All repos (ADR-293). */
+export function SyncButton({ sync, canSync }: { sync: SyncRunHandle; canSync: boolean }) {
   const progress = sync.run && sync.running ? syncProgress(sync.run) : undefined;
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={sync.running || !canSync}
-      onClick={() => {
-        sync.start();
-        onStart?.();
-      }}
-    >
+    <Button variant="outline" size="sm" disabled={sync.running || !canSync} onClick={sync.start}>
       <FolderSync /> {progress ? `Syncing ${progress.done}/${progress.total}` : "Sync all"}
     </Button>
   );

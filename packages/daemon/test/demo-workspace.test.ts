@@ -46,6 +46,41 @@ test(
   DEMO_TIMEOUT,
 );
 
+test(
+  "the demo shop's repos track their branch on the invented host as fetched at the start: catalog and payments have commits to pull, and inventory has diverged",
+  async () => {
+    const projects = mkdtempSync(join(tmpdir(), "trackwall-demo-"));
+    createDemoWorkspace(projects);
+    const vcs = new Vcs(systemTempFolder);
+    const server = async (repo: string) => {
+      const { upstream, fetchedAt } = await vcs.status(join(projects, repo), "fresh");
+      return { upstream, fetched: fetchedAt !== null, remote: await vcs.remote(join(projects, repo)) };
+    };
+
+    expect(await server("catalog")).toEqual({
+      upstream: { name: "origin/main", ahead: 0, behind: 15 },
+      fetched: true,
+      remote: "git.example.com/shop/catalog",
+    });
+    expect(await server("payments")).toEqual({
+      upstream: { name: "origin/main", ahead: 0, behind: 2 },
+      fetched: true,
+      remote: "git.example.com/shop/payments",
+    });
+    expect(await server("inventory")).toEqual({
+      upstream: { name: "origin/main", ahead: 1, behind: 3 },
+      fetched: true,
+      remote: "git.example.com/shop/inventory",
+    });
+    expect(await server("auth")).toEqual({
+      upstream: { name: "origin/main", ahead: 0, behind: 0 },
+      fetched: true,
+      remote: "git.example.com/shop/auth",
+    });
+  },
+  DEMO_TIMEOUT,
+);
+
 test("every demo session runs in a repo of the demo shop", () => {
   expect(Object.keys(TURNS).filter((repo) => !DEMO_REPOS.includes(repo))).toEqual([]);
 });

@@ -487,7 +487,7 @@ export const mcpTools = {
     auditArgs: ["tags"] as const,
     description:
       "Repos in the user's projects folder: id, path, remote address (host/path), branch, latest commit, number of " +
-      "local changes (untracked: how many of them are new), ahead/behind, the result of the latest sync since Trackwall started (lastSync: null when there " +
+      "local changes (untracked: how many of them are new), ahead/behind as of the last fetch (fetchedAt), the result of the latest sync since Trackwall started (lastSync: null when there " +
       "was none) and repo tags (e.g. java, frontend, bff, monorepo, no-mise for a repo without mise tasks, local-mise for one with mise tasks only this clone has, and tags from the user's rules). The tags argument " +
       "narrows the list to repos with every given tag. Start with this tool; pass the id field to the other tools.",
     args: z

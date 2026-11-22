@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { RepoStatusOk } from "@trackwall/protocol";
 import { StatusMemo, type TimedStatus } from "../src/modules/vcs/status-memo.ts";
 
-const CLEAN: RepoStatusOk = { kind: "ok", branch: "main", head: null, changes: 0, untracked: 0, upstream: null };
+const CLEAN: RepoStatusOk = { kind: "ok", branch: "main", head: null, changes: 0, untracked: 0, upstream: null, fetchedAt: null };
 const EDITED: RepoStatusOk = { ...CLEAN, changes: 1 };
 
 /** A memo whose clock and git directory key the test sets, and a `git status` that runs `readMs` on that clock. */

@@ -5,19 +5,23 @@ import { folderWorkWarning, pullLabel, pullResultLine, upstreamOffer, workInRepo
 const AT = "2026-11-18T10:00:00.000Z";
 
 function status(more: Partial<RepoStatusOk>): RepoStatusOk {
-  return { kind: "ok", branch: "develop", head: null, changes: 0, untracked: 0, upstream: null, ...more };
+  return { kind: "ok", branch: "develop", head: null, changes: 0, untracked: 0, upstream: null, fetchedAt: null, ...more };
 }
 
 describe("what the Upstream tile offers", () => {
   test("a clean branch behind its upstream gets a pull named with the number of commits", () => {
     const offer = upstreamOffer(status({ upstream: { name: "origin/develop", ahead: 0, behind: 320 } }));
-    expect(offer).toEqual({ kind: "pull", behind: 320 });
+    expect(offer).toEqual({
+      kind: "pull",
+      behind: 320,
+      title: "Fetch, then fast-forward develop to origin/develop; the default branch is synced as in Sync all",
+    });
     expect(pullLabel(320)).toBe("Pull 320");
   });
 
   test("new untracked files do not stop a pull, because a fast-forward leaves them where they are", () => {
     const offer = upstreamOffer(status({ changes: 2, untracked: 2, upstream: { name: "origin/develop", ahead: 0, behind: 3 } }));
-    expect(offer).toEqual({ kind: "pull", behind: 3 });
+    expect(offer).toMatchObject({ kind: "pull", behind: 3 });
   });
 
   test("changed tracked files stop the pull and lead to putting them aside or to the Changes tab", () => {

@@ -3,7 +3,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fileKey } from "../../infra/file-key.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { type GitDirs, gitDirs, headRefName, optionalKey, statIfExists } from "./git-dir.ts";
+import { fetchHeadFile, type GitDirs, gitDirs, headRefName, optionalKey, statIfExists } from "./git-dir.ts";
 
 /**
  * The state of a repo's HEAD and refs read from the files in its git directory, without a `git` process (§4.5, ADR-63):
@@ -72,7 +72,8 @@ export class GitStateReader {
 
 /**
  * What `git status` depends on in the git directory (ADR-141): HEAD with its branch, the remote-tracking refs its upstream
- * is among, `packed-refs`, and the index, which staging, a commit and a `git status` that refreshes stat data rewrite.
+ * is among, `packed-refs`, and the index, which staging, a commit and a `git status` that refreshes stat data rewrite;
+ * and `FETCH_HEAD`, whose time the repo status carries as its last fetch (ADR-293), so a fetch that brought nothing shows too.
  * Not the other local branches: a task's commit in its worktree moves its own branch in the shared git directory, which
  * says nothing about the root's status, and every turn of a task commits (ADR-168). With reftable every ref lives in
  * one table list, so there a task's commit still counts. An upstream that is a local branch, or one set in `config`,
@@ -82,13 +83,22 @@ export class GitStateReader {
 export async function gitDirKey(repo: string): Promise<string | undefined> {
   const dirs = await gitDirs(repo);
   if (!dirs) return undefined;
-  const [head, packed, remotes, index] = await Promise.all([
+  const [head, packed, remotes, index, fetched] = await Promise.all([
     readHead(dirs, { refsDirs: new Map() }),
     statIfExists(join(dirs.commonDir, "packed-refs")),
     refsKeys(join(dirs.commonDir, "refs", "remotes"), "/remotes", new Map(), new Map()),
     statIfExists(join(dirs.gitDir, "index")),
+    statIfExists(fetchHeadFile(dirs)),
   ]);
-  return head ? [head.key, `packed-refs ${optionalKey(packed)}`, ...remotes, `index ${optionalKey(index)}`].join("\n") : undefined;
+  if (!head) return undefined;
+  const parts = [
+    head.key,
+    `packed-refs ${optionalKey(packed)}`,
+    ...remotes,
+    `index ${optionalKey(index)}`,
+    `fetch ${optionalKey(fetched)}`,
+  ];
+  return parts.join("\n");
 }
 
 async function readRepo(dirs: GitDirs, cache: RepoCache, previousDirs: ReadonlyMap<string, RefsDir>): Promise<GitState | null> {

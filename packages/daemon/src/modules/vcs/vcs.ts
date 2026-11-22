@@ -36,6 +36,7 @@ import {
 import { ConfigMemo } from "./config-memo.ts";
 import { checkGitProgram, type GitVersion, git, gitRead, gitVersion, readConfigFile } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
+import { lastFetch } from "./git-dir.ts";
 import { useGitProgram } from "./git-program.ts";
 import { type GitState, GitStateReader, gitDirKey } from "./git-state.ts";
 import { grep, grepCounts, grepFiles } from "./grep.ts";
@@ -216,10 +217,14 @@ export class Vcs {
   }
 
   private async readStatus(dir: string): Promise<TimedStatus> {
-    const { stdout, ranMs } = await gitRead(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
+    const [{ stdout, ranMs }, fetchedAt] = await Promise.all([
+      gitRead(dir, ["status", "--porcelain=v2", "--branch", "-z"]),
+      // A `FETCH_HEAD` that cannot be read this time (a network drive's timeout) leaves only this read without its time.
+      lastFetch(dir).catch(() => null),
+    ]);
     const { headOid, ...status } = parseStatus(stdout.toString("utf8"));
     const head = headOid === null ? null : await this.headCommits.get(headOid, () => this.newestCommit(dir, headOid));
-    return { status: { ...status, head }, ranMs };
+    return { status: { ...status, head, fetchedAt }, ranMs };
   }
 
   private async newestCommit(dir: string, commit: string): Promise<Commit | null> {
