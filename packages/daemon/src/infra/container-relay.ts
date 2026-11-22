@@ -2,6 +2,7 @@ import { connect, createServer, type Server, type Socket } from "node:net";
 import { networkInterfaces } from "node:os";
 import { containerProxyPort } from "./args.ts";
 import { appendNote } from "./container-log.ts";
+import { messageOf } from "./errors.ts";
 
 /**
  * The relay of a dev container whose ports Docker publishes (ADR-287): the daemon and the service proxy listen only on
@@ -47,29 +48,33 @@ function pass(client: Socket, targetPort: number): void {
   upstream.pipe(client);
 }
 
-function listen(route: RelayRoute): Promise<Server> {
+/** Listens on one route; an error after that (no file descriptors left, say) goes to `onError`, and the route keeps listening. */
+function listen(route: RelayRoute, onError: (msg: string) => void): Promise<Server> {
   const server = createServer((client) => pass(client, route.targetPort));
   return new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(route.listen.port, route.listen.host, () => {
       server.off("error", reject);
+      server.on("error", (err) => onError(`${route.listen.host}:${route.listen.port}: ${messageOf(err)}`));
       resolve(server);
     });
   });
 }
 
 /** Listens on every route; a route that cannot listen closes the others and fails the start, saying which one. */
-export async function startRelay(routes: readonly RelayRoute[]): Promise<{ close(): Promise<void> }> {
+export async function startRelay(
+  routes: readonly RelayRoute[],
+  onError: (msg: string) => void = () => {},
+): Promise<{ close(): Promise<void> }> {
   if (routes.length === 0) throw new Error("the container has no address besides 127.0.0.1 to listen on");
   const servers: Server[] = [];
   const close = () => Promise.all(servers.map((server) => new Promise<void>((r) => server.close(() => r())))).then(() => {});
   for (const route of routes) {
     try {
-      servers.push(await listen(route));
+      servers.push(await listen(route, onError));
     } catch (err) {
       await close();
-      const reason = err instanceof Error ? err.message : String(err);
-      throw new Error(`cannot listen on ${route.listen.host}:${route.listen.port}: ${reason}`);
+      throw new Error(`cannot listen on ${route.listen.host}:${route.listen.port}: ${messageOf(err)}`);
     }
   }
   return { close };
@@ -83,9 +88,9 @@ export async function runContainerRelay(logPath: string, port: number): Promise<
   const proxyPort = containerProxyPort(port);
   const routes = relayRoutes(proxyPort === null ? [port] : [port, proxyPort], containerAddresses());
   try {
-    await startRelay(routes);
+    await startRelay(routes, (msg) => appendNote(logPath, "relay", msg));
   } catch (err) {
-    appendNote(logPath, "relay", `not started: ${err instanceof Error ? err.message : String(err)}`);
+    appendNote(logPath, "relay", `not started: ${messageOf(err)}`);
     return false;
   }
   const listening = routes.map(({ listen }) => `${listen.host}:${listen.port}`).join(", ");

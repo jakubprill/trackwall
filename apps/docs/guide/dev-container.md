@@ -137,12 +137,14 @@ Trackwall listens only on 127.0.0.1 inside the container, which Docker cannot pu
 
 Keep the rest of the example as it is, and rebuild the container.
 
+Other containers on the same Docker network can reach the relay too. Trackwall still asks every request for its token and checks where it comes from, as it does for programs on your computer, but [services](/features/services) opened through port 7701 need no token. To keep other containers out, give the container a network of its own, for example `"--network", "trackwall-net"` in `runArgs` after `docker network create trackwall-net`.
+
+
 - The port on your computer must be the same as the port in the container: the app and the browser find Trackwall by the port it listens on. With the Feature's `port` option set to 7800, publish `127.0.0.1:7800:7800` and `127.0.0.1:7801:7801`.
 - Write `127.0.0.1:` before each port. Without it Docker publishes the port to every network of your computer, and other computers can reach it.
-- Other containers on the same Docker network can reach the relay too. Trackwall still asks every request for its token and checks where it comes from, as it does for programs on your computer. To keep them out, give the container a network of its own, for example `"--network", "trackwall-net"` in `runArgs` after `docker network create trackwall-net`.
 - Choose `publish` or `forwardPorts`, not both: both want port 7700 on your computer.
 
-When the published port does not answer, check in a terminal on your computer that Docker published it: `docker port <container name>` should list `7700/tcp -> 127.0.0.1:7700`. If it does not, the container was created before `runArgs` changed: rebuild it. In the container, `grep relay ~/.trackwall/logs/daemon.log` shows where the relay listens or why it could not start. If it says nothing, check that the Feature has `"publish": true` and rebuild.
+When the published port does not answer, check in a terminal on your computer that Docker published it: `docker port <container name>` should list `7700/tcp -> 127.0.0.1:7700`. If it does not, the container was created before `runArgs` changed: rebuild it. In the container, `grep relay ~/.trackwall/logs/daemon.log` shows where the relay listens or why it could not start. If it says nothing, check that the Feature has `"publish": true` and rebuild. The relay listens on the networks the container had when it started: after `docker network connect`, restart the container.
 
 ## MCP servers on your computer
 

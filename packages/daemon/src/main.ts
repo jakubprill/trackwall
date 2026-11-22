@@ -355,9 +355,14 @@ function runContainerCommand(line: ContainerCommandLine): void {
       runApplyUpdate(home, line.port, line.target);
       return;
     case CONTAINER_RELAY:
-      void runContainerRelay(join(home, DAEMON_LOG), line.port).then((started) => {
-        if (!started) process.exitCode = 1;
-      });
+      runContainerRelay(join(home, DAEMON_LOG), line.port)
+        .then((started) => {
+          if (!started) process.exitCode = 1;
+        })
+        .catch((err: unknown) => {
+          process.stderr.write(`[relay] ${messageOf(err)}\n`);
+          process.exitCode = 1;
+        });
       return;
   }
 }
