@@ -2,6 +2,7 @@ import { realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type CopilotCliRelation,
+  type CopilotCliSource,
   type CopilotCliVersion,
   copilotCliInstallAdvice,
   countLabel,
@@ -130,7 +131,7 @@ type Settled<T> = { ok: true; value: T } | { ok: false; message: string };
 type CopilotVersionRead =
   | { kind: "missing"; message: string }
   | { kind: "failed"; message: string }
-  | { kind: "answered"; version: string | null };
+  | { kind: "answered"; version: string | null; program: string };
 
 interface CheckContext {
   env: NodeJS.ProcessEnv;
@@ -351,7 +352,9 @@ export class Doctor {
     if (read.kind === "missing")
       return fail(`${read.message}.`, "Install GitHub Copilot CLI, sign in by running `copilot` once, and restart Trackwall.");
     if (read.kind === "failed") return fail(`Copilot CLI: ${read.message}`, "Run `copilot --version` in a terminal to see what is wrong.");
-    return copilotVersionOutcome(read.version, this.deps.inContainer);
+    const outcome = copilotVersionOutcome(read.version, copilotCliSource(read.program, this.deps.inContainer));
+    // The program is named only when it is not the tested one: a fix in a container has to reach the copy that runs.
+    return outcome.status === "ok" ? outcome : { ...outcome, summary: `${outcome.summary} It runs from ${read.program}.` };
   }
 
   /**
@@ -363,10 +366,10 @@ export class Doctor {
     const tested = TESTED_COPILOT_CLI_VERSION;
     const version = read.kind === "answered" ? read.version : null;
     const relation = copilotVersionRelation(version);
-    const { inContainer } = this.deps;
+    const source = copilotCliSource(read.kind === "answered" ? read.program : null, this.deps.inContainer);
     return version === null || relation === "unknown"
-      ? { relation: "unknown", version: null, tested, inContainer }
-      : { relation, version, tested, inContainer };
+      ? { relation: "unknown", version: null, tested, source }
+      : { relation, version, tested, source };
   }
 
   /** Copilot CLI found as sessions find it and its `--version`, as `x.y.z` (`null` when it names none). */
@@ -375,7 +378,7 @@ export class Doctor {
     if ("missing" in copilot) return { kind: "missing", message: copilot.message };
     const output = await settle(this.version([copilot.program, ...copilot.args], env));
     if (!output.ok) return { kind: "failed", message: output.message };
-    return { kind: "answered", version: versionIn(output.value) };
+    return { kind: "answered", version: versionIn(output.value), program: copilot.program };
   }
 
   private async copilotTrustedFolder({ env, projectsDir }: CheckContext): Promise<Outcome> {
@@ -474,6 +477,15 @@ export class Doctor {
   }
 }
 
+/**
+ * Where the Copilot CLI at `program` comes from: in a container, a path in mise's folders (its shims or installs) is
+ * mise's copy, anything else the image's (#549: `npm i -g` puts it in `/usr/local/bin`, which wins over mise).
+ */
+export function copilotCliSource(program: string | null, inContainer: boolean): CopilotCliSource {
+  if (!inContainer) return "computer";
+  return program !== null && /[\\/]mise[\\/]/.test(program) ? "container-mise" : "container-image";
+}
+
 /** Where a Copilot CLI version stands against the tested one (ADR-274); `unknown` without a version. */
 function copilotVersionRelation(version: string | null): CopilotCliRelation {
   if (version === null) return "unknown";
@@ -485,9 +497,9 @@ function copilotVersionRelation(version: string | null): CopilotCliRelation {
  * Older than the tested version may lack what the daemon relies on; newer may have changed it, which the nightly contract
  * tests find only after users have it (ADR-274). Both work as a rule, so both are warnings, not failures.
  */
-export function copilotVersionOutcome(version: string | null, inContainer: boolean): NonNullable<Outcome> {
+export function copilotVersionOutcome(version: string | null, source: CopilotCliSource): NonNullable<Outcome> {
   const tested = TESTED_COPILOT_CLI_VERSION;
-  const advice = copilotCliInstallAdvice(tested, inContainer);
+  const advice = copilotCliInstallAdvice(tested, source);
   switch (copilotVersionRelation(version)) {
     case "unknown":
       return warn("Copilot CLI did not say its version.", `Trackwall is tested with Copilot CLI ${tested}.`);
