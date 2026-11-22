@@ -18,7 +18,7 @@ function checked(remoteBranches: string[]): ServerCheckState {
   };
 }
 
-describe("the line above Create task about where the task starts (ADR-296)", () => {
+describe("the line above Create task about where the task starts (ADR-297)", () => {
   test("a default branch behind the remote one as of the last fetch warns that the agent would work on older code, and offers the sync", () => {
     expect(newTaskBaseLine("catalog", base({ behind: 15 }), undefined, NOW)).toEqual({
       tone: "warning",

@@ -32,7 +32,7 @@ async function shopCloned() {
 
 const head = (dir: string, ref = "HEAD") => gitIn(dir, "rev-parse", ref).trim();
 
-describe("where a new task starts, against the server (ADR-296)", () => {
+describe("where a new task starts, against the server (ADR-297)", () => {
   test(
     "a fresh clone's default branch lacks nothing of the remote one, and the repo has not fetched since the clone",
     async () => {

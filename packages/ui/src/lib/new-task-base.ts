@@ -4,7 +4,7 @@ import { newOnServerAt } from "./new-on-server.ts";
 import { syncResultMessage } from "./sync-state.ts";
 
 /**
- * The line above "Create task" about where the task starts (ADR-296): a task branches from the repo's own default branch
+ * The line above "Create task" about where the task starts (ADR-297): a task branches from the repo's own default branch
  * (`Task.base`), so a default branch behind the server gives its agent older code than the server's. The line says so
  * and offers that one repo's sync; it never holds the start. Tests in `test/new-task-base.test.ts`.
  */

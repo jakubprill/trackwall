@@ -49,7 +49,7 @@ export function syncMessage(repo: SyncRepo): string | undefined {
   }
 }
 
-/** The sentences about a sync that ended without an error: of a repo in "Sync all", or of one repo ("Sync main", ADR-296). */
+/** The sentences about a sync that ended without an error: of a repo in "Sync all", or of one repo ("Sync main", ADR-297). */
 export function syncResultMessage(result: SyncResult): string {
   switch (result.state) {
     case "updated":

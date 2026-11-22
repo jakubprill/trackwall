@@ -16,7 +16,7 @@ const TONE_CLASS: Record<NewTaskBaseTone, string> = {
 };
 
 /**
- * The line above "Create task" when the repo's default branch, where a new task starts, is behind the server (ADR-296),
+ * The line above "Create task" when the repo's default branch, where a new task starts, is behind the server (ADR-297),
  * with "Sync main": the sync of that one repo, as "Sync all" does it. After the sync it says what the sync did, until the
  * form shows another repo, which mounts the line anew. A repo the daemon cannot compare, or one it fails to read, gets no
  * line: it is a hint, and the start never waits for it. `label` names the repo where the form starts a change in several.

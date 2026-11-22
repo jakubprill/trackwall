@@ -7,7 +7,7 @@ import { showSessions, useTrackwall, waitForTerminal } from "./support/trackwall
 
 const trackwall = useTrackwall();
 
-describe("where a new task starts (ADR-296)", () => {
+describe("where a new task starts (ADR-297)", () => {
   test("with main behind origin/main under a feature branch, the New task form says so, Sync main moves main alone, and the task starts from the server's main", async () => {
     const { daemon } = trackwall();
     const shop = join(daemon.projects, "shop");

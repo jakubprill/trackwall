@@ -176,7 +176,7 @@ export const ServerCheckState = z.object({
        * The repos whose server moved a branch since their last fetch, each with the moment before it was asked: a fetch
        * after that moment (`RepoStatusOk.fetchedAt`) has brought what the server had then. `remoteBranches` are the
        * remote-tracking branches the server has moved past, as `origin/main`: the one the checked-out branch tracks
-       * (`RepoStatusOk.upstream`), the main remote's default branch, where a new task starts (`NewTaskBase`, ADR-296), or both.
+       * (`RepoStatusOk.upstream`), the main remote's default branch, where a new task starts (`NewTaskBase`, ADR-297), or both.
        */
       newCommits: z.array(z.object({ repo: RepoId, checkedAt: z.iso.datetime(), remoteBranches: z.array(z.string()).min(1) })),
       /** The repos whose server did not answer (or git could not read the repo); the doctor says why (ADR-195). */
@@ -187,7 +187,7 @@ export const ServerCheckState = z.object({
 export type ServerCheckState = z.infer<typeof ServerCheckState>;
 
 /**
- * Where a new task of a repo starts (ADR-296): the repo's default branch, which a task branches from (`Task.base`), against
+ * Where a new task of a repo starts (ADR-297): the repo's default branch, which a task branches from (`Task.base`), against
  * the remote-tracking branch a sync fast-forwards it to, as of the repo's last fetch. The New task form says when a task
  * would start from older code than the server's, and offers that one repo's sync.
  */
@@ -615,7 +615,7 @@ export const workspaceApi = {
   unpushedWork: endpoint("unpushed-work", z.object({}).strict(), UnpushedWork),
   /** The last round of the server check (ADR-295), read from the daemon's memory: asking it starts no git. */
   serverCheck: endpoint("server-check", z.object({}).strict(), ServerCheckState),
-  /** Where a new task of the repo starts, against the server as of the last fetch (ADR-296); `null` with nothing to compare. */
+  /** Where a new task of the repo starts, against the server as of the last fetch (ADR-297); `null` with nothing to compare. */
   newTaskBase: endpoint("new-task-base", RepoRequest, NewTaskBase.nullable()),
   /**
    * Turns the server check on or off (ADR-295); `on: true` removes `serverCheck` from `workspace.yaml`. No MCP tool sets
@@ -656,7 +656,7 @@ export const workspaceApi = {
   syncRun: endpoint("sync-run", z.object({}).strict(), SyncRun.nullable()),
   /**
    * The sync of one repo, as "Sync all" syncs each (ADR-21), answered when it is done: "Sync main" in the New task form
-   * (ADR-296). No MCP tool does it: an agent does not move the user's branches.
+   * (ADR-297). No MCP tool does it: an agent does not move the user's branches.
    */
   syncRepo: endpoint("sync-repo", RepoRequest, SyncResult),
   /**

@@ -154,7 +154,7 @@ describe("the server check asks real git servers for new commits without fetchin
   );
 
   test(
-    "with another branch checked out it also asks about the default branch, where a new task starts, in the same connection (ADR-296)",
+    "with another branch checked out it also asks about the default branch, where a new task starts, in the same connection (ADR-297)",
     async () => {
       const projects = mkdtempSync(join(tmpdir(), "trackwall-server-check-default-"));
       const shop = cloneFromServer(projects, "shop");

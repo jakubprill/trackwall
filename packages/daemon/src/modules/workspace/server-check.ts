@@ -7,7 +7,7 @@ import type { RepoEntry } from "./projects-dir.ts";
  * The server check (§4.5, ADR-295): every 15 minutes the daemon asks the server of each repo whether the branch the
  * checked-out branch tracks or the default branch moved since the repo's last fetch (`vcs.newOnServer`: `git ls-remote`
  * outside the repo, with only the user's own sign-in, as the doctor asks, ADR-195), so "All repos" shows the repos with
- * new commits on the server, and the New task form a default branch a task would start behind (ADR-296).
+ * new commits on the server, and the New task form a default branch a task would start behind (ADR-297).
  * It fetches nothing: a fetch in the background would run what a repo's own configuration names (§8), and the user's
  * Pull or "Sync all" brings the commits. Why a server did not answer is the doctor's to explain, so a round keeps no
  * message, and none reaches the log, where a token someone put in a remote's address would stay.

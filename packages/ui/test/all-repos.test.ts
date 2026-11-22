@@ -199,7 +199,7 @@ describe("new commits the server check found without a fetch (ADR-295)", () => {
     expect(allReposSummary(rows).label).toBe("4 to pull · 1 changed");
   });
 
-  test("only the branch the checked-out one tracks counts: a default branch that moved under another checked-out branch is the New task form's (ADR-296)", () => {
+  test("only the branch the checked-out one tracks counts: a default branch that moved under another checked-out branch is the New task form's (ADR-297)", () => {
     const onFeature = repo(
       "catalog",
       ok({ branch: "discounts", upstream: { name: "origin/discounts", ahead: 0, behind: 0 }, fetchedAt: TWO_DAYS_AGO }),

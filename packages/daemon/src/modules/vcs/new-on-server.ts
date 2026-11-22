@@ -6,7 +6,7 @@ import { knownDefaultTarget } from "./sync.ts";
 import { trackedBranch } from "./tracked-branch.ts";
 
 /**
- * One repo's part of the server check (§4.5, ADR-295, ADR-296): the remote-tracking branches the server has moved past
+ * One repo's part of the server check (§4.5, ADR-295, ADR-297): the remote-tracking branches the server has moved past
  * since the repo's last fetch, i.e. what a fetch would bring, out of two: the one the checked-out branch tracks, which a
  * pull fast-forwards it to, and the main remote's default branch, where a new task starts. The repo itself is only read
  * (its HEAD, the branch's configuration, its remote-tracking refs); each server is asked once, from outside the repo, in a
@@ -74,7 +74,7 @@ async function trackedByHead(dir: string, config: GitConfig): Promise<RemoteBran
   return url === undefined ? undefined : { ref: tracked.ref, name: tracked.short, url, serverRef: tracked.remoteRef };
 }
 
-/** The main remote's default branch, where a new task starts (ADR-296), as `defaultBase` knows it. */
+/** The main remote's default branch, where a new task starts (ADR-297), as `defaultBase` knows it. */
 async function defaultOfMainRemote(dir: string, config: GitConfig): Promise<RemoteBranch | undefined> {
   const known = await knownDefaultTarget(dir, config);
   if (known === undefined) return undefined;

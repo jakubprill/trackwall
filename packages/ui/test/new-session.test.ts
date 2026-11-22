@@ -186,7 +186,7 @@ describe("a task with more repos is a change (ADR-171)", () => {
     expect(formChangeStart(form, null, true, "", added, "Refunds").firstPart).toBeNull();
   });
 
-  test("each repo a task would start in gets its own line about its default branch (ADR-296): the task's, then each added one once, and none for a session", () => {
+  test("each repo a task would start in gets its own line about its default branch (ADR-297): the task's, then each added one once, and none for a session", () => {
     const added = [
       { repo: "orders-api", note: "" },
       { repo: "", note: "not chosen yet" },

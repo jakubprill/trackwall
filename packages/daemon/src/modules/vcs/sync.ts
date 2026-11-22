@@ -48,7 +48,7 @@ export async function syncDefaultBranch(dir: string): Promise<SyncBranchOutcome>
 /**
  * The main remote's default branch as the repo last heard of it, without asking the server (`knownDefaultBranch`), with
  * the main remote's address: where a new task starts (`defaultBase`), what the New task form compares (`newTaskBase`) and
- * one of the branches the server check asks about (ADR-296). `undefined` without a main remote or a default branch pointer.
+ * one of the branches the server check asks about (ADR-297). `undefined` without a main remote or a default branch pointer.
  */
 export async function knownDefaultTarget(dir: string, config: GitConfig): Promise<{ url: string; target: FastForwardTarget } | undefined> {
   const remote = mainRemote(config);
