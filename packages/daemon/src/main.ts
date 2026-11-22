@@ -184,6 +184,7 @@ async function start(
     }
     // After the API: the first comparison hands every repo to the card warm-up, and its git processes must not delay the start.
     facade.repoWatch.start();
+    facade.serverCheck.start();
     facade.localConfig.start();
     facade.mergeRequests.start();
     facade.containerHealth.start();

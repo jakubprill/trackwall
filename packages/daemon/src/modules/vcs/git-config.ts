@@ -42,15 +42,22 @@ export function parseConfig(out: string): GitConfig {
 
 /**
  * `origin`, and without it the only remote; with several and no `origin` we do not guess which one is the main one. The address after
- * applying `insteadOf` (the longest matching prefix, as in git), i.e. the one git really connects to.
+ * applying `insteadOf` (`remoteUrl`), i.e. the one git really connects to.
  */
 export function mainRemote(config: GitConfig): { name: string; url: string } | undefined {
-  const origin = config.remotes.get("origin")?.[0];
-  if (origin !== undefined) return { name: "origin", url: rewrite(origin, config.insteadOf) };
-  const [only] = config.remotes;
-  const onlyUrl = only?.[1][0];
-  if (only && onlyUrl !== undefined && config.remotes.size === 1) return { name: only[0], url: rewrite(onlyUrl, config.insteadOf) };
-  return undefined;
+  const [only] = config.remotes.keys();
+  const name = config.remotes.has("origin") ? "origin" : config.remotes.size === 1 ? only : undefined;
+  const url = name === undefined ? undefined : remoteUrl(config, name);
+  return name !== undefined && url !== undefined ? { name, url } : undefined;
+}
+
+/**
+ * The address git fetches remote `name` from: its first `url` after applying `insteadOf` (the longest matching prefix, as
+ * in git); `undefined` for a remote the configuration does not name.
+ */
+export function remoteUrl(config: GitConfig, name: string): string | undefined {
+  const url = config.remotes.get(name)?.[0];
+  return url === undefined ? undefined : rewrite(url, config.insteadOf);
 }
 
 function rewrite(url: string, insteadOf: ReadonlyMap<string, string>): string {

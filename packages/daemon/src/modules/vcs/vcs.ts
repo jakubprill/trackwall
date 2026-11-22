@@ -45,6 +45,7 @@ import { hostedProject } from "./hosted-project.ts";
 import { IndexPlaces } from "./index-place.ts";
 import { excludeLocally, ignoredPaths, trackedPaths } from "./local-files.ts";
 import { searchLog } from "./log-search.ts";
+import { newOnServer } from "./new-on-server.ts";
 import {
   type CommitFile,
   type GitObject,
@@ -215,6 +216,12 @@ export class Vcs {
   reachRemote(url: string): Promise<void> {
     return reachRemote(url);
   }
+
+  /**
+   * Whether the server moved the branch the checked-out branch tracks since the last fetch, asked outside the repo
+   * (ADR-295); `null` when there is nothing to ask, git's error when the server does not answer.
+   */
+  readonly newOnServer = newOnServer;
 
   private async readStatus(dir: string): Promise<TimedStatus> {
     const [{ stdout, ranMs }, fetchedAt] = await Promise.all([

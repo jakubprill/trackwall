@@ -19,6 +19,10 @@ describe("what the Upstream tile offers", () => {
     expect(pullLabel(320)).toBe("Pull 320");
   });
 
+  test("the button has no number while only the server check knows of new commits, which the pull's fetch counts (ADR-295)", () => {
+    expect(pullLabel(null)).toBe("Pull");
+  });
+
   test("new untracked files do not stop a pull, because a fast-forward leaves them where they are", () => {
     const offer = upstreamOffer(status({ changes: 2, untracked: 2, upstream: { name: "origin/develop", ahead: 0, behind: 3 } }));
     expect(offer).toMatchObject({ kind: "pull", behind: 3 });

@@ -225,6 +225,7 @@ export class Workspace {
     const retryModel = configOrProblem(() => this.deps.file.retryModel(), null);
     const taskTokenBudget = configOrProblem(() => this.deps.file.taskTokenBudget(), null);
     const runningTasksWarning = configOrProblem(() => this.deps.file.runningTasksWarning(), null);
+    const serverCheck = configOrProblem(() => this.deps.file.serverCheck(), false);
     const supervisor = configOrProblem(() => this.deps.file.supervisorSettings(), SupervisorSettings.parse({}));
     const sandbox = configOrProblem(() => this.deps.file.sandboxSettings(), null);
     const alwaysAllow = configOrProblem(() => this.deps.file.alwaysAllowedTools(), []);
@@ -249,6 +250,8 @@ export class Workspace {
       taskTokenBudgetProblem: taskTokenBudget.problem,
       runningTasksWarning: runningTasksWarning.value,
       runningTasksWarningProblem: runningTasksWarning.problem,
+      serverCheck: serverCheck.value,
+      serverCheckProblem: serverCheck.problem,
       supervisor: supervisor.value,
       supervisorProblem: supervisor.problem,
       sandbox: sandbox.value,
@@ -678,6 +681,20 @@ export class Workspace {
   /** `runningTasksWarning` from `workspace.yaml` (ADR-248), `null` without the key; `invalid_config` for a bad key. */
   runningTasksWarning(): number | null {
     return this.deps.file.runningTasksWarning();
+  }
+
+  /** Turns the server check on or off (ADR-295); on removes the key. */
+  setServerCheck(on: boolean): WorkspaceSettings {
+    this.deps.file.setServerCheck(on);
+    return this.settings();
+  }
+
+  /**
+   * Whether the server check asks the repos' servers (`serverCheck`, ADR-295): on without the key, and off while the key
+   * cannot be read, so that a typo in the line meant to turn it off never connects anywhere.
+   */
+  serverCheckOn(): boolean {
+    return configOrProblem(() => this.deps.file.serverCheck(), false).value;
   }
 
   /**

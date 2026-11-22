@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   breadcrumbs,
   changesLabel,
+  clockTime,
   elapsedLabel,
   formatBytes,
   formatUptime,
@@ -12,6 +13,12 @@ import {
 
 describe("format", () => {
   const now = new Date("2026-10-23T12:00:00Z");
+
+  test("a time of day on a 24-hour clock in the computer's own time zone", () => {
+    const at = new Date("2026-10-23T17:05:00Z");
+    const local = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+    expect(clockTime("2026-10-23T17:05:00Z")).toBe(local);
+  });
 
   test("relative time in English, older dates as a date", () => {
     expect(relativeTime("2026-10-23T11:59:30Z", now)).toBe("just now");

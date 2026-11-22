@@ -1,6 +1,6 @@
 import { ArrowDown, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { folderWorkWarning, pullLabel, type UpstreamOffer } from "@/lib/upstream-pull";
+import { folderWorkWarning, type PullOffer, pullLabel } from "@/lib/upstream-pull";
 import type { PullHandle } from "@/lib/use-pull";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +19,7 @@ export function PullButton({
   variant,
   className,
 }: {
-  offer: Extract<UpstreamOffer, { kind: "pull" }>;
+  offer: PullOffer;
   pull: PullHandle;
   variant?: "outline";
   className?: string;

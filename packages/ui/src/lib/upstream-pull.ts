@@ -17,11 +17,20 @@ import { sessionTitle } from "./session-state.ts";
  * fetch, which can find more commits or a diverged branch; this is only what the tile shows before the click.
  */
 
+/**
+ * A pull to offer: `behind` commits to pull as of the last fetch, or `null` when the server check found new commits the
+ * repo has not fetched, which the pull counts (ADR-295); `title`, the button's tooltip, says which branch moves where.
+ */
+export interface PullOffer {
+  kind: "pull";
+  behind: number | null;
+  title: string;
+}
+
 /** What the Upstream tile offers: a pull, a reason with the way out, or nothing (no upstream, nothing to pull). */
 export type UpstreamOffer =
   | { kind: "none" }
-  /** `title`: the button's tooltip, which branch moves where. */
-  | { kind: "pull"; behind: number; title: string }
+  | (PullOffer & { behind: number })
   | { kind: "blocked"; message: string; way: "changes" | "shell" };
 
 export function upstreamOffer(status: RepoStatusOk): UpstreamOffer {
@@ -40,16 +49,17 @@ export function upstreamOffer(status: RepoStatusOk): UpstreamOffer {
       message: `${countLabel(changed, { one: "changed file", other: "changed files" })} on ${branch} ${changed === 1 ? "is" : "are"} in the way.`,
       way: "changes",
     };
-  return {
-    kind: "pull",
-    behind: upstream.behind,
-    title: `Fetch, then fast-forward ${branch} to ${upstream.name}; the default branch is synced as in Sync all`,
-  };
+  return { kind: "pull", behind: upstream.behind, title: pullTitle(branch, upstream.name) };
 }
 
-/** The button's text: "Pull 320". */
-export function pullLabel(behind: number): string {
-  return `Pull ${behind}`;
+/** The tooltip of a pull: which branch moves where, and that the default branch is synced too. */
+export function pullTitle(branch: string, tracked: string): string {
+  return `Fetch, then fast-forward ${branch} to ${tracked}; the default branch is synced as in Sync all`;
+}
+
+/** The button's text: "Pull 320", or "Pull" while the count is the server's, not yet fetched. */
+export function pullLabel(behind: number | null): string {
+  return behind === null ? "Pull" : `Pull ${behind}`;
 }
 
 /**

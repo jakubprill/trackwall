@@ -1,5 +1,5 @@
 import type { ContainerHealth, HealthSample, HealthWarning } from "@trackwall/protocol";
-import { formatBytes, relativeTime } from "./format.ts";
+import { clockTime, formatBytes, relativeTime } from "./format.ts";
 
 /**
  * What the container's health panel shows (ADR-279): one tile per resource with its use against its limit, the day's
@@ -98,7 +98,7 @@ export function memoryBars(history: HealthSample[], limit: number | null): { top
           {
             at: point.at,
             percent: Math.min(100, (point.memoryBytes / top) * 100),
-            label: `${clock(point.at)}: ${formatBytes(point.memoryBytes)}`,
+            label: `${clockTime(point.at)}: ${formatBytes(point.memoryBytes)}`,
           },
         ],
   );
@@ -117,7 +117,7 @@ export function healthEvents(health: ContainerHealth, now: Date): { key: string;
   }));
   return [...kills, ...restarts]
     .sort((a, b) => b.at.localeCompare(a.at))
-    .map((e, i) => ({ key: `${e.at}-${i}`, text: `${e.text}, ${relativeTime(e.at, now)} (${clock(e.at)})` }));
+    .map((e, i) => ({ key: `${e.at}-${i}`, text: `${e.text}, ${relativeTime(e.at, now)} (${clockTime(e.at)})` }));
 }
 
 /** How long the container and the daemon have run. */
@@ -125,10 +125,6 @@ export function healthUptime(health: ContainerHealth, now: Date): string {
   const daemon = relativeTime(health.daemonStartedAt, now);
   if (health.containerStartedAt === null) return `Trackwall's daemon started ${daemon}.`;
   return `The container started ${relativeTime(health.containerStartedAt, now)}, Trackwall's daemon ${daemon}.`;
-}
-
-function clock(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 }
 
 /** A warning as a row of Home's "Needs you" (ADR-280): a short title and status; the whole text is the row's tooltip. */
