@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { runProgram } from "../src/infra/run-program.ts";
 import { findOnPath } from "../src/modules/agents/copilot-command.ts";
-import { appPackagesCanRun, gitInstallFolder, sandboxGitBlocked } from "../src/modules/doctor/sandbox-git.ts";
+import { appPackagesCanRun, gitInstallFolder, readAcl, sandboxGitBlocked } from "../src/modules/doctor/sandbox-git.ts";
 
 describe("whether Copilot CLI's sandbox on Windows can start git (#364)", () => {
   test("ALL APPLICATION PACKAGES with read and execute can run it, also when Windows shows the group in another language", () => {
@@ -38,7 +38,8 @@ describe("whether Copilot CLI's sandbox on Windows can start git (#364)", () => 
       if (git === undefined) throw new Error("git is not on PATH");
       const run = async (command: string, args: readonly string[], o: { env: NodeJS.ProcessEnv; timeoutMs: number }) =>
         (await runProgram(command, args, { label: command, env: o.env, timeoutMs: o.timeoutMs })).stdout.toString("utf8");
-      expect(await sandboxGitBlocked(git, run, process.env, 60_000)).toBe(false);
+      const acl = await readAcl(git, run, process.env, 60_000);
+      expect({ acl, canRun: appPackagesCanRun(acl) }).toEqual({ acl, canRun: true });
     },
     70_000,
   );

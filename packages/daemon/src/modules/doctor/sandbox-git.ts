@@ -11,9 +11,16 @@ import { win32 } from "node:path";
 /** The SID of ALL APPLICATION PACKAGES. */
 export const ALL_APPLICATION_PACKAGES = "S-1-15-2-1";
 
-/** Reads the ACL of the file in `TRACKWALL_ACL_PATH` as `SID|Allow or Deny|rights` lines; the path never enters the script. */
+/**
+ * Reads the ACL of the file in `TRACKWALL_ACL_PATH` as `SID|Allow or Deny|rights` lines; the path never enters the
+ * script. .NET only, no cmdlet: a `PSModulePath` inherited from PowerShell 7 keeps Windows PowerShell from loading
+ * `Get-Acl`'s module (the CI runner showed it), and the rules come with their SIDs, so nothing is translated.
+ */
 const ACL_SCRIPT =
-  "(Get-Acl -LiteralPath $env:TRACKWALL_ACL_PATH).Access | ForEach-Object { try { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value + '|' + $_.AccessControlType + '|' + $_.FileSystemRights } catch {} }";
+  "$acl = [System.Security.AccessControl.FileSecurity]::new($env:TRACKWALL_ACL_PATH, 'Access'); foreach ($rule in $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])) { $rule.IdentityReference.Value + '|' + $rule.AccessControlType + '|' + $rule.FileSystemRights }";
+
+/** PowerShell's `-EncodedCommand`: the script as UTF-16LE in base64, so no quoting on the command line can change it. */
+const ENCODED_ACL_SCRIPT = Buffer.from(ACL_SCRIPT, "utf16le").toString("base64");
 
 /** The rights that let a program start; a deny of any of them stops it. */
 const RUN_RIGHTS = /ReadAndExecute|ExecuteFile|Modify|FullControl/;
@@ -47,12 +54,18 @@ export async function sandboxGitBlocked(
   timeoutMs: number,
 ): Promise<boolean | null> {
   try {
-    const acl = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", ACL_SCRIPT], {
-      env: { ...env, TRACKWALL_ACL_PATH: program },
-      timeoutMs,
-    });
-    return acl.trim() === "" ? null : !appPackagesCanRun(acl);
+    return !appPackagesCanRun(await readAcl(program, run, env, timeoutMs));
   } catch {
     return null;
   }
+}
+
+/** The ACL lines of `program`; throws with PowerShell's message when it cannot read them, or when it reads none. */
+export async function readAcl(program: string, run: RunAclScript, env: NodeJS.ProcessEnv, timeoutMs: number): Promise<string> {
+  const acl = await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", ENCODED_ACL_SCRIPT], {
+    env: { ...env, TRACKWALL_ACL_PATH: program },
+    timeoutMs,
+  });
+  if (acl.trim() === "") throw new Error(`PowerShell read no access rules of ${program}`);
+  return acl;
 }
