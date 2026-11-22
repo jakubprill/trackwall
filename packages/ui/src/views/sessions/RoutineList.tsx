@@ -1,4 +1,4 @@
-import { type RoutineEntry, routinesApi, trackwallDirLabel } from "@trackwall/protocol";
+import { type RoutineEntry, type RoutineProblem, routinesApi, trackwallDirLabel } from "@trackwall/protocol";
 import { Check, GitBranch } from "lucide-react";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -26,17 +26,32 @@ export function RoutineList({ conn, onStarted }: { conn: Connection; onStarted: 
   if (list.error) return <ErrorWithRetry message={list.error} onRetry={list.reload} />;
   if (!list.data) return null;
   const { routines, problems } = list.data;
+  return <RoutineSection conn={conn} routines={routines} problems={problems} onChanged={list.reload} onStarted={onStarted} />;
+}
+
+/**
+ * The routines as read, with the files that are not routines: nothing while there are none, since the section would
+ * only take room on the form of a new install (ADR-290); the first routine an agent proposes brings it.
+ */
+export function RoutineSection({
+  conn,
+  routines,
+  problems,
+  onChanged,
+  onStarted,
+}: {
+  conn: Connection;
+  routines: readonly RoutineEntry[];
+  problems: readonly RoutineProblem[];
+  onChanged: () => void;
+  onStarted: (selection: SessionSelection) => void;
+}) {
+  if (routines.length === 0 && problems.length === 0) return null;
   return (
     <section aria-label="Routines" className="flex max-w-3xl flex-col gap-3 px-6 pb-6">
       <h3 className="hud-label">Routines</h3>
-      {routines.length === 0 && (
-        <p className="text-muted-foreground max-w-prose text-xs">
-          No routines yet. Ask an agent to prepare one, e.g. “prepare a routine that updates the orders API client and checks that it
-          compiles”; it shows here for you to approve.
-        </p>
-      )}
       {routines.map((routine) => (
-        <RoutineRow key={`${routine.name}-${routine.digest}`} conn={conn} routine={routine} onChanged={list.reload} onStarted={onStarted} />
+        <RoutineRow key={`${routine.name}-${routine.digest}`} conn={conn} routine={routine} onChanged={onChanged} onStarted={onStarted} />
       ))}
       {problems.map((problem) => (
         <p key={problem.file} className="text-destructive text-xs">

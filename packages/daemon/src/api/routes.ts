@@ -135,6 +135,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(taskEvidenceApi.get, (f, b) => f.taskEvidence(b.task)),
   route(doctorApi.run, (f) => f.doctor.run()),
   route(doctorApi.trustProjectsFolder, (f) => f.doctor.trustProjectsFolder()),
+  route(doctorApi.projectsFolderTrust, (f) => f.doctor.projectsFolderTrust()),
   route(doctorApi.copilotCliVersion, (f) => f.doctor.copilotCliVersion()),
   route(providerModelsApi.list, (f) => f.providerModels.list()),
   route(javaNavigationApi.state, (f) => f.javaNavigation.state()),
