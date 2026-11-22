@@ -4,7 +4,7 @@ import { errorMessage, post } from "./api.ts";
 import type { Connection } from "./connection.ts";
 
 /** The pull's own state: running, its result or error, or the question asked first when something works in the folder. */
-type PullState =
+export type PullState =
   | { kind: "idle" }
   | { kind: "asking" }
   /** The user chose to put the changes aside first; the Upstream tile lists the files. */
@@ -27,10 +27,16 @@ export interface PullHandle {
 /**
  * The pull of one repo's checked-out branch (ADR-269), the same in the Upstream tile and in a row of All repos (ADR-291):
  * it asks first when something works in the repo folder (`workInRepoFolder`) and keeps its result until the next pull.
- * The new status comes with the repo list, which sees the moved HEAD.
+ * The new status comes with the repo list, which sees the moved HEAD. `initial` is the state it starts in: nothing pulled
+ * in the app, any state in the gallery of view states.
  */
-export function usePull(conn: Connection, repo: string, workInFolder: readonly string[]): PullHandle {
-  const [state, setState] = useState<PullState>({ kind: "idle" });
+export function usePull(
+  conn: Connection,
+  repo: string,
+  workInFolder: readonly string[],
+  initial: PullState = { kind: "idle" },
+): PullHandle {
+  const [state, setState] = useState<PullState>(initial);
   const run = () => {
     setState({ kind: "running" });
     post(conn, workspaceApi.pull, { repo }).then(

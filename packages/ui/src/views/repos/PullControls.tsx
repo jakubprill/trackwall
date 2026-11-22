@@ -52,7 +52,8 @@ export function PullQuestion({ workInFolder, pull }: { workInFolder: readonly st
 export function PullFailure({ message, pull }: { message: string; pull: PullHandle }) {
   return (
     <span className="flex flex-col items-start gap-1 text-xs">
-      <span className="text-destructive whitespace-pre-wrap break-words">Pull failed: {message}</span>
+      {/* Capped, so that a word longer than the line (git's URL) breaks rather than widening the text past its frame. */}
+      <span className="text-destructive max-w-full whitespace-pre-wrap break-words">Pull failed: {message}</span>
       <Button variant="outline" size="sm" className="h-7" onClick={pull.run}>
         <RotateCw /> Retry
       </Button>

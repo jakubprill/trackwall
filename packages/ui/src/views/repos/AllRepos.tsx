@@ -11,7 +11,7 @@ import type { RepoTab } from "@/lib/repo-tabs";
 import type { SessionSelection } from "@/lib/session-entries";
 import { UNPUSHED_NOTE } from "@/lib/unpushed-work";
 import { pullResultLine, workInRepoFolder } from "@/lib/upstream-pull";
-import { type PullHandle, usePull } from "@/lib/use-pull";
+import { type PullHandle, type PullState, usePull } from "@/lib/use-pull";
 import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
 import type { SyncRunHandle } from "@/lib/use-sync-run";
 import { cn } from "@/lib/utils";
@@ -90,7 +90,12 @@ export function AllReposView({
   onShowSync,
   onOpenRepo,
   onOpenInSessions,
-}: AllReposProps & { running: readonly RunningMiseTask[] }) {
+  initialPulls,
+}: AllReposProps & {
+  running: readonly RunningMiseTask[];
+  /** The state a row's pull starts in, by repo, for the gallery of view states; in the app no pull has started. */
+  initialPulls?: Readonly<Record<string, PullState>>;
+}) {
   const kept = useKept(rows);
   const [showFolded, setShowFolded] = useState(false);
   const { shown, folded } = splitRows(rows, kept);
@@ -155,6 +160,7 @@ export function AllReposView({
                   workInFolder={workInRepoFolder(row.repo, sessions, running)}
                   onOpenRepo={(tab) => onOpenRepo(row.repo, tab)}
                   onOpenActivity={(target) => openActivity(row.repo, target)}
+                  initialPull={initialPulls?.[row.repo]}
                 />
               ))}
             </tbody>
@@ -216,6 +222,7 @@ function TableRow({
   workInFolder,
   onOpenRepo,
   onOpenActivity,
+  initialPull,
 }: {
   conn: Connection;
   row: AllReposRow;
@@ -224,8 +231,9 @@ function TableRow({
   workInFolder: readonly string[];
   onOpenRepo: (tab?: RepoTab) => void;
   onOpenActivity: (target: RepoActivityTarget) => void;
+  initialPull: PullState | undefined;
 }) {
-  const pull = usePull(conn, row.repo, workInFolder);
+  const pull = usePull(conn, row.repo, workInFolder, initialPull);
   const { state } = pull;
   const detail = state.kind === "asking" || state.kind === "failed";
   const ok = row.kind === "ok" ? row : undefined;
@@ -271,17 +279,33 @@ function TableRow({
         </td>
       </tr>
       {detail && (
-        <tr className="border-b last:border-b-0">
-          <td colSpan={7} className="px-3 pb-3">
-            {state.kind === "asking" ? (
-              <PullQuestion workInFolder={workInFolder} pull={pull} />
-            ) : (
-              <PullFailure message={state.message} pull={pull} />
-            )}
-          </td>
-        </tr>
+        <DetailRow inContainer={inContainer}>
+          {state.kind === "asking" ? (
+            <PullQuestion workInFolder={workInFolder} pull={pull} />
+          ) : (
+            <PullFailure message={state.message} pull={pull} />
+          )}
+        </DetailRow>
       )}
     </>
+  );
+}
+
+/**
+ * A line under a row across the whole table, for the pull's question or failure. Its cell in each layout spans exactly
+ * the columns that layout shows: the repo's and State, or the repo's and the wide ones. A cell spanning more would add
+ * empty columns to the table, which squeeze the others and push a narrow table out of its frame.
+ */
+function DetailRow({ inContainer, children }: { inContainer: boolean; children: ReactNode }) {
+  return (
+    <tr className="border-b last:border-b-0">
+      <td colSpan={2} className={cn("px-3 pb-3", NARROW)}>
+        {children}
+      </td>
+      <td colSpan={inContainer ? 6 : 5} className={cn("px-3 pb-3", WIDE)}>
+        {children}
+      </td>
+    </tr>
   );
 }
 

@@ -1,5 +1,6 @@
 import type { Repo, RepoStatusOk, SessionList, UnpushedWork } from "@trackwall/protocol";
 import { allReposRows } from "@/lib/all-repos";
+import type { PullState } from "@/lib/use-pull";
 import type { SyncRunHandle } from "@/lib/use-sync-run";
 import { AllReposView } from "@/views/repos/AllRepos";
 import type { GalleryState } from "./gallery-state.ts";
@@ -31,18 +32,20 @@ const CLEAN = ["admin-bff", "admin-web", "api-gateway", "auth", "customers", "no
   ok(id, { fetched: 2 * 24 * 60 }),
 );
 
-/** All repos for `repos` as the panel shows them, with the sessions and the work only in a container given. */
+/** All repos for `repos` as the panel shows them, with the sessions, the work only in a container and the pulls given. */
 function AllReposOf({
   repos,
   unpushed,
   sessions,
   all = repos.length,
+  pulls,
 }: {
   repos: readonly Repo[];
   unpushed?: UnpushedWork;
   sessions?: SessionList;
   /** The repos before the tag filter, when it leaves fewer. */
   all?: number;
+  pulls?: Readonly<Record<string, PullState>>;
 }) {
   return (
     <AllReposView
@@ -57,6 +60,7 @@ function AllReposOf({
       onShowSync={() => {}}
       onOpenRepo={() => {}}
       onOpenInSessions={() => {}}
+      initialPulls={pulls}
     />
   );
 }
@@ -100,6 +104,8 @@ const busy: GalleryState = {
         tasks: [task(4, { repo: "pricing" })],
       })}
       all={20}
+      // Its line across the table counts the column a container adds.
+      pulls={{ catalog: { kind: "asking" } }}
     />
   ),
 };
@@ -107,6 +113,24 @@ const busy: GalleryState = {
 const outside: GalleryState = {
   name: "Commits to pull, outside a container",
   render: () => <AllReposOf repos={[ok("catalog", { behind: 320 }), ok("orders-api", { changes: 2, untracked: 1 }), ...CLEAN]} />,
+};
+
+/** The question and the failure take a line of their own under the row, across the whole table. */
+const pulls: GalleryState = {
+  name: "A pull asks first, another failed",
+  render: () => (
+    <AllReposOf
+      repos={[ok("catalog", { behind: 15 }), ok("payments", { behind: 2 }), ...CLEAN]}
+      sessions={sessionList({ sessions: [waiting(1, 12, { repo: "catalog", state: stateOf("Input") })] })}
+      pulls={{
+        catalog: { kind: "asking" },
+        payments: {
+          kind: "failed",
+          message: "fatal: unable to access 'https://git.example.com/shop/payments.git/': Could not resolve host: git.example.com",
+        },
+      }}
+    />
+  ),
 };
 
 const clean: GalleryState = { name: "All clean", render: () => <AllReposOf repos={CLEAN} /> };
@@ -118,4 +142,4 @@ const loading: GalleryState = {
   ),
 };
 
-export const ALL_REPOS_STATES: readonly GalleryState[] = [busy, outside, clean, loading];
+export const ALL_REPOS_STATES: readonly GalleryState[] = [busy, outside, pulls, clean, loading];
