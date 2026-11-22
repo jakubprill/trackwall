@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { DoctorCheck, DoctorReport } from "@trackwall/protocol";
-import { fixCommand, getStartedHeadline, getStartedPlace, getStartedPlan, goodToHaveSummary } from "../src/lib/get-started.ts";
+import {
+  doneStepsLine,
+  fixCommand,
+  getStartedHeadline,
+  getStartedInSessions,
+  getStartedPlace,
+  getStartedPlan,
+  goodToHaveSummary,
+  stepsLeft,
+} from "../src/lib/get-started.ts";
 
 const report = (...checks: DoctorCheck[]): DoctorReport => ({ checkedAt: "2026-11-17T16:00:00.000Z", checks });
 const ok = (id: DoctorCheck["id"], summary: string): DoctorCheck => ({ id, status: "ok", summary, fix: null });
@@ -159,5 +168,59 @@ describe("Get started", () => {
     expect(fixCommand("Run `git config --global user.name` and `git config --global user.email`.")).toBeNull();
     expect(fixCommand("Install mise (mise.jdx.dev) and restart Trackwall.")).toBeNull();
     expect(fixCommand(null)).toBeNull();
+  });
+});
+
+describe("Get started above the Sessions form", () => {
+  test("shows while no projects folder is set, whatever else is known", () => {
+    expect(getStartedInSessions(null, 0, null)).toBe(true);
+    expect(getStartedInSessions(null, 3, 0)).toBe(true);
+  });
+
+  test("with a folder, shows until the first session while the doctor's last run left a step open", () => {
+    expect(getStartedInSessions("/home/me/dev", 0, 2)).toBe(true);
+    expect(getStartedInSessions("/home/me/dev", 1, 2)).toBe(false);
+  });
+
+  test("with a folder, does not run the doctor when its last run left nothing open or it never ran in this browser", () => {
+    expect(getStartedInSessions("/home/me/dev", 0, 0)).toBe(false);
+    expect(getStartedInSessions("/home/me/dev", 0, null)).toBe(false);
+  });
+
+  test("does not show while the workspace settings are on their way and nothing was left open", () => {
+    expect(getStartedInSessions(undefined, 0, null)).toBe(false);
+    expect(getStartedInSessions(undefined, 0, 1)).toBe(true);
+  });
+
+  test("lists the steps not done one by one, in their order, and the done ones in one line", () => {
+    const plan = getStartedPlan(NEW_COMPUTER);
+
+    expect(stepsLeft(plan).map((s) => [s.id, s.state])).toEqual([
+      ["projects-folder", "todo"],
+      ["copilot-cli", "todo"],
+      ["copilot-trusted-folder", "later"],
+    ]);
+    expect(doneStepsLine(plan)).toBe("Done: Git, Network for sessions.");
+  });
+
+  test("with every step done nothing is left one by one, and with none done there is no line of done steps", () => {
+    const allDone = getStartedPlan(
+      report(
+        ok("projects-folder", "/home/me/dev"),
+        ok("git", "git 2.47.1"),
+        ok("copilot-cli", "Copilot CLI 1.0.110"),
+        ok("network", "github.com and api.githubcopilot.com answer."),
+        ok("copilot-trusted-folder", "Copilot CLI trusts /home/me/dev."),
+      ),
+    );
+    const noneDone = getStartedPlan(
+      report({ id: "projects-folder", status: "fail", summary: "No projects folder is set.", fix: "Choose the folder with your repos." }),
+    );
+
+    expect(stepsLeft(allDone)).toEqual([]);
+    expect(doneStepsLine(allDone)).toBe(
+      "Done: Projects folder, Git, Copilot CLI, Network for sessions, Copilot CLI trusts your projects folder.",
+    );
+    expect(doneStepsLine(noneDone)).toBeNull();
   });
 });

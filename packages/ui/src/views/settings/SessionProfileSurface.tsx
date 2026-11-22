@@ -1,11 +1,11 @@
 import { countLabel, type SessionList, type WorkspaceSettings, workspaceApi } from "@trackwall/protocol";
+import { PathForm } from "@/components/PathForm";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { providerModelsNote } from "@/lib/provider-models";
 import { sessionsOnOtherProfile } from "@/lib/session-profile";
 import { useProviderModels } from "@/lib/use-provider-models";
 import type { RemoteHandle } from "@/lib/use-remote";
-import { PathForm } from "./PathForm.tsx";
 import { SettingsRead } from "./SettingsRead.tsx";
 
 /**

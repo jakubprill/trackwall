@@ -7,7 +7,7 @@ description: The problems people meet while setting Trackwall up, what each mess
 
 The problems people meet while setting Trackwall up, what each message means and what fixes it.
 
-Start with "Settings > Get started" for a first session, or "Settings > Diagnostics" for everything else: the [doctor](/features/doctor) there names most of the problems below with the fix for your computer, and "Check again" shows whether the fix worked. This page explains the fixes it points to and covers what it cannot see.
+Start with "Get started" for a first session (at the top of "Sessions" until you have one, and always in "Settings > Get started"), or "Settings > Diagnostics" for everything else: the [doctor](/features/doctor) there names most of the problems below with the fix for your computer, and "Check again" shows whether the fix worked. This page explains the fixes it points to and covers what it cannot see.
 
 ## Windows or macOS will not open Trackwall
 

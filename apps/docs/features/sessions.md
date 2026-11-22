@@ -41,7 +41,7 @@ At the end of its name line, every session that has talked to the model shows wh
 ## Use it
 
 1. Install Copilot CLI and sign in to it.
-2. Trackwall opens on "Sessions"; from another view press Ctrl+1 (⌘1 on macOS). Until your projects folder is set, it says so with "Get started" in place of the form; set the folder there and come back.
+2. Trackwall opens on "Sessions"; from another view press Ctrl+1 (⌘1 on macOS). Until your projects folder is set, the steps of [Get started](/features/get-started) show in place of the form; set the folder there and the form appears under them.
 3. Press "+", pick a repo (or "No repo: the projects folder"), turn off the "Own worktree" pill, open "More options" to pick a model, Chat or Java navigation if you want them, and press "Start session".
 4. Work in the terminal as you would in any Copilot CLI session.
 5. When a session waits for you, press Alt+J to jump to it.

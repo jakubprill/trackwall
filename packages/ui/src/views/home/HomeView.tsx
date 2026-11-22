@@ -3,7 +3,6 @@ import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Loading } from "@/components/Loading";
-import { ProjectsFolderNeeded } from "@/components/ProjectsFolderNeeded";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
@@ -26,6 +25,7 @@ import { useUnpushedWork } from "@/lib/use-unpushed-work";
 import { HomeDetails } from "./HomeDetails.tsx";
 import { HomeHoverCard } from "./HomeHoverCard.tsx";
 import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
+import { ProjectsFolderNeeded } from "./ProjectsFolderNeeded.tsx";
 
 /**
  * The "Home" view (ADR-33, §5.5): the first screen. On the left the "Needs you" queue (sessions that are waiting or have

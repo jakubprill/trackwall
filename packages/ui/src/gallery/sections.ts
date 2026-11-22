@@ -1,5 +1,5 @@
 import type { GallerySection } from "./gallery-state.ts";
-import { GET_STARTED_STATES } from "./get-started-states.tsx";
+import { GET_STARTED_CARD_STATES, GET_STARTED_STATES } from "./get-started-states.tsx";
 import { HOME_STATES } from "./home-states.tsx";
 import { SESSION_LIST_STATES } from "./session-list-states.tsx";
 import { SETTING_ROWS_STATES } from "./setting-rows-states.tsx";
@@ -9,6 +9,15 @@ import { TRAY_PANEL_STATES } from "./tray-panel-states.tsx";
 /** The parts of views the gallery shows, in the order of the page, each at the sizes it takes in the app. */
 export const GALLERY_SECTIONS: readonly GallerySection[] = [
   { name: "Sessions · the list", sizes: [{ name: "fixed width", className: "w-sidebar" }], states: SESSION_LIST_STATES },
+  {
+    name: "Sessions · Get started above the form",
+    // The card's widest, and the view next to the list and a pinned supervisor panel in a 1024 px window.
+    sizes: [
+      { name: "widest", className: "w-3xl" },
+      { name: "narrowest", className: "w-80" },
+    ],
+    states: GET_STARTED_CARD_STATES,
+  },
   {
     name: "Home · Needs you",
     // The column shrinks from the sidebar width down to 12rem in a narrow window.

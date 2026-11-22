@@ -59,7 +59,7 @@ export function SupervisorPanel({
   focused: boolean;
   onFocusedChange: (focused: boolean) => void;
   onOpenInSessions: (selection: SessionSelection) => void;
-  /** The projects folder (`useProjectsDir`): the start card waits for it. */
+  /** The projects folder (`useWorkspaceSettings`): the start card waits for it. */
   projectsDir: string | null | undefined;
   /** Opens Settings › Get started, where the start card sends the user while no projects folder is set. */
   onOpenGetStarted: () => void;
