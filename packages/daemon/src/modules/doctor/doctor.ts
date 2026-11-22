@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   type CopilotCliRelation,
   type CopilotCliVersion,
+  copilotCliInstallAdvice,
   countLabel,
   type DoctorCheck,
   DoctorCheckId,
@@ -341,7 +342,7 @@ export class Doctor {
     if (read.kind === "missing")
       return fail(`${read.message}.`, "Install GitHub Copilot CLI, sign in by running `copilot` once, and restart Trackwall.");
     if (read.kind === "failed") return fail(`Copilot CLI: ${read.message}`, "Run `copilot --version` in a terminal to see what is wrong.");
-    return copilotVersionOutcome(read.version);
+    return copilotVersionOutcome(read.version, this.deps.inContainer);
   }
 
   /**
@@ -353,7 +354,10 @@ export class Doctor {
     const tested = TESTED_COPILOT_CLI_VERSION;
     const version = read.kind === "answered" ? read.version : null;
     const relation = copilotVersionRelation(version);
-    return version === null || relation === "unknown" ? { relation: "unknown", version: null, tested } : { relation, version, tested };
+    const { inContainer } = this.deps;
+    return version === null || relation === "unknown"
+      ? { relation: "unknown", version: null, tested, inContainer }
+      : { relation, version, tested, inContainer };
   }
 
   /** Copilot CLI found as sessions find it and its `--version`, as `x.y.z` (`null` when it names none). */
@@ -457,20 +461,21 @@ function copilotVersionRelation(version: string | null): CopilotCliRelation {
  * Older than the tested version may lack what the daemon relies on; newer may have changed it, which the nightly contract
  * tests find only after users have it (ADR-274). Both work as a rule, so both are warnings, not failures.
  */
-export function copilotVersionOutcome(version: string | null): NonNullable<Outcome> {
+export function copilotVersionOutcome(version: string | null, inContainer: boolean): NonNullable<Outcome> {
   const tested = TESTED_COPILOT_CLI_VERSION;
+  const advice = copilotCliInstallAdvice(tested, inContainer);
   switch (copilotVersionRelation(version)) {
     case "unknown":
       return warn("Copilot CLI did not say its version.", `Trackwall is tested with Copilot CLI ${tested}.`);
     case "older":
       return warn(
         `Copilot CLI ${version} is older than ${tested}, the version Trackwall is tested with.`,
-        "Update Copilot CLI the way you installed it (npm, Homebrew or WinGet).",
+        `${advice.charAt(0).toUpperCase()}${advice.slice(1)}.`,
       );
     case "newer":
       return warn(
         `Copilot CLI ${version} is newer than ${tested}, the version Trackwall is tested with.`,
-        `Sessions usually work, but a change in Copilot CLI can make Trackwall show a session's state wrong. If one does, install Copilot CLI ${tested} again the way you installed it, and update Trackwall when a version tested with ${version} comes out.`,
+        `Sessions usually work, but a change in Copilot CLI can make Trackwall show a session's state wrong. If one does, ${advice}, and update Trackwall when a version tested with ${version} comes out.`,
       );
     case "tested":
       return ok(`Copilot CLI ${version}`);

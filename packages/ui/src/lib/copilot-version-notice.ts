@@ -1,4 +1,4 @@
-import type { CopilotCliVersion } from "@trackwall/protocol";
+import { type CopilotCliVersion, copilotCliInstallAdvice } from "@trackwall/protocol";
 
 /**
  * The strip above the views about a Copilot CLI Trackwall is not tested with (ADR-274). The contract tests pin one
@@ -15,7 +15,7 @@ export function copilotVersionNotice(found: CopilotCliVersion, hiddenFor: string
   const { version, tested } = found;
   return found.relation === "newer"
     ? `Copilot CLI ${version} is newer than ${tested}, the version this Trackwall is tested with: a session's state may show wrong until Trackwall is updated.`
-    : `Copilot CLI ${version} is older than ${tested}, the version this Trackwall is tested with: update Copilot CLI, since sessions may lack what Trackwall relies on.`;
+    : `Copilot CLI ${version} is older than ${tested}, the version this Trackwall is tested with: ${copilotCliInstallAdvice(tested, found.inContainer)}, since sessions may lack what Trackwall relies on.`;
 }
 
 /** The version the strip was hidden for, `null` when it never was. */

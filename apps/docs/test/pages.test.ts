@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CONFIG_ENTRIES, WORKSPACE_KEYS } from "@trackwall/protocol";
+import { CONFIG_ENTRIES, TESTED_COPILOT_CLI_VERSION, WORKSPACE_KEYS } from "@trackwall/protocol";
 import { FEATURE_GROUPS, SIDEBAR } from "../.vitepress/sidebar.ts";
 import { TALK_PAGES } from "../.vitepress/talk-pages.ts";
 
@@ -203,4 +203,8 @@ test("the Polish talk has the slides of the English one, with the same numbers a
     slides: slides("talk.md"),
     sections: sections("talk.md"),
   });
+});
+
+test("the dev container guide installs the Copilot CLI version Trackwall is tested with, so raising it updates the guide too", () => {
+  expect(read("guide/dev-container.md")).toContain(`mise use -g node@22 npm:@github/copilot@${TESTED_COPILOT_CLI_VERSION}\``);
 });

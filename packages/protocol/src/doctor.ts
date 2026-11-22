@@ -74,11 +74,24 @@ export const CopilotCliRelation = z.enum(["older", "tested", "newer", "unknown"]
 export type CopilotCliRelation = z.infer<typeof CopilotCliRelation>;
 
 export const CopilotCliVersion = z.discriminatedUnion("relation", [
-  /** What `copilot --version` says, as `x.y.z`, against the tested version, `TESTED_COPILOT_CLI_VERSION` of this daemon. */
-  z.object({ relation: z.enum(["older", "tested", "newer"]), version: z.string(), tested: z.string() }),
-  z.object({ relation: z.literal("unknown"), version: z.null(), tested: z.string() }),
+  /**
+   * What `copilot --version` says, as `x.y.z`, against the tested version, `TESTED_COPILOT_CLI_VERSION` of this daemon;
+   * `inContainer` when the daemon runs in a container, where Copilot CLI comes from its mise config or image.
+   */
+  z.object({ relation: z.enum(["older", "tested", "newer"]), version: z.string(), tested: z.string(), inContainer: z.boolean() }),
+  z.object({ relation: z.literal("unknown"), version: z.null(), tested: z.string(), inContainer: z.boolean() }),
 ]);
 export type CopilotCliVersion = z.infer<typeof CopilotCliVersion>;
+
+/**
+ * How to get the tested Copilot CLI, for the doctor and the window's strip alike (ADR-274). In a container Copilot CLI
+ * comes from the mise config the dev container guide sets up, or from the image, so an update made inside the
+ * container any other way is gone at the next rebuild, and the user has to know which version to put there.
+ */
+export function copilotCliInstallAdvice(tested: string, inContainer: boolean): string {
+  if (!inContainer) return `install Copilot CLI ${tested} the way you installed it (npm, Homebrew or WinGet)`;
+  return `install Copilot CLI ${tested} where the container gets it: run \`mise use -g npm:@github/copilot@${tested}\` in the container, or put that version into its image and rebuild it (an update made any other way is lost at the next rebuild)`;
+}
 
 const endpoint = apiEndpoints("doctor");
 
