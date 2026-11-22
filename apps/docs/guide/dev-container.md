@@ -179,6 +179,14 @@ Docker does not let the sandbox start by default, so Trackwall leaves it off in 
 
 From then on Trackwall sees that the sandbox can run and puts tasks without approvals in it, as on a Linux computer: the New session form says so under the options. `sandbox.tasks` in `workspace.yaml` still chooses otherwise, as described in [Approvals](/features/approvals).
 
+If your image is built from the official `node` images, or installs tools with `npm i -g` in another way, let the sandbox read `/usr/local/lib`. npm keeps its global packages in `/usr/local/lib/node_modules`, with only links to them in `/usr/local/bin`. The sandbox shows `/usr/local/bin` but hides `/usr/local/lib`, so in a sandboxed task `npm`, `npx`, `corepack` and `pnpm` say "command not found", while `node` itself works. Run this once in a terminal of the container:
+
+```sh
+copilot config sandbox.userPolicy.filesystem.readonlyPaths /usr/local/lib
+```
+
+It goes into Copilot CLI's `settings.json` in the `workspace-copilot` volume, so it survives a rebuild. If `readonlyPaths` already lists other paths, add `/usr/local/lib` to that list in the file instead. The folder stays read-only in the sandbox, and the other repos and the sign-ins stay hidden.
+
 What each part does, and what it costs:
 
 - The `sandbox` option installs bubblewrap, slirp4netns, iproute2 and iptables with the image's package manager (`apt-get`, `apk` or `dnf`). With another one, install them in your image yourself. It also makes `~/.trackwall`, `~/.copilot`, `~/.config/mise` and `/workspaces` yours in the image, so new volumes there are yours too and need no `sudo chown`. A volume of your own elsewhere, such as one for your skills, needs its folder made yours in your image (`RUN mkdir -p ... && chown vscode:vscode ...`).
