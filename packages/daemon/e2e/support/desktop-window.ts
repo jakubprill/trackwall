@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { Browser, Page } from "playwright";
 import { z } from "zod";
 import { onCspViolation } from "./csp-violations.ts";
+import { withoutTips } from "./without-tips.ts";
 
 /**
  * The UI as the Tauri shell shows it, which the daemon's own page does not: the files under the window's origin with
@@ -46,6 +47,7 @@ export async function openDesktopWindow(
     const response = await route.fetch({ url: `${daemon.baseUrl}${pathname}${search}` });
     await route.fulfill({ response, headers: { ...response.headers(), "content-security-policy": csp } });
   });
+  await withoutTips(context);
   const page = await context.newPage();
   const problems: string[] = [];
   page.on("pageerror", (err) => problems.push(`uncaught: ${err.message}`));

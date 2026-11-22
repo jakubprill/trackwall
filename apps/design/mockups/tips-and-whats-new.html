@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tips and What's new</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Tips under the control they explain and the What's new strip after an update (ADR-296), in the app's own tokens, sample data only. */
+body { background: var(--background); color: var(--foreground); font-family: var(--font-sans); margin: 0; }
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 24px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 32px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 15px; margin: 0 0 8px; }
+p, li { line-height: 1.55; color: var(--muted-foreground); max-width: 72ch; font-size: 13px; }
+.frame { border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); overflow: hidden; font-size: 13px; }
+.hud { font-family: var(--font-mono); font-size: 11px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-foreground); }
+.hud em { font-style: normal; color: var(--primary); }
+.btn { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 10px; color: var(--foreground); background: transparent; font: inherit; font-size: 13px; white-space: nowrap; }
+.btn.ghost { border-color: transparent; }
+.btn.main { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+.muted { color: var(--muted-foreground); }
+.spacer { flex: 1; }
+/* What's new: the strip above the views, with a card per change. */
+.whats-new { background: color-mix(in oklch, var(--primary) 10%, transparent); border-bottom: 1px solid var(--border); padding: 8px 16px; display: flex; flex-direction: column; gap: 8px; }
+.whats-new .head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.changes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.change { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 8px 10px; display: flex; gap: 10px; align-items: flex-start; }
+.change div { flex: 1; min-width: 0; }
+.change b { display: block; font-weight: 500; }
+.change span { font-size: 12px; color: var(--muted-foreground); }
+.view { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+/* The New session form's worktree pill, and the tip right under it, in the page's flow. */
+.pills { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pill { border: 1px solid color-mix(in oklch, var(--primary) 50%, transparent); background: color-mix(in oklch, var(--primary) 12%, transparent); border-radius: 999px; padding: 3px 12px; }
+.pill::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); margin-right: 8px; vertical-align: middle; }
+.prompt { border: 1px solid var(--input); border-radius: var(--radius); padding: 10px; min-height: 48px; color: var(--muted-foreground); }
+.tip { border: 1px solid color-mix(in oklch, var(--primary) 40%, transparent); background: color-mix(in oklch, var(--primary) 10%, transparent); border-radius: var(--radius); padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; max-width: 720px; }
+.tip .title { font-weight: 500; }
+.tip .actions { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding-top: 4px; }
+/* Settings › App: the folded row, opened. */
+.row { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; max-width: 720px; }
+.row .line { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.row .value { margin-left: auto; font-family: var(--font-mono); font-size: 12px; }
+.choice { display: flex; flex-direction: column; gap: 6px; }
+.choice label { display: flex; gap: 8px; align-items: baseline; }
+.choice input { accent-color: var(--primary); }
+.state { font-family: var(--font-mono); font-size: 11px; border-radius: 999px; padding: 0 8px; border: 1px solid var(--border); }
+.state.built { color: var(--success); border-color: color-mix(in oklch, var(--success) 40%, transparent); }
+.state.later { color: var(--muted-foreground); }
+</style>
+<main class="wrap">
+  <header>
+    <h1>Tips and What's new</h1>
+    <p>Trackwall teaches its features in place. A tip shows under a control the first time it is on screen, one at a time in a window, and goes for good with "Got it". After an update, a strip above the views lists the changes worth a look, each with "Show", which opens the place it lives in and shows its tip there.</p>
+  </header>
+
+  <section aria-labelledby="after-update">
+    <h2 id="after-update">After an update: "Show" on "Tips" opened the New session form <span class="state built">built · ADR-296</span></h2>
+    <div class="frame">
+      <div class="whats-new" role="region" aria-label="What's new">
+        <div class="head">
+          <span><b>What's new.</b> <span class="muted">3 changes worth a look, each shown where it lives.</span></span>
+          <span class="spacer"></span>
+          <button class="btn ghost" type="button">Release notes ↗</button>
+          <button class="btn ghost" type="button">Hide</button>
+          <button class="btn ghost" type="button">Dismiss</button>
+        </div>
+        <ul class="changes">
+          <li class="change"><div><b>Tips</b><span>A tip explains a feature where you meet it for the first time, such as Own worktree in the New session form.</span></div><button class="btn" type="button">Show</button></li>
+          <li class="change"><div><b>New on the server</b><span>Every 15 minutes Trackwall asks each repo's server whether its branch moved, without a fetch, and All repos says so.</span></div><button class="btn" type="button">Show</button></li>
+          <li class="change"><div><b>Close all in Sessions</b><span>The tasks whose agent says its work is over are counted at the top of the Sessions list, with Close all.</span></div><button class="btn" type="button">Show</button></li>
+        </ul>
+      </div>
+      <div class="view">
+        <span class="hud">New task or session for the agent</span>
+        <div class="prompt">What the agent should do, e.g. "Add email validation to the sign-up form, with a test"</div>
+        <div class="pills"><span class="pill">Own worktree</span><span class="muted">› More options</span></div>
+        <div class="tip" role="region" aria-label="Tip: Own worktree">
+          <span class="hud">Tip <em>// Own worktree</em></span>
+          <span class="title">On, the prompt becomes a task on a branch of its own</span>
+          <span class="muted">Trackwall makes the branch from the repo's default branch in a worktree of its own, with a port of its own and the local config files .worktreeinclude lists, and starts the agent there, so your working copy stays as it is. Changes, Verify and a merge request are there only for a task. Off, the agent works in the repo's own folder.</span>
+          <div class="actions"><button class="btn ghost" type="button">Agent tasks</button><span class="spacer"></span><button class="btn ghost" type="button">Turn off tips</button><button class="btn main" type="button">Got it</button></div>
+        </div>
+        <div><button class="btn main" type="button">Create task</button> <button class="btn ghost" type="button">Cancel</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="settings">
+    <h2 id="settings">Settings › App, under "Help" <span class="state built">built · ADR-296</span></h2>
+    <div class="row">
+      <div class="line"><b>Tips and What's new</b><span class="muted">Explain a feature where it shows, and list what changed after an update.</span><span class="value">on</span></div>
+      <div class="choice" role="radiogroup" aria-label="On this computer">
+        <span class="hud">On this computer</span>
+        <label><input type="radio" name="tips" checked> On <span class="muted">A tip under a feature the first time you meet it, and What's new above the views after an update.</span></label>
+        <label><input type="radio" name="tips"> Off <span class="muted">Neither. The release notes still list every change.</span></label>
+      </div>
+      <div class="line"><span class="muted">2 of 4 tips seen on this computer.</span><button class="btn" type="button">Show the tips again</button></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="variants">
+    <h2 id="variants">Variants</h2>
+    <ul>
+      <li><strong>A, tips</strong> under "Own worktree", "Next waiting", the evidence card and "Ready to close", in the page's flow rather than floating over it: built.</li>
+      <li><strong>B, What's new</strong> with "Show" for each change, none on a new install: built.</li>
+      <li><strong>C, suggestions from how you work</strong>, such as "Always allow" after the third same approval in a repo's tasks: <span class="state later">later</span></li>
+      <li><strong>D, "Learn Trackwall"</strong>, short lessons on a practice shop in a window of its own: <span class="state later">later</span></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

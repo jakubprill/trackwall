@@ -39,6 +39,9 @@ describe("text in the UI", () => {
     await page.getByRole("button", { name: "New task or Copilot CLI session" }).click();
     await page.getByRole("button", { name: "Own worktree", pressed: true }).click();
     await page.getByRole("button", { name: "Start session" }).click();
+    // The supervisor's terminal shows the fake's welcome too: the form going away says that the session started and
+    // opened, which would otherwise take the window back to Sessions in the middle of the walk below.
+    await page.getByRole("button", { name: "Start session" }).waitFor({ state: "detached" });
     await waitForTerminal(page, "Welcome to the fake");
     await page.getByRole("button", { name: /The supervisor is waiting for you/ }).waitFor();
     // Home has no icon until the user shows it (ADR-294): shown, it is one of the views below too.

@@ -197,7 +197,28 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await page.getByText("workspace.yaml", { exact: true }).waitFor();
     await settle(page);
   },
+  tips: async (page) => {
+    // The demo has a projects folder, so it lists What's new as after an update; "Show" of its first change opens the
+    // New session form with the tip of Own worktree.
+    await page.getByRole("region", { name: "What's new" }).getByRole("button", { name: "Show Tips" }).click();
+    await page.getByRole("region", { name: "Tip: Own worktree" }).waitFor();
+    await settle(page);
+  },
 };
+
+/** The pictures that show tips and What's new; every other page starts with them off, so they do not cover the view. */
+const WITH_TIPS = new Set(["tips"]);
+
+/** Turns tips and What's new off in a page, as "Turn off tips" does, before the page loads. */
+async function withoutTips(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      window.localStorage.setItem("trackwall.tips", "off");
+    } catch {
+      // A frame without storage of its own shows no tips either.
+    }
+  });
+}
 
 /**
  * The tray panel at the size of its window (`tauri.conf.json`), with the approvals of the demo's sessions. The page is
@@ -244,6 +265,7 @@ try {
     const only = process.argv.slice(2);
     for (const [name, show] of Object.entries(SHOTS).filter(([name]) => only.length === 0 || only.includes(name))) {
       const page = await browser.newPage({ viewport: VIEWPORT, colorScheme: "dark" });
+      if (!WITH_TIPS.has(name)) await withoutTips(page);
       await page.goto(url);
       // The page opens on Sessions, with the supervisor's panel folded to its strip, so the view gets the width.
       await settle(page, 2500);

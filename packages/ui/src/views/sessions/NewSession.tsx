@@ -186,6 +186,7 @@ export function NewSession({
             onOpen={setStackTraceOpen}
           />
           <FoldedStartOptions
+            conn={conn}
             worktree={
               repo === null || !form.sessions ? undefined : { value: choice.worktree, onChange: (worktree) => choose({ worktree }) }
             }

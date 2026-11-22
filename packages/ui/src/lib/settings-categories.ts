@@ -65,6 +65,7 @@ export const SETTINGS_CATEGORIES = [
       "vscode-extension",
       "theme",
       "home",
+      "tips",
     ],
     wide: false,
     group: "settings",
