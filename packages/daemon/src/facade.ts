@@ -32,7 +32,7 @@ import { runProgram } from "./infra/run-program.ts";
 import { STATE_BACKUPS_DIR, type StateFiles } from "./infra/state-backup.ts";
 import { extractTarGz } from "./infra/tar.ts";
 import { ensureTrackwallDir } from "./infra/trackwall-dir.ts";
-import { userShell } from "./infra/user-shell.ts";
+import { shellStart, userShell } from "./infra/user-shell.ts";
 import { AGENT_QUEUES_FORMAT } from "./modules/agents/agent-queues.ts";
 import {
   AGENT_QUEUES_FILE,
@@ -699,7 +699,7 @@ export function createFacade(o: FacadeOptions): Facade {
     procs,
     folder: placeFolder,
     env: o.userEnv,
-    shell: (env) => userShell(env),
+    shell: (env, firstLine) => shellStart(userShell(env), firstLine),
     places: new ShellPlaces(join(o.home, SHELL_PLACES_FILE), o.log),
     log: o.log,
   });
