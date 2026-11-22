@@ -1,5 +1,5 @@
 import type { ServerCheckState } from "@trackwall/protocol";
-import { messageOf } from "../../infra/errors.ts";
+import { failureLog } from "../../infra/failure-log.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
 import type { RepoEntry } from "./projects-dir.ts";
 
@@ -41,16 +41,17 @@ export class ServerCheck {
   #timer: NodeJS.Timeout | undefined;
   /** A slow or absent server must not stack rounds: the next one starts only after the previous one ended. */
   #running: Promise<void> | undefined;
-  /** The last error of a round, so that a missing projects folder does not write to the log every minute. */
-  #failure: string | undefined;
+  /** A missing projects folder fails every round: the log gets its message once, not every minute. */
+  readonly #report: (job: Promise<unknown>) => void;
 
   constructor(deps: ServerCheckDeps) {
     this.#deps = deps;
+    this.#report = failureLog("server check", deps.log);
   }
 
   start(tickMs = TICK_MS): void {
     if (this.#timer) return;
-    this.#timer = setInterval(() => this.#tick(), tickMs);
+    this.#timer = setInterval(() => this.#report(this.checkIfDue()), tickMs);
     this.#timer.unref();
   }
 
@@ -80,20 +81,6 @@ export class ServerCheck {
       this.#running = undefined;
     });
     return this.#running;
-  }
-
-  /** From a timer an exception would be an unhandled rejection, which ends the process under Node. */
-  #tick(): void {
-    this.checkIfDue().then(
-      () => {
-        this.#failure = undefined;
-      },
-      (err: unknown) => {
-        const message = messageOf(err);
-        if (this.#failure !== message) this.#deps.log(`server check: ${message}`);
-        this.#failure = message;
-      },
-    );
   }
 
   /** A repo list that cannot be read throws before any server is asked, and the previous round stays. */
