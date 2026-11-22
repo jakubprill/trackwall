@@ -9,7 +9,7 @@ Run Trackwall next to your repos in a Linux dev container and use it from the br
 
 Where security software checks every program that starts and every file it opens, git and builds can be slow on Windows. Inside a Linux container whose files live in a Docker volume, the same work is much faster. Trackwall can run there too: everything that touches your repos (git, mise tasks, services, Copilot CLI sessions and the MCP server) runs in the container, and you use Trackwall from the browser or the desktop app on your computer through a forwarded port.
 
-This page uses VS Code's Dev Containers extension. Any container works the same way as long as port forwarding keeps the port number.
+This page uses VS Code's Dev Containers extension. Another container works too, but Trackwall listens only on 127.0.0.1 inside it, so Docker's published ports (`docker run -p`, Docker Compose's `ports:`) reach it only through the Feature's relay: see [Publish the ports instead of forwarding them](#publish-the-ports-instead-of-forwarding-them). Either way the port on your computer must be the same as in the container.
 
 ## What you need
 
@@ -65,10 +65,12 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
 
 Rebuild the container ("Dev Containers: Rebuild Container" in VS Code). From then on Trackwall starts with the container, on port 7700, and starts again by itself if it crashes. From 0.5.17 it starts also when the container starts without VS Code, for example after `docker restart` or from Docker or Rancher Desktop; with 0.5.16 and older, run `trackwall-container start` in the container then. Trackwall then starts before VS Code connects, so keep its settings, such as `TRACKWALL_HOME` and a proxy, in `containerEnv`, not `remoteEnv`. A Docker Compose dev container started with `docker compose up` instead of VS Code does not start Trackwall by itself. Then, in a terminal of the container:
 
-1. Install [mise](https://mise.jdx.dev/getting-started.html) as its guide describes, then Copilot CLI with it: `mise use -g node@22 npm:@github/copilot`. Trackwall finds tools installed with mise without further setup.
+1. Install [mise](https://mise.jdx.dev/getting-started.html) as its guide describes, then Copilot CLI with it, at the version Trackwall is tested with: `mise use -g node@22 npm:@github/copilot@1.0.114`. Trackwall finds tools installed with mise without further setup.
 2. Point Trackwall at the repos: in Settings › Workspace choose `/workspaces`, or run `echo "projectsDir: /workspaces" > ~/.trackwall/workspace.yaml` before the first start.
 3. Print the address: `trackwall-container address`, and open it in the browser on your computer within a minute. The address carries a one-time code instead of Trackwall's token, so the copy your browser's history keeps opens nothing later; print a new one for another browser or after the minute.
 4. Sign in to Copilot CLI once: run `copilot login --device-code`, open the address it prints in the browser on your computer and enter the code it shows. Without `--device-code` the browser tries to send you back to an address inside the container, which it cannot reach. The sign-in stays in the `workspace-copilot` volume.
+
+Copilot CLI's version is pinned because the container gets whatever version its mise config or image names, and a version other than the tested one makes the doctor warn. When you update Trackwall (the Feature's `<version>`), the doctor's "Copilot CLI" line names the version the new Trackwall is tested with: run `mise use -g npm:@github/copilot@<that version>` in the container. The version stays in your mise config in the `workspace-mise` volume, so after a rebuild `mise install` in the container brings back the same one. An image of your own that installs Copilot CLI with `npm i -g @github/copilot@<version>` needs the new version there and a rebuild of the container; an update made inside the container is lost at the next rebuild.
 
 The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart, open or reload the page, and it asks for the address; print a new one as in step 3 and paste it there. Trackwall's output goes to `~/.trackwall/logs/daemon.log` in the container; look there when it does not answer. It stops when the container stops, or when you stop it from the app; with `shutdownAction` set as above, closing VS Code does not stop the container.
 
@@ -135,10 +137,9 @@ Trackwall listens only on 127.0.0.1 inside the container, which Docker cannot pu
 }
 ```
 
-Keep the rest of the example as it is, and rebuild the container.
+Keep the rest of the example as it is, and rebuild the container. In Docker Compose, the same ports go under the service's `ports:` as `"127.0.0.1:7700:7700"` and `"127.0.0.1:7701:7701"`.
 
 Other containers on the same Docker network can reach the relay too. Trackwall still asks every request for its token and checks where it comes from, as it does for programs on your computer, but [services](/features/services) opened through port 7701 need no token. To keep other containers out, give the container a network of its own, for example `"--network", "trackwall-net"` in `runArgs` after `docker network create trackwall-net`.
-
 
 - The port on your computer must be the same as the port in the container: the app and the browser find Trackwall by the port it listens on. With the Feature's `port` option set to 7800, publish `127.0.0.1:7800:7800` and `127.0.0.1:7801:7801`.
 - Write `127.0.0.1:` before each port. Without it Docker publishes the port to every network of your computer, and other computers can reach it.
