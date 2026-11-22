@@ -30,7 +30,7 @@ import {
 import { hyperlinkHandler, trackwallLinkProvider, webLinkHandler } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { opensSearch } from "@/lib/terminal-search";
-import { cssTokens, terminalTheme, watchWindowEffect } from "@/lib/terminal-theme";
+import { cssTokens, ignoreProgramColours, terminalTheme, watchWindowEffect } from "@/lib/terminal-theme";
 import { DARK_ISLAND } from "@/lib/theme";
 import { browserTimers } from "@/lib/timers";
 import { useOpenTrackwallLink } from "@/lib/trackwall-link";
@@ -172,6 +172,7 @@ export function PtyTerminal({
       else setNotice(COPY_REFUSED);
       return true;
     });
+    const stopIgnoringColours = ignoreProgramColours(terminal);
     fit.fit();
     const kept = lastScreens.shown(screenKey, terminal.cols);
     if (kept !== undefined) terminal.write(kept);
@@ -300,6 +301,7 @@ export function PtyTerminal({
       element.removeEventListener("mousemove", holdMove, { capture: true });
       element.removeEventListener("pointerdown", noteClick, { capture: true });
       copyHandler.dispose();
+      stopIgnoringColours();
       window.removeEventListener("focus", onWindowFocus);
       window.removeEventListener("blur", sendFocus);
       document.removeEventListener("visibilitychange", sendFocus);

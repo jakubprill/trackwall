@@ -51,6 +51,12 @@ export const CopilotReference = z.object({
 });
 export type CopilotReference = z.infer<typeof CopilotReference>;
 
+/**
+ * The default background (OSC 11) and text colour (OSC 10) Copilot CLI sets as it starts, GitHub's dark ones, once the
+ * terminal has answered its colour queries (`copilot-prompt-frame.contract.ts`); the session terminal ignores them (ADR-16).
+ */
+export const COPILOT_DEFAULT_COLOURS = "\u001b]11;#0D1117\u0007\u001b]10;#F0F6FC\u0007";
+
 export const PROMPT_PLACEHOLDER = "{prompt}";
 
 /** The prompt after which the fake Copilot CLI's agent calls two commands at once, each asking for approval (ADR-66). */

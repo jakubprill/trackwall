@@ -1,4 +1,4 @@
-import type { ITheme } from "@xterm/xterm";
+import type { ITheme, Terminal } from "@xterm/xterm";
 
 /** xterm.js parses theme colours itself, so a colour value rather than the CSS keyword `transparent`. */
 const TRANSPARENT = "rgba(0, 0, 0, 0)";
@@ -42,6 +42,32 @@ export function terminalTheme(token: (name: string) => string): ITheme {
     cursorAccent: token("--background"),
     selectionBackground: token("--accent"),
   };
+}
+
+/** The OSC numbers with which a program sets the terminal's default text (10), background (11) and cursor (12) colour. */
+const DEFAULT_COLOUR_OSC = [10, 11, 12] as const;
+
+/**
+ * Makes `terminal` ignore a program's own default colours and keep the theme's. Copilot CLI sets GitHub's dark text and
+ * background as it starts, and xterm.js painted an opaque box over the surface the transparent theme shows, only until
+ * the terminal opened anew: the daemon's screen image carries no default colours, so a session looked different after
+ * a change of layout than right after its start. Questions about the colours still reach xterm.js, which answers them.
+ * Returns the unsubscribe.
+ */
+export function ignoreProgramColours(terminal: Pick<Terminal, "parser">): () => void {
+  const handlers = DEFAULT_COLOUR_OSC.map((osc) => terminal.parser.registerOscHandler(osc, setsDefaultColour));
+  return () => {
+    for (const handler of handlers) handler.dispose();
+  };
+}
+
+/**
+ * Whether OSC 10–12 `data` sets a colour (`true` ends the sequence there) rather than only asking for one with `?`
+ * (`false` leaves it to xterm.js). A program may chain several (`OSC 10;?;?` asks for the text and the background); a
+ * chain that sets any of them is ignored as a whole.
+ */
+export function setsDefaultColour(data: string): boolean {
+  return data.split(";").some((part) => part !== "?");
 }
 
 /** The attribute the desktop shell sets on `<html>` once the window has its background effect (ADR-11). */
