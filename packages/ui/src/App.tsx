@@ -16,6 +16,7 @@ import { PageTokenForm } from "@/components/PageTokenForm";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
+import { WhatsNew } from "@/components/WhatsNew";
 import { inDesktopShell, reportShown, START_PARAMS, startFromLocation } from "@/lib/app-window";
 import type { PaletteAction } from "@/lib/command-palette";
 import { containerAttentionCount } from "@/lib/container-health";
@@ -282,6 +283,7 @@ export function App() {
                 <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />
                 <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: dismissWindowError }} />
                 <ErrorBanner message={sessionLink.notice} action={{ label: "Dismiss", onClick: sessionLink.dismiss }} />
+                <WhatsNew conn={conn} workspace={workspace} onShow={runCommand} />
                 {conn && dropped && (
                   <FolderDrop
                     key={dropped.seq}

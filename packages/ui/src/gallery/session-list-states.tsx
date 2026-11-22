@@ -24,6 +24,7 @@ import {
   usage,
   waiting,
 } from "./sample-data.ts";
+import { NewComputerTips } from "./tips-states.tsx";
 
 /**
  * The Sessions list for `list` as the view shows it, with `selected` picked, the tasks' outcomes, and what the last
@@ -227,6 +228,16 @@ const manyWait: GalleryState = {
   ),
 };
 
+/** The jump to the next waiting entry with its tip, as a new computer shows it the first time (ADR-296). */
+const nextWaitingTip: GalleryState = {
+  name: "Next waiting with its tip",
+  render: () => (
+    <NewComputerTips>
+      <SessionListOf list={sessionList({ sessions: [waiting(700, 3, { repo: "orders-api" }), session(701)] })} />
+    </NewComputerTips>
+  ),
+};
+
 /** Tasks whose agent said its work is over (ADR-282), counted above the list, and the one the last "Close all" left open. */
 const readyToClose: GalleryState = {
   name: "Tasks ready to close, one of them left open by the last Close all",
@@ -259,6 +270,7 @@ export const SESSION_LIST_STATES: readonly GalleryState[] = [
   groupsAndLevels,
   supervisorWaits,
   manyWait,
+  nextWaitingTip,
   readyToClose,
   empty,
   failed,

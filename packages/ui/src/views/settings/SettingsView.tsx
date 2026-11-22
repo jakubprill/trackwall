@@ -16,6 +16,7 @@ import { useOpenSteps } from "@/lib/get-started-memory";
 import { SETTING_ROWS, type SettingRowId, type SettingSources, settingRowOpen, settingsParts, settingValue } from "@/lib/setting-rows";
 import { type SettingsCategory, type SettingsSection, settingsCategory } from "@/lib/settings-categories";
 import { useTheme } from "@/lib/theme-controller";
+import { useTips } from "@/lib/tips-controller";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { useDoctorReport } from "@/lib/use-doctor-report";
 import type { HomeOnBarChoice } from "@/lib/use-home-on-bar";
@@ -53,6 +54,7 @@ import { SupervisorChangesCodeSurface } from "./SupervisorChangesCodeSurface.tsx
 import { SupervisorModelSurface } from "./SupervisorModelSurface.tsx";
 import { TaskTokenBudgetSurface } from "./TaskTokenBudgetSurface.tsx";
 import { ThemeSurface } from "./ThemeSurface.tsx";
+import { TipsSurface } from "./TipsSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
 import { VsCodeExtensionSurface } from "./VsCodeExtensionSurface.tsx";
 import { WorkBackupSurface } from "./WorkBackupSurface.tsx";
@@ -100,6 +102,7 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
     settingsFailed: settings.error !== undefined,
     theme: useTheme().choice,
     homeOnBar: props.homeOnBar.value,
+    tipsOn: useTips().state.on,
   };
   return (
     <div className="@container w-full max-w-6xl">
@@ -229,6 +232,8 @@ function Section({
       return <ThemeSurface />;
     case "home":
       return <HomeSurface onBar={homeOnBar} />;
+    case "tips":
+      return <TipsSurface />;
     case "daemon":
       return <DaemonSurface conn={conn} warmupLive={warmupLive} onRetry={onRetry} />;
     case "config-files":

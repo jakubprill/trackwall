@@ -7,6 +7,7 @@ import { ONE_REPO, type SessionApiOptions, startSessionApi } from "../../test/su
 import { onCspViolation } from "./csp-violations.ts";
 import { openDesktopWindow } from "./desktop-window.ts";
 import { UI_DIR } from "./ui-dir.ts";
+import { withoutTips } from "./without-tips.ts";
 
 const VIEWPORT = { width: 1600, height: 1000 };
 /** A small screen: 1920×1080 at 150 % scaling, the window maximised, without the taskbar and the window's title bar. */
@@ -57,12 +58,17 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
      */
     openWithoutToken: async () => {
       const context = await browser.newContext({ viewport: VIEWPORT, colorScheme: "dark" });
+      await withoutTips(context);
       const page = await watched(context.newPage());
       await page.goto(origin);
       return page;
     },
-    /** The main window as the Tauri shell opens it, on Sessions (ADR-288). */
-    open: async (viewport = VIEWPORT) => openMainWindow(await watched(browser.newPage({ viewport, colorScheme: "dark" })), pageAddress()),
+    /** The main window as the Tauri shell opens it, on Sessions (ADR-288); with tips and What's new only when the test asks. */
+    open: async (viewport = VIEWPORT, { tips = false } = {}) => {
+      const page = await watched(browser.newPage({ viewport, colorScheme: "dark" }));
+      if (!tips) await withoutTips(page.context());
+      return openMainWindow(page, pageAddress());
+    },
     /** The main window as the Tauri shell shows it: under the window's origin and CSP, connected through the shell. */
     openDesktopWindow: (failingFiles?: RegExp) => openDesktopWindow(browser, { baseUrl: origin, token }, VIEWPORT, failingFiles),
     /** The tray panel (ADR-50): the same UI under `#tray-panel`, at the size of its window. */
