@@ -130,8 +130,8 @@ type Settled<T> = { ok: true; value: T } | { ok: false; message: string };
 /** What the Copilot CLI of sessions said about its version: not found, failed to answer, or answered. */
 type CopilotVersionRead =
   | { kind: "missing"; message: string }
-  | { kind: "failed"; message: string }
-  | { kind: "answered"; version: string | null; program: string };
+  | { kind: "failed"; message: string; source: CopilotCliSource }
+  | { kind: "answered"; version: string | null; program: string; source: CopilotCliSource };
 
 interface CheckContext {
   env: NodeJS.ProcessEnv;
@@ -352,7 +352,7 @@ export class Doctor {
     if (read.kind === "missing")
       return fail(`${read.message}.`, "Install GitHub Copilot CLI, sign in by running `copilot` once, and restart Trackwall.");
     if (read.kind === "failed") return fail(`Copilot CLI: ${read.message}`, "Run `copilot --version` in a terminal to see what is wrong.");
-    const outcome = copilotVersionOutcome(read.version, copilotCliSource(read.program, this.deps.inContainer));
+    const outcome = copilotVersionOutcome(read.version, read.source);
     // The program is named only when it is not the tested one: a fix in a container has to reach the copy that runs.
     return outcome.status === "ok" ? outcome : { ...outcome, summary: `${outcome.summary} It runs from ${read.program}.` };
   }
@@ -366,7 +366,8 @@ export class Doctor {
     const tested = TESTED_COPILOT_CLI_VERSION;
     const version = read.kind === "answered" ? read.version : null;
     const relation = copilotVersionRelation(version);
-    const source = copilotCliSource(read.kind === "answered" ? read.program : null, this.deps.inContainer);
+    // Without a program there is no version and no strip; a container then has only its image to install it in.
+    const source = read.kind !== "missing" ? read.source : this.deps.inContainer ? "container-image" : "computer";
     return version === null || relation === "unknown"
       ? { relation: "unknown", version: null, tested, source }
       : { relation, version, tested, source };
@@ -377,8 +378,9 @@ export class Doctor {
     const copilot = this.deps.resolveCopilot(env);
     if ("missing" in copilot) return { kind: "missing", message: copilot.message };
     const output = await settle(this.version([copilot.program, ...copilot.args], env));
-    if (!output.ok) return { kind: "failed", message: output.message };
-    return { kind: "answered", version: versionIn(output.value), program: copilot.program };
+    const source = copilotCliSource(copilot.program, this.deps.inContainer, env, this.deps.homeDir);
+    if (!output.ok) return { kind: "failed", message: output.message, source };
+    return { kind: "answered", version: versionIn(output.value), program: copilot.program, source };
   }
 
   private async copilotTrustedFolder({ env, projectsDir }: CheckContext): Promise<Outcome> {
@@ -478,12 +480,14 @@ export class Doctor {
 }
 
 /**
- * Where the Copilot CLI at `program` comes from: in a container, a path in mise's folders (its shims or installs) is
- * mise's copy, anything else the image's (#549: `npm i -g` puts it in `/usr/local/bin`, which wins over mise).
+ * Where the Copilot CLI at `program` comes from: in a container, a program under mise's data folder (its shims or
+ * installs; `MISE_DATA_DIR`, else `$XDG_DATA_HOME/mise`, else `~/.local/share/mise`, as mise and the Feature's wrapper
+ * find it) is mise's copy, anything else the image's (#549: `npm i -g` in an image puts it in `/usr/local/bin`).
  */
-export function copilotCliSource(program: string | null, inContainer: boolean): CopilotCliSource {
+export function copilotCliSource(program: string, inContainer: boolean, env: NodeJS.ProcessEnv, homeDir: string): CopilotCliSource {
   if (!inContainer) return "computer";
-  return program !== null && /[\\/]mise[\\/]/.test(program) ? "container-mise" : "container-image";
+  const miseData = env.MISE_DATA_DIR || join(env.XDG_DATA_HOME || join(homeDir, ".local", "share"), "mise");
+  return isInside(miseData, program) ? "container-mise" : "container-image";
 }
 
 /** Where a Copilot CLI version stands against the tested one (ADR-274); `unknown` without a version. */

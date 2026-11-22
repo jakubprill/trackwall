@@ -587,11 +587,17 @@ describe("program versions", () => {
     expect(check?.fix).toContain(`npm i -g @github/copilot@${TESTED_COPILOT_CLI_VERSION}`);
   });
 
-  test("in a container, a Copilot CLI in mise's folders is mise's copy, and any other, such as npm's in /usr/local/bin, the image's", () => {
-    expect(copilotCliSource("/home/vscode/.local/share/mise/installs/npm-github-copilot/1.0.114/bin/copilot", true)).toBe("container-mise");
-    expect(copilotCliSource("/home/vscode/.local/share/mise/shims/copilot", true)).toBe("container-mise");
-    expect(copilotCliSource("/usr/local/bin/copilot", true)).toBe("container-image");
-    expect(copilotCliSource("/usr/local/bin/copilot", false)).toBe("computer");
+  test("in a container, a Copilot CLI under mise's data folder, wherever MISE_DATA_DIR or XDG_DATA_HOME puts it, is mise's copy, and any other, such as npm's in /usr/local/bin, the image's", () => {
+    const home = "/home/vscode";
+    expect(copilotCliSource("/home/vscode/.local/share/mise/installs/npm-github-copilot/1.0.114/bin/copilot", true, {}, home)).toBe(
+      "container-mise",
+    );
+    expect(copilotCliSource("/home/vscode/.local/share/mise/shims/copilot", true, {}, home)).toBe("container-mise");
+    expect(copilotCliSource("/opt/tools/shims/copilot", true, { MISE_DATA_DIR: "/opt/tools" }, home)).toBe("container-mise");
+    expect(copilotCliSource("/data/mise/shims/copilot", true, { XDG_DATA_HOME: "/data" }, home)).toBe("container-mise");
+    expect(copilotCliSource("/srv/mise/bin/copilot", true, {}, home)).toBe("container-image");
+    expect(copilotCliSource("/usr/local/bin/copilot", true, {}, home)).toBe("container-image");
+    expect(copilotCliSource("/usr/local/bin/copilot", false, {}, home)).toBe("computer");
   });
 
   test("the version alone says where the Copilot CLI of sessions stands against the tested one", async () => {
