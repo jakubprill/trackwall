@@ -14,13 +14,13 @@ const ids = (entries: ReturnType<typeof whatsNewEntries>) => entries?.map((entry
 describe("What's new (ADR-296)", () => {
   test("after an update, a computer that never dismissed it lists every entry, newest first", () => {
     expect(ids(whatsNewEntries(null, false))).toEqual(WHATS_NEW.map((entry) => entry.id));
-    expect(ids(whatsNewEntries(null, false))?.[0]).toBe("tips");
+    expect(ids(whatsNewEntries(null, false))?.[0]).toBe("sync-main-in-new-task");
   });
 
   test("a computer that dismissed What's new lists only the entries a later update added", () => {
-    const dismissedBefore = new Set(WHATS_NEW.filter((entry) => entry.id !== "tips").map((entry) => entry.id));
+    const dismissedBefore = new Set(WHATS_NEW.filter((entry) => entry.id !== "sync-main-in-new-task").map((entry) => entry.id));
 
-    expect(ids(whatsNewEntries(dismissedBefore, false))).toEqual(["tips"]);
+    expect(ids(whatsNewEntries(dismissedBefore, false))).toEqual(["sync-main-in-new-task"]);
     expect(ids(whatsNewEntries(new Set(WHATS_NEW.map((entry) => entry.id)), false))).toEqual([]);
   });
 

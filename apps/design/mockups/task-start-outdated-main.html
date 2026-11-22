@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Task form: a main behind the server</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: the form in four states (the app's New task form, cut to its lower part) and a column of notes. */
+:root {
+  --line-strong: oklch(0.85 0.04 220 / 26%);
+  --r: 6px;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--background);
+  background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 28px; }
+@media (max-width: 900px) { .page { grid-template-columns: minmax(0, 1fr); } }
+h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; text-wrap: balance; }
+.lede { color: var(--muted-foreground); margin: 0 0 20px; max-width: 65ch; }
+.label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); }
+.states { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 720px) { .states { grid-template-columns: minmax(0, 1fr); } }
+.state { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.state h2 { margin: 0; font-size: 13px; font-weight: 600; }
+.state h2 span { color: var(--muted-foreground); font-weight: 400; }
+.panel { background: color-mix(in oklch, var(--overlay) 55%, transparent); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.select { font-family: var(--font-mono); font-size: 13px; height: 32px; display: inline-flex; align-items: center; gap: 8px; padding: 0 10px; width: fit-content; border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--overlay); }
+.select::after { content: "▾"; color: var(--muted-foreground); }
+.prompt { border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--overlay); padding: 8px 10px; min-height: 64px; font-size: 13px; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px; border-radius: 99px; font-size: 12.5px; color: var(--foreground); background: color-mix(in oklch, var(--accent) 60%, transparent); border: 1px solid color-mix(in oklch, var(--primary) 45%, transparent); }
+.pill.more { color: var(--muted-foreground); background: transparent; border: 1px dashed var(--line-strong); }
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 6px var(--primary); }
+.base { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 12.5px; padding: 8px 10px; border-radius: var(--r); border: 1px solid; }
+.base p { margin: 0; flex: 1 1 260px; min-width: 0; }
+.base.warn { color: var(--warning); border-color: color-mix(in oklch, var(--warning) 35%, transparent); background: color-mix(in oklch, var(--warning) 6%, transparent); }
+.base.ok { color: var(--success); border-color: color-mix(in oklch, var(--success) 35%, transparent); background: color-mix(in oklch, var(--success) 6%, transparent); }
+.base.info { color: var(--muted-foreground); border-color: var(--border); }
+.base code { font-family: var(--font-mono); font-size: 12px; color: var(--foreground); }
+.small-btn { font: inherit; font-size: 12.5px; height: 28px; padding: 0 10px; border-radius: var(--r); border: 1px solid var(--line-strong); background: var(--overlay); color: var(--foreground); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.btn { font: inherit; font-weight: 600; font-size: 13px; height: 32px; padding: 0 14px; border-radius: var(--r); border: 0; background: var(--primary); color: var(--primary-foreground); display: inline-flex; align-items: center; gap: 6px; }
+.btn.ghost { background: none; color: var(--muted-foreground); font-weight: 400; }
+aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.note { border-top: 1px solid var(--border); padding-top: 12px; }
+.note h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+.note p, .note li { margin: 0; color: var(--muted-foreground); font-size: 13px; }
+.note ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+</style>
+
+<div class="page">
+  <div>
+    <div class="label">Mockup · built · ADR-297 · 2026-11-22</div>
+    <h1>The New task form says when main is behind the server</h1>
+    <p class="lede">A task starts from the repo's own <code>main</code>. When that is behind the server, a line above "Create task" says so and offers to sync <code>main</code> first, in one click; it never stops the start.</p>
+
+    <div class="states">
+      <section class="state" aria-labelledby="s1">
+        <h2 id="s1">1 · Behind, as of the last fetch <span>(main is checked out or not)</span></h2>
+        <div class="panel">
+          <div class="label">New task or session</div>
+          <div class="select">catalog</div>
+          <div class="prompt">Add a size filter to the product search, with a test</div>
+          <div class="pills"><span class="pill"><span class="dot"></span>Own worktree</span><span class="pill more">More options</span></div>
+          <div class="base warn" role="status">
+            <p><code>main</code> is 15 commits behind <code>origin/main</code> (fetched 2 h ago). The task starts from <code>main</code>, so its agent would work on the older code.</p>
+            <span class="small-btn">↓ Sync main</span>
+          </div>
+          <div class="actions"><span class="btn">⎇ Create task</span><span class="btn ghost">Cancel</span></div>
+        </div>
+      </section>
+
+      <section class="state" aria-labelledby="s2">
+        <h2 id="s2">2 · New on the server <span>(the server check, not fetched yet)</span></h2>
+        <div class="panel">
+          <div class="label">New task or session</div>
+          <div class="select">catalog</div>
+          <div class="prompt">Add a size filter to the product search, with a test</div>
+          <div class="pills"><span class="pill"><span class="dot"></span>Own worktree</span><span class="pill more">More options</span></div>
+          <div class="base warn" role="status">
+            <p>The server has new commits on <code>main</code> that catalog has not fetched (checked 4 min ago). The task would start without them.</p>
+            <span class="small-btn">↓ Sync main</span>
+          </div>
+          <div class="actions"><span class="btn">⎇ Create task</span><span class="btn ghost">Cancel</span></div>
+        </div>
+      </section>
+
+      <section class="state" aria-labelledby="s3">
+        <h2 id="s3">3 · After "Sync main"</h2>
+        <div class="panel">
+          <div class="label">New task or session</div>
+          <div class="select">catalog</div>
+          <div class="prompt">Add a size filter to the product search, with a test</div>
+          <div class="pills"><span class="pill"><span class="dot"></span>Own worktree</span><span class="pill more">More options</span></div>
+          <div class="base ok" role="status">
+            <p>Synced: <code>main</code> moved 15 commits to <code>origin/main</code>. The task starts from the server's code.</p>
+          </div>
+          <div class="actions"><span class="btn">⎇ Create task</span><span class="btn ghost">Cancel</span></div>
+        </div>
+      </section>
+
+      <section class="state" aria-labelledby="s4">
+        <h2 id="s4">4 · Sync cannot move main</h2>
+        <div class="panel">
+          <div class="label">New task or session</div>
+          <div class="select">catalog</div>
+          <div class="prompt">Add a size filter to the product search, with a test</div>
+          <div class="pills"><span class="pill"><span class="dot"></span>Own worktree</span><span class="pill more">More options</span></div>
+          <div class="base info" role="status">
+            <p><code>main</code> and <code>origin/main</code> have diverged (2 local, 15 remote), so a sync leaves <code>main</code> as it is; merge them in the repo's Shell. The task starts from your <code>main</code>.</p>
+          </div>
+          <div class="actions"><span class="btn">⎇ Create task</span><span class="btn ghost">Cancel</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <aside>
+    <div class="note">
+      <h3>When the line shows</h3>
+      <ul>
+        <li>For a task, and for each repo of a change, since each starts from that repo's <code>main</code>. Not for a session, which works on the checked-out branch.</li>
+        <li>When <code>main</code> lacks commits of <code>origin/main</code> as of the last fetch (1), or when the server check found newer ones (2). Up to date: no line at all.</li>
+        <li>Also when another branch is checked out: the line is about <code>main</code>, where the task starts.</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3>What "Sync main" does</h3>
+      <p>What "Sync all" does, for this one repo: a fetch, then a fast-forward of <code>main</code> when nothing is in its way. It never touches the checked-out branch or uncommitted changes. When <code>main</code> cannot move (4), the line says why and names the repo's Shell tab, where to merge (the form has no link to a repo's tab yet).</p>
+    </div>
+    <div class="note">
+      <h3>Never in the way</h3>
+      <p>"Create task" stays enabled in every state: starting from the older code can be what the user wants, for example to reproduce a bug in the released version.</p>
+    </div>
+    <div class="note">
+      <h3>Rejected</h3>
+      <ul>
+        <li>A sync before every task by itself: a fetch on every start waits for the network and runs the repo's own git configuration without a click on Sync.</li>
+        <li>Starting the task from <code>origin/main</code> while <code>main</code> stays behind: the task's base would differ from the <code>main</code> the user sees and reviews against.</li>
+        <li>Holding the start until <code>main</code> is synced (above).</li>
+      </ul>
+    </div>
+  </aside>
+</div>
+</body>
+</html>

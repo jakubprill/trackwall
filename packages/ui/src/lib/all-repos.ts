@@ -1,5 +1,6 @@
 import { type Repo, type RepoStatusOk, type ServerCheckState, trackedChanges, type UnpushedWork } from "@trackwall/protocol";
 import { clockTime, relativeTime, workingTreeLabel } from "./format.ts";
+import { newOnServerAt } from "./new-on-server.ts";
 import { branchLabel, type StatusTone, serverLabel } from "./repo-status.ts";
 import { type UnpushedRow, unpushedRows } from "./unpushed-work.ts";
 import { type PullOffer, upstreamOffer } from "./upstream-pull.ts";
@@ -79,18 +80,15 @@ export function allReposRows(
 }
 
 /**
- * The repos whose server has commits they have not fetched, for the table and the repo list (ADR-295): the ones the
- * server check's last round found new commits in, each with the moment it read the repo (`checkedAt`), unless the repo
- * fetched after that moment, which brought what the server had then.
+ * The repos whose server has commits on the checked-out branch's upstream they have not fetched, for the table and the
+ * repo list (ADR-295), each with the moment the server check read the repo (`newOnServerAt`).
  */
 export function newOnServerSince(repos: readonly Repo[], serverCheck: ServerCheckState | undefined): ReadonlyMap<string, string> {
-  const found = new Map((serverCheck?.last?.newCommits ?? []).map((n) => [n.repo, n.checkedAt]));
   return new Map(
     repos.flatMap(({ id, status }): [string, string][] => {
-      const checkedAt = found.get(id);
-      if (checkedAt === undefined || status.kind !== "ok") return [];
-      const fetchedSince = status.fetchedAt !== null && Date.parse(status.fetchedAt) >= Date.parse(checkedAt);
-      return fetchedSince ? [] : [[id, checkedAt]];
+      if (status.kind !== "ok" || status.upstream === null) return [];
+      const checkedAt = newOnServerAt(serverCheck, id, status.upstream.name, status.fetchedAt);
+      return checkedAt === null ? [] : [[id, checkedAt]];
     }),
   );
 }

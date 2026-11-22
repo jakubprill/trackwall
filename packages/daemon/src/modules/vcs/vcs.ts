@@ -46,6 +46,7 @@ import { IndexPlaces } from "./index-place.ts";
 import { excludeLocally, ignoredPaths, trackedPaths } from "./local-files.ts";
 import { searchLog } from "./log-search.ts";
 import { newOnServer } from "./new-on-server.ts";
+import { newTaskBase } from "./new-task-base.ts";
 import {
   type CommitFile,
   type GitObject,
@@ -228,12 +229,15 @@ export class Vcs {
   }
 
   /**
-   * Whether the server moved the branch the checked-out branch tracks since the last fetch, asked outside the repo
-   * (ADR-295); `null` when there is nothing to ask, git's error when the server does not answer.
+   * The remote-tracking branches the server moved past since the last fetch, out of the one the checked-out branch tracks
+   * and the default branch, asked outside the repo (ADR-295, ADR-297); git's error when a server does not answer.
    */
-  newOnServer(dir: string): Promise<boolean | null> {
+  newOnServer(dir: string): Promise<string[]> {
     return newOnServer(dir, this.serverQuestionsDir);
   }
+
+  /** Where a new task of the repo starts, against the server as of the last fetch (ADR-297); `null` with nothing to compare. */
+  readonly newTaskBase = newTaskBase;
 
   private async readStatus(dir: string): Promise<TimedStatus> {
     const [{ stdout, ranMs }, fetchedAt] = await Promise.all([
