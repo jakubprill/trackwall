@@ -75,9 +75,10 @@ describe("Get started", () => {
       ["Copilot CLI", "needed", "todo"],
       ["Network for sessions", "needed", "done"],
       ["Copilot CLI trusts your projects folder", "recommended", "later"],
+      ["mise for builds and tests", "recommended", "todo"],
     ]);
     expect(plan.ready).toBe(false);
-    expect(plan.open).toBe(2);
+    expect(plan.open).toBe(3);
     expect(getStartedHeadline(plan)).toBe("2 steps left before your first session.");
   });
 
@@ -142,12 +143,39 @@ describe("Get started", () => {
     expect(plan.ready).toBe(true);
   });
 
-  test("mise, the sandbox and the repo host CLIs are good to have, never steps, and the folded row names the missing ones", () => {
+  test("mise is a recommended step: without it a session can start, and Get started says a step is left, as the repos' readiness does", () => {
+    const plan = getStartedPlan(
+      report(
+        ok("projects-folder", "/home/me/dev"),
+        ok("git", "git 2.47.1"),
+        ok("copilot-cli", "Copilot CLI 1.0.110"),
+        ok("network", "direct"),
+        ok("copilot-trusted-folder", "Copilot CLI trusts /home/me/dev."),
+        {
+          id: "mise",
+          status: "warn",
+          summary: "mise: program mise not found in PATH",
+          fix: "Install mise (mise.jdx.dev) and restart Trackwall; repo tasks, services and task verification need it.",
+        },
+      ),
+    );
+    expect(plan.steps.at(-1)).toEqual({
+      id: "mise",
+      title: "mise for builds and tests",
+      need: "recommended",
+      state: "todo",
+      summary: "mise: program mise not found in PATH",
+      fix: "Install mise (mise.jdx.dev) and restart Trackwall; repo tasks, services and task verification need it.",
+    });
+    expect(plan.ready).toBe(true);
+    expect(plan.open).toBe(1);
+    expect(getStartedHeadline(plan)).toBe("Ready. 1 recommended step is left.");
+    expect(plan.goodToHave).toEqual([]);
+  });
+
+  test("the sandbox and the repo host CLIs are good to have, never steps, and the folded row names the missing ones", () => {
     const plan = getStartedPlan(FOLDER_NOT_TRUSTED);
-    expect(plan.goodToHave.map((g) => [g.title, g.ok])).toEqual([
-      ["mise", true],
-      ["GitLab CLI (glab)", false],
-    ]);
+    expect(plan.goodToHave.map((g) => [g.title, g.ok])).toEqual([["GitLab CLI (glab)", false]]);
     expect(goodToHaveSummary(plan.goodToHave)).toBe("1 tool could add more: GitLab CLI (glab).");
     expect(goodToHaveSummary(plan.goodToHave.filter((g) => g.ok))).toBe("All there.");
   });
@@ -199,6 +227,7 @@ describe("Get started above the Sessions form", () => {
       ["projects-folder", "todo"],
       ["copilot-cli", "todo"],
       ["copilot-trusted-folder", "later"],
+      ["mise", "todo"],
     ]);
     expect(doneStepsLine(plan)).toBe("Done: Git, Network for sessions.");
   });

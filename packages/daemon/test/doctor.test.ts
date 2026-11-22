@@ -414,6 +414,23 @@ describe("doctor", () => {
     expect(checks.some((c) => c.id === "gitlab-cli")).toBe(false);
   });
 
+  test("glab not signed in says why, not only that NO_PROMPT is deprecated (glab 1.131 and newer)", async () => {
+    const { facade } = doctorFacade({
+      copilot: true,
+      mise: "2026.10.1",
+      copilotConfig: null,
+      authErrors: { "gitlab.example.com": "gitlab.example.com has not been authenticated with glab" },
+    });
+    facade.workspace.setRepoHosts([{ kind: "gitlab", host: "gitlab.example.com" }]);
+    const checks = (await facade.doctor.run()).checks;
+    expect(checks.find((c) => c.id === "gitlab-cli")).toEqual({
+      id: "gitlab-cli",
+      status: "fail",
+      summary: "glab is not signed in to gitlab.example.com: gitlab.example.com has not been authenticated with glab",
+      fix: "Run `glab auth login --hostname gitlab.example.com` in a terminal.",
+    });
+  });
+
   test("a program's error goes into its check as one line, and a check that throws fails alone", async () => {
     const deps = fakeDeps({
       run: () => Promise.reject(new Error(`mise: broken install\n${"x".repeat(16_000)}`)),
