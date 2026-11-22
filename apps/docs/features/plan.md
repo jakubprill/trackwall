@@ -46,7 +46,7 @@ The item then follows its tasks. When the agent says it is done (it reports its 
 ## Use it
 
 1. Press Alt+N, type an idea and press Enter.
-2. Open "Plan" (Ctrl+5) and add a project in the line under "Projects".
+2. Open "Plan" (Ctrl+4) and add a project in the line under "Projects".
 3. Open "Inbox", press F on the idea and the number of the project.
 4. Split it in the line under its notes, and pick a repo under "Repos".
 5. Press "Start task" on the item you want an agent to do, check the prompt and start it.
@@ -56,7 +56,7 @@ The item then follows its tasks. When the agent says it is done (it reports its 
 | Keys | On macOS | What happens |
 |---|---|---|
 | Alt+N | ⌥N | Write an idea into the inbox, from any view. |
-| Ctrl+5 | ⌘5 | Open "Plan". |
+| Ctrl+4 | ⌘4 | Open "Plan". |
 | J, K or ↓, ↑ | J, K or ↓, ↑ | In the inbox: select the next or the previous idea. |
 | F, then 1–9 | F, then 1–9 | In the inbox: file the selected idea in the project with that number. |
 | S | S | In the inbox: start a task on the selected idea. |

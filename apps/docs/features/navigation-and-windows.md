@@ -20,7 +20,7 @@ Move between views with the keyboard, and spread Trackwall over several windows 
 
 ## How it works
 
-The bar at the left edge of the window switches views, as in VS Code: "Home", "Repos", "Sessions", "Overview", "Plan" and "[Flow](/features/flow)" at the top, "Settings" at the bottom. Hover over an icon to see the view's name and key. A number on an icon counts what needs you there: on "Sessions" the sessions and task proposals waiting for you, on "Home" what the [container's health](/features/container-health) warns of when Trackwall runs in a dev container.
+The bar at the left edge of the window switches views, as in VS Code: "Sessions", "Repos", "Overview", "Plan", "[Flow](/features/flow)" and "[Home](/features/home)" at the top, "Settings" at the bottom. Trackwall opens on "Sessions", the first view of the bar. Hover over an icon to see the view's name and key. A number on an icon counts what needs you there: on "Sessions" the sessions and task proposals waiting for you, on "Home" what the [container's health](/features/container-health) warns of when Trackwall runs in a dev container.
 
 "Settings" lists its categories on the left: "[Get started](/features/get-started)", "Workspace" (the projects folder, the task worktrees folder and the local config backup), "Repo hosts", "Agents" (how tasks, the supervisor and sessions start, and installing [Java navigation](/features/java-navigation)), "Usage" ([Copilot usage](/features/copilot-usage), [Model statistics](/features/model-stats) and the [MCP calls](/features/mcp-calls) agents made), "App" (start at sign-in, updates, the theme and how the Home scene looks), "Files" (every file Trackwall reads or writes, see [Config files](/features/config-files)) and "Diagnostics" (the doctor, the state of the daemon and Trackwall's own errors). Click a category to see its settings. In a narrow window the categories sit in a row above them.
 
@@ -30,7 +30,7 @@ In "Workspace", "Agents" and "App" every setting is one folded row: its name, on
 
 Ctrl+K (⌘K on macOS) opens the command palette over any view. Type a few letters of what you want, a session, a task, a repo, a view or a Settings category, and press Enter, or click it. The palette also does a few things: start a new session, open the next session waiting for you, show the supervisor, open the current view in a new window and switch the theme. Every word you type must appear in the name, so "billing task" finds a task in the `billing` repo; names that start with what you typed come first. Where an action has its own key, the palette shows it next to the name.
 
-Any view can open in a new window: right-click its icon and choose "Open in new window", press Ctrl+Shift with the view's digit, or choose "New window" in the tray. Every window has its own view bar, switches views on its own and shows the same sessions and repos live. Each window's title names its view ("Sessions – Trackwall"), so you can tell them apart in the taskbar.
+Any view can open in a new window: right-click its icon and choose "Open in new window", press Ctrl+Shift with the view's digit, or choose "New window" in the tray, which opens on "Sessions". Every window has its own view bar, switches views on its own and shows the same sessions and repos live. Each window's title names its view ("Sessions – Trackwall"), so you can tell them apart in the taskbar.
 
 Ctrl+= and Ctrl+- make everything in a window larger or smaller, from half to double size, and Ctrl+0 brings it back to normal. Each window keeps its own zoom, also after Trackwall starts again.
 
@@ -42,13 +42,13 @@ A window opens on the monitor, at the size and position its predecessor had. Whe
 
 1. Press Ctrl+1 … Ctrl+6 to switch views (⌘ on macOS).
 2. Press Ctrl+K, type the name of a repo, and press Enter to open it in "Repos".
-3. Press Ctrl+Shift+3 to open "Sessions" in a new window, and drag it to your other monitor.
+3. Press Ctrl+Shift+5 to open "Flow" in a new window, and drag it to your other monitor.
 
 ## Shortcuts
 
 | Keys (Windows) | Keys (macOS) | What happens |
 |---|---|---|
-| Ctrl+1, Ctrl+2, Ctrl+3, Ctrl+4, Ctrl+5, Ctrl+6 | ⌘1, ⌘2, ⌘3, ⌘4, ⌘5, ⌘6 | Home, Repos, Sessions, Overview, Plan, Flow. |
+| Ctrl+1, Ctrl+2, Ctrl+3, Ctrl+4, Ctrl+5, Ctrl+6 | ⌘1, ⌘2, ⌘3, ⌘4, ⌘5, ⌘6 | Sessions, Repos, Overview, Plan, Flow, Home. |
 | Ctrl+, | ⌘, | Settings. |
 | Ctrl+K (Ctrl+Shift+K in a terminal) | ⌘K | The command palette. |
 | Ctrl+Shift+digit | ⌥⌘digit | Open that view in a new window. |
