@@ -10,7 +10,7 @@ One list shows what is left before your first session, in Sessions and in Settin
 
 ## What you get
 
-- The few things Trackwall needs, in the order to do them: your projects folder, Git, Copilot CLI and the network your sessions use.
+- The few things Trackwall needs, in the order to do them: your projects folder, Git, Copilot CLI and the network your sessions use. Then what it recommends, such as mise for your repos' builds and tests.
 - For each one, what Trackwall found on your computer and what to do when something is missing.
 - Two steps settled with one click right in the list: your projects folder, when Trackwall finds a likely one, and "Trust folder", which stops Copilot CLI asking whether it may work in each repo and task.
 - The steps left right above the form for your first task in "Sessions", where Trackwall opens, so you set up and start in one place, with a clear "Ready" once nothing needed is left.
@@ -22,11 +22,11 @@ Trackwall needs only one setting to work: your projects folder. Everything else 
 
 Trackwall opens on "Sessions", and until your projects folder is set, a card there shows the steps left in place of the form for a new task. Set the folder in the card and the form appears under it; the card stays until you start your first session, and says "Ready" when nothing is left. The done steps share one line at its top, and "Settings › Get started" at its bottom opens the whole list. Should a step still be open when you come back, say a proxy that takes a few days to open, the card shows again until you have a session; after that, the open steps are under "Get started" in Settings.
 
-"Get started" is also the first category of Settings, in a frame of its own above the others. Settings opens on it until you have a session, and also later while a step is still open. It runs the [doctor](/features/doctor) and shows a few of its checks as steps; the card in "Sessions" shows the same ones. A step with a green mark is done. A step with a number has something for you to do: the line under it says what was found, the next one what to do, and a command to run comes with a copy button. A step marked "needed" stops a first session; one marked "recommended" does not, but saves you questions later, such as Copilot CLI asking whether it may trust each repo.
+"Get started" is also the first category of Settings, in a frame of its own above the others. Settings opens on it until you have a session, and also later while a step is still open. It runs the [doctor](/features/doctor) and shows a few of its checks as steps; the card in "Sessions" shows the same ones. A step with a green mark is done. A step with a number has something for you to do: the line under it says what was found, the next one what to do, and a command to run comes with a copy button. A step marked "needed" stops a first session; one marked "recommended" does not, but saves you trouble later. Without the trusted folder, Copilot CLI asks whether it may work in each repo; without mise, agents cannot run your repos' builds and tests, and Verify cannot judge a task.
 
 The step "Copilot CLI trusts your projects folder" has a "Trust folder" button. Copilot CLI keeps a list of folders it works in without asking, `trustedFolders` in its `config.json`. The button adds your projects folder to that list, which covers every repo in it and their task worktrees. Trackwall leaves the rest of the file as it is and keeps a copy of the file as it was next to it, named `config.before-trackwall-trust.json`. The line under the button names the file, if you would rather edit it yourself.
 
-Under the steps, "Good to have" lists tools Trackwall works without and what each adds: mise for repo tasks and services, Copilot CLI's sandbox, and the command-line tool of your repo host. Click it to open the list.
+Under the steps, "Good to have" lists tools Trackwall works without and what each adds: Copilot CLI's sandbox and the command-line tool of your repo host. Click it to open the list.
 
 The line under "Get started" in the list of categories says what is left: how many steps are to do, in yellow, or "All set". It shows what the last check found, so it is there as soon as Settings opens, and it updates when you open "Get started" or "Diagnostics", or when the card in "Sessions" shows, which run the check again.
 
