@@ -60,6 +60,14 @@ _Avoid_: accordion, advanced settings, panel
 The field Ctrl+K (⌘K) opens over any view, Ctrl+Shift+K from a terminal: a few letters find a session, task, repo, view or Settings category, or an action such as "New session", and Enter goes there (ADR-246).
 _Avoid_: quick open, search (that is the Repos view's repo search), launcher
 
+**Tip** (`TipId`, `TIPS`, `Tip`, `TipCard`, `TipsController`, `lib/tips.ts`; in the UI *Tip*):
+A short explanation under a control, shown the first time the control is on screen and one at a time in a window, until the user presses "Got it" (ADR-296). Tips and **What's new** are on or off together on this computer, in Settings › App › "Tips and What's new".
+_Avoid_: tooltip (that is the text on hover), hint, coach mark, bubble, onboarding (that is **Get started**)
+
+**What's new** (`WHATS_NEW`, `WhatsNewEntry`, `lib/whats-new.ts`, `components/WhatsNew.tsx`; in the UI *What's new*, an entry a *change*):
+The strip above the views after an update that lists the changes worth a look this computer has not seen, newest first, each with "Show", which opens the place the change lives in and shows its tip (ADR-296).
+_Avoid_: changelog, release notes (those are `docs/release-notes/` and the release on GitHub), announcement
+
 **Tab** (`TabBar`):
 A switch for part of the content inside a view, for example README, Files, Commits and mise tasks in the Repos view.
 

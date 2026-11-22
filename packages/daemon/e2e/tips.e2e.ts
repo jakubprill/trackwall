@@ -40,7 +40,10 @@ describe("tips and What's new", () => {
     await tip.waitFor({ state: "detached" });
     await page.getByRole("region", { name: "What's new" }).waitFor({ state: "detached" });
 
-    await page.getByRole("navigation", { name: "Views" }).getByRole("button", { name: /^Settings/ }).click();
+    await page
+      .getByRole("navigation", { name: "Views" })
+      .getByRole("button", { name: /^Settings/ })
+      .click();
     await page.getByRole("navigation", { name: "Settings categories" }).getByRole("button", { name: /^App/ }).click();
     const row = page.getByRole("button", { name: /^Tips and What's new/ });
     await row.getByText("off", { exact: true }).waitFor();

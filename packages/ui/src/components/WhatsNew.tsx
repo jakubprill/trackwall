@@ -1,4 +1,4 @@
-import { countLabel, TRACKWALL_RELEASES_URL, type WorkspaceSettings } from "@trackwall/protocol";
+import { countLabel, TRACKWALL_RELEASES_URL } from "@trackwall/protocol";
 import { ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -6,9 +6,8 @@ import type { Connection } from "@/lib/connection";
 import { useOpenWebLink } from "@/lib/desktop";
 import { useTips } from "@/lib/tips-controller";
 import { useAction } from "@/lib/use-action";
-import type { Remote } from "@/lib/use-remote";
 import { useWhatsNew } from "@/lib/use-whats-new";
-import type { WhatsNewEntry, WhatsNewPlace } from "@/lib/whats-new";
+import { isNewComputer, type WhatsNewEntry, type WhatsNewPlace, type WhatsNewShow } from "@/lib/whats-new";
 
 /**
  * Strip above the views after an update (ADR-296): the changes worth a look, each with "Show", which opens the place it
@@ -16,18 +15,18 @@ import type { WhatsNewEntry, WhatsNewPlace } from "@/lib/whats-new";
  */
 export function WhatsNew({
   conn,
-  workspace,
+  projectsDir,
   onShow,
 }: {
   conn: Connection | undefined;
-  /** The workspace settings: a new install, which shows no What's new, has no projects folder yet. */
-  workspace: Remote<WorkspaceSettings>;
+  /** The daemon's projects folder, `undefined` until it says: a new computer, which has none yet, lists no change. */
+  projectsDir: string | null | undefined;
   onShow: (place: WhatsNewPlace) => void;
 }) {
   const { tips, state } = useTips();
-  const { entries, dismiss } = useWhatsNew(workspace.data && workspace.data.projectsDir === null);
+  const { entries, dismiss } = useWhatsNew(isNewComputer(projectsDir));
   if (!conn || !state.on || !entries || entries.length === 0) return null;
-  const show = ({ place, tip }: NonNullable<WhatsNewEntry["show"]>) => {
+  const show = ({ place, tip }: WhatsNewShow) => {
     if (tip) tips?.ask(tip);
     onShow(place);
   };
@@ -43,7 +42,7 @@ export function WhatsNewStrip({
 }: {
   conn: Connection;
   entries: readonly WhatsNewEntry[];
-  onShow: (show: NonNullable<WhatsNewEntry["show"]>) => void;
+  onShow: (show: WhatsNewShow) => void;
   onDismiss: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -84,13 +83,7 @@ export function WhatsNewStrip({
   );
 }
 
-function WhatsNewItem({
-  entry: { title, text, show },
-  onShow,
-}: {
-  entry: WhatsNewEntry;
-  onShow: (show: NonNullable<WhatsNewEntry["show"]>) => void;
-}) {
+function WhatsNewItem({ entry: { title, text, show }, onShow }: { entry: WhatsNewEntry; onShow: (show: WhatsNewShow) => void }) {
   return (
     <li className="bg-card flex items-start gap-3 rounded-md border px-3 py-2">
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">

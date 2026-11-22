@@ -15,13 +15,19 @@ import type { TipId } from "./tips.ts";
 /** Where "Show" takes the user: a command of the command palette, which `App` carries out as it does the palette's. */
 export type WhatsNewPlace = Extract<PaletteAction<"sessions" | "repos">, { kind: "view" | "settings" | "new-session" }>;
 
+/** What "Show" of an entry does: opens the place, and shows the tip there. */
+export interface WhatsNewShow {
+  place: WhatsNewPlace;
+  tip?: TipId;
+}
+
 export interface WhatsNewEntry {
   /** Never reused: a computer that saw an entry with this id never shows another one with it. */
   id: string;
   title: string;
   text: string;
-  /** The place to open, and the tip to show there; none for a change with no place of its own. */
-  show?: { place: WhatsNewPlace; tip?: TipId };
+  /** None for a change with no place of its own. */
+  show?: WhatsNewShow;
 }
 
 /**
@@ -37,9 +43,9 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     show: { place: { kind: "new-session" }, tip: "own-worktree" },
   },
   {
-    id: "all-repos",
-    title: "All repos",
-    text: "Repos opens on a table of the repos that need a look, each with its next step, and Sync all above it.",
+    id: "new-on-the-server",
+    title: "New on the server",
+    text: "Every 15 minutes Trackwall asks each repo's server whether its branch moved, without a fetch, and All repos says so.",
     show: { place: { kind: "view", view: "repos" } },
   },
   {
@@ -54,10 +60,21 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     text: "Home's icon comes back once you show it in Settings › App › Home; its shortcut and the command palette open it either way.",
     show: { place: { kind: "settings", category: "app" } },
   },
+  {
+    id: "all-repos",
+    title: "All repos",
+    text: "Repos opens on a table of the repos that need a look, each with its next step, and Sync all above it.",
+    show: { place: { kind: "view", view: "repos" } },
+  },
 ];
 
 /** The most entries `WHATS_NEW` holds (a test keeps it so): more would push the views down too far. */
 export const WHATS_NEW_MOST = 6;
+
+/** Whether the computer is new, from the daemon's projects folder (`undefined` until the daemon says): none is set yet. */
+export function isNewComputer(projectsDir: string | null | undefined): boolean | undefined {
+  return projectsDir === undefined ? undefined : projectsDir === null;
+}
 
 /**
  * The entries the strip lists: the ones this computer has not seen, newest first; none on a new computer that never

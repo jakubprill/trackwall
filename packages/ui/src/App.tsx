@@ -283,7 +283,7 @@ export function App() {
                 <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />
                 <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: dismissWindowError }} />
                 <ErrorBanner message={sessionLink.notice} action={{ label: "Dismiss", onClick: sessionLink.dismiss }} />
-                <WhatsNew conn={conn} workspace={workspace} onShow={runCommand} />
+                <WhatsNew conn={conn} projectsDir={workspace.data?.projectsDir} onShow={runCommand} />
                 {conn && dropped && (
                   <FolderDrop
                     key={dropped.seq}

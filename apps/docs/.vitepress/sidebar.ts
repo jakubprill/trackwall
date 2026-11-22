@@ -66,6 +66,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     text: "Desktop",
     items: [
       { text: "Get started", link: "/features/get-started" },
+      { text: "Tips and What's new", link: "/features/tips" },
       { text: "Home dashboard", link: "/features/home" },
       { text: "Navigation and windows", link: "/features/navigation-and-windows" },
       { text: "trackwall:// links", link: "/features/links" },

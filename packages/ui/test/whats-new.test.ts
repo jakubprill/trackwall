@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readSeenWhatsNew, saveAllWhatsNewSeen, WHATS_NEW, WHATS_NEW_MOST, whatsNewEntries } from "../src/lib/whats-new.ts";
+import { isNewComputer, readSeenWhatsNew, saveAllWhatsNewSeen, WHATS_NEW, WHATS_NEW_MOST, whatsNewEntries } from "../src/lib/whats-new.ts";
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const stored = new Map(Object.entries(initial));
@@ -27,6 +27,12 @@ describe("What's new (ADR-296)", () => {
   test("a new install lists none, and nothing shows while the daemon has not said whether the computer is new", () => {
     expect(whatsNewEntries(null, true)).toEqual([]);
     expect(whatsNewEntries(null, undefined)).toBeUndefined();
+  });
+
+  test("a computer is new while its daemon has no projects folder, and not known to be until the daemon says", () => {
+    expect(isNewComputer(null)).toBe(true);
+    expect(isNewComputer("/home/dev/projects")).toBe(false);
+    expect(isNewComputer(undefined)).toBeUndefined();
   });
 
   test("once the seen entries are stored, the strip no longer waits for the daemon", () => {
