@@ -178,22 +178,22 @@ describe("the supervisor (ADR-58)", () => {
     expect(proposerLabel({ session: "sup", supervisor: true, task: null }, [])).toBe("proposed by the supervisor");
   });
 
-  test("the panel is pinned until folded or widened, and storage that refuses access reads as pinned", () => {
+  test("the panel is folded until the user pins or widens it, and storage that refuses access reads as folded", () => {
     const stored = new Map<string, string>();
     const storage = {
       getItem: (key: string) => stored.get(key) ?? null,
       setItem: (key: string, value: string) => void stored.set(key, value),
     };
-    expect(readSupervisorLayout(() => storage)).toBe("pinned");
-    saveSupervisorLayout(() => storage, "folded");
     expect(readSupervisorLayout(() => storage)).toBe("folded");
+    saveSupervisorLayout(() => storage, "pinned");
+    expect(readSupervisorLayout(() => storage)).toBe("pinned");
     saveSupervisorLayout(() => storage, "wide");
     expect(readSupervisorLayout(() => storage)).toBe("wide");
     const refusing = () => {
       throw new Error("SecurityError");
     };
-    expect(readSupervisorLayout(refusing)).toBe("pinned");
-    expect(() => saveSupervisorLayout(refusing, "folded")).not.toThrow();
+    expect(readSupervisorLayout(refusing)).toBe("folded");
+    expect(() => saveSupervisorLayout(refusing, "pinned")).not.toThrow();
   });
 
   test("a panel folded or pinned before it could be widened keeps its layout", () => {

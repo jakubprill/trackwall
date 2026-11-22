@@ -75,7 +75,14 @@ function terminals(
   places: ShellPlacesStore = memoryPlaces().places,
   log: (msg: string) => void = () => {},
 ) {
-  return new FolderTerminals({ procs, folder, env: async () => ({ PATH: "/bin" }), shell: () => ["/bin/bash"], places, log });
+  return new FolderTerminals({
+    procs,
+    folder,
+    env: async () => ({ PATH: "/bin" }),
+    shell: () => ({ command: ["/bin/bash"], screenLine: null }),
+    places,
+    log,
+  });
 }
 
 describe("folder terminals", () => {

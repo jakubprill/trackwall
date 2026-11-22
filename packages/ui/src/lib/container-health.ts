@@ -141,3 +141,13 @@ export const HEALTH_WARNING_ROWS: Record<HealthWarning["id"], { title: string; s
   "daemon-restarted": { title: "Daemon restarted", status: "after a crash" },
   "backup-old": { title: "No recent work backup", status: "work on no remote" },
 };
+
+/**
+ * The number at Home's icon on the view bar (ADR-287): the warnings Home lists under "Container", which no other view
+ * shows, so that they show from every view; none outside a container and until the daemon answers. The repos of "Only
+ * in this container" (ADR-162) do not count: in a container some work is nearly always unpushed, and a number that never
+ * goes away is not read. The warning that the last backup is old counts them when they are at risk.
+ */
+export function containerAttentionCount(health: ContainerHealth | undefined): number {
+  return health?.warnings.length ?? 0;
+}

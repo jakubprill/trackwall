@@ -1,4 +1,4 @@
-import { graphApi, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
+import { graphApi, type HealthWarning, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
 import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -17,7 +17,6 @@ import type { SettingsCategory } from "@/lib/settings-categories";
 import { DARK_ISLAND } from "@/lib/theme";
 import { unpushedRows } from "@/lib/unpushed-work";
 import { useAction } from "@/lib/use-action";
-import { useContainerHealth } from "@/lib/use-container-health";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
@@ -33,13 +32,11 @@ import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
  * an error, task proposals waiting for a decision, tasks ready to close (ADR-282), and repos that are not clean), in the middle the 3D dashboard in the
  * "Orbit" layout, on the right the details of the selected object. A click selects; a double click or the button in the
  * details goes to the session or repo. The data is the same daemon responses as in other views (services polled as in the
- * repo's Service panel); sessions and running mise tasks come live from the events WebSocket (ADR-36), and `App` fetches the sessions, because their count is also on the
- * view bar. Outside the canvas the view takes only `@trackwall/scene/model` from the scene (keys and snapshot types), so
- * that three.js and Pawn stay in the lazily loaded chunk.
+ * repo's Service panel); sessions and running mise tasks come live from the events WebSocket (ADR-36), and `App` fetches
+ * the sessions and the container's health, because their counts are also on the view bar (ADR-287). Outside the canvas
+ * the view takes only `@trackwall/scene/model` from the scene (keys and snapshot types), so that three.js and Pawn stay
+ * in the lazily loaded chunk.
  */
-
-/** The daemon reads the container every 30 s (ADR-279), so Home asks no more often. */
-const CONTAINER_HEALTH_PACE = 30_000;
 
 /** The scene's own messages are for people developing Trackwall, so a failure shows a general text, as in `HomeCanvas`. */
 const CANVAS_FAILED = "the 3D view failed to load";
@@ -52,6 +49,7 @@ export function HomeView({
   eventsLost,
   repoWatch,
   sessions,
+  containerWarnings,
   onOpenInSessions,
   onOpenRepo,
   onOpenDaemon,
@@ -65,6 +63,8 @@ export function HomeView({
   /** Commits and repos added to the folder (ADR-63): the list and the graph are fetched again at once. */
   repoWatch: RepoWatchHandle;
   sessions: RemoteHandle<SessionList>;
+  /** The container health's warnings (ADR-280), from `App`, which counts them on the view bar (ADR-287); `undefined` until the daemon answers. */
+  containerWarnings: readonly HealthWarning[] | undefined;
   /** Go to the Sessions view with a session or a task proposal. */
   onOpenInSessions: (selection: SessionSelection) => void;
   onOpenRepo: (id: string) => void;
@@ -80,7 +80,6 @@ export function HomeView({
   const services = useServices(conn);
   const unpushed = useUnpushedWork(conn, repoWatch.options(REPO_LIST_PACE));
   const unpushedList = useMemo(() => unpushedRows(unpushed.data), [unpushed.data]);
-  const health = useContainerHealth(conn, { pollMs: CONTAINER_HEALTH_PACE });
   const [selected, setSelected] = useState<HomeKey | null>(null);
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();
@@ -159,7 +158,7 @@ export function HomeView({
         readyToClose={readyTasks}
         closing={{ pending: closeAll.pending, outcome: closeAll.error ?? closeResult }}
         unpushed={unpushedList}
-        containerWarnings={health.data?.warnings ?? []}
+        containerWarnings={containerWarnings ?? []}
         selected={current}
         onSelect={setSelected}
         onOpen={open}

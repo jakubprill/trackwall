@@ -29,7 +29,7 @@ export function ActivityBar<Id extends string>({
   onSelect: (id: Id) => void;
   /** Views in new windows (ADR-49): the Ctrl+Shift shortcuts and the icon's context menu; absent outside the shell. */
   newWindow?: { open: (id: Id) => void; showMenu: (id: Id) => void };
-  /** The number at a view's icon, for example sessions waiting for you; zero and none show nothing. */
+  /** The number at a view's icon of what needs the user there, such as sessions waiting for you; zero and none show nothing. */
   badges?: Partial<Record<Id, number>>;
 }) {
   useViewShortcuts(views, active, onSelect, newWindow?.open);
@@ -93,7 +93,7 @@ function ActivityButton<Id extends string>({
     <li>
       <button
         type="button"
-        aria-label={count === undefined ? view.label : `${view.label} (waiting: ${count})`}
+        aria-label={count === undefined ? view.label : `${view.label} (needs you: ${count})`}
         aria-current={active ? "page" : undefined}
         aria-keyshortcuts={ariaShortcut(view.shortcut, IS_MAC)}
         onClick={onSelect}

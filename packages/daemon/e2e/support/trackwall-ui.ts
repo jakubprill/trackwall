@@ -116,13 +116,13 @@ async function signIn(page: Page, address: string): Promise<void> {
 }
 
 /**
- * The main window. The supervisor's panel is folded, so a session terminal is wider than the screen the fake Copilot
- * CLI draws: the fake does not redraw when the terminal shrinks, as Copilot CLI does, and its approval dialog wrapped
- * over two rows is no dialog the daemon can read.
+ * The main window, with the supervisor's panel folded as a new window opens it (ADR-286), so a session terminal is
+ * wider than the screen the fake Copilot CLI draws: the fake does not redraw when the terminal shrinks, as Copilot CLI
+ * does, and its approval dialog wrapped over two rows is no dialog the daemon can read.
  */
 async function openMainWindow(page: Page, address: string): Promise<Page> {
   await signIn(page, address);
-  await page.getByRole("button", { name: "Fold the supervisor panel" }).click();
+  await page.getByRole("button", { name: /^Pin the supervisor panel open/ }).waitFor();
   return page;
 }
 

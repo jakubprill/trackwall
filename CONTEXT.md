@@ -45,7 +45,7 @@ A newer version of Trackwall from GitHub Releases, installed by the shell after 
 _Avoid_: upgrade, sync (that is the repo synchronization)
 
 **View** (`View`):
-A screen of the app in the UI (Home, Repos, Sessions, Overview, Plan, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
+A screen of the app in the UI (Home, Repos, Sessions, Overview, Plan, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut. A number at a view's icon counts what needs the user there: at Sessions the waiting sessions and task proposals (`attentionCount`), at Home the container's health warnings (`containerAttentionCount`, ADR-287).
 _Avoid_: tab (for a whole screen)
 
 **Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
@@ -713,7 +713,7 @@ The Copilot CLI model the supervisor runs on, an id of the same shape as a task 
 _Avoid_: default model (that is Copilot CLI's own), coordinator model
 
 **Supervisor panel** (`SupervisorPanel`):
-The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or, while none runs, its start card (`SupervisorStart`): "Start my day", "Continue" (the last supervisor's conversation, while Copilot CLI keeps one, `SessionList.lastSupervisor`) and "New conversation", one of them first as the main choice, and "Show as" for a terminal or the conversation view (ADR-58, ADR-70, ADR-96, ADR-126). Pinned open, wide ("Widen": most of the window, for reading the supervisor), or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you (`SupervisorLayout` in `supervisor-layout.ts`); Alt+0 unfolds it, a wide panel staying wide, and puts the keyboard in its terminal.
+The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or, while none runs, its start card (`SupervisorStart`): "Start my day", "Continue" (the last supervisor's conversation, while Copilot CLI keeps one, `SessionList.lastSupervisor`) and "New conversation", one of them first as the main choice, and "Show as" for a terminal or the conversation view (ADR-58, ADR-70, ADR-96, ADR-126). Folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you, as a window starts until the user chooses (ADR-286), pinned open, or wide ("Widen": most of the window, for reading the supervisor) (`SupervisorLayout` in `supervisor-layout.ts`); Alt+0 unfolds it, a wide panel staying wide, and puts the keyboard in its terminal.
 _Avoid_: sidebar (that is the list on the left of a view), drawer
 
 **Day start** (`DayStart`, `dayStartApi`, `DayStartRun`, `startSupervisorWith`; "Start my day" in the UI; `dayStart` in `workspace.yaml`):
