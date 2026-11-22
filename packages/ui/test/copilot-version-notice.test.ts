@@ -9,13 +9,13 @@ test("a newer Copilot CLI than the tested one gets a strip that says a session's
 
 test("an older Copilot CLI gets a strip that asks to install the tested version", () => {
   expect(copilotVersionNotice({ version: "1.0.90", tested: "1.0.114", relation: "older", inContainer: false }, null)).toBe(
-    "Copilot CLI 1.0.90 is older than 1.0.114, the version this Trackwall is tested with: install Copilot CLI 1.0.114 the way you installed it (npm, Homebrew or WinGet), since sessions may lack what Trackwall relies on.",
+    "Copilot CLI 1.0.90 is older than 1.0.114, the version this Trackwall is tested with, so sessions may lack what Trackwall relies on. Install Copilot CLI 1.0.114 the way you installed it (npm, Homebrew or WinGet).",
   );
 });
 
 test("in a container the strip names the version and where to put it, since an update inside is lost at the next rebuild", () => {
   expect(copilotVersionNotice({ version: "1.0.105", tested: "1.0.114", relation: "older", inContainer: true }, null)).toBe(
-    "Copilot CLI 1.0.105 is older than 1.0.114, the version this Trackwall is tested with: install Copilot CLI 1.0.114 where the container gets it: run `mise use -g npm:@github/copilot@1.0.114` in the container, or put that version into its image and rebuild it (an update made any other way is lost at the next rebuild), since sessions may lack what Trackwall relies on.",
+    "Copilot CLI 1.0.105 is older than 1.0.114, the version this Trackwall is tested with, so sessions may lack what Trackwall relies on. Install Copilot CLI 1.0.114 where the container gets it: run `mise use -g npm:@github/copilot@1.0.114` in the container, or put that version into its image and rebuild it. An update made any other way is lost at the next rebuild.",
   );
 });
 

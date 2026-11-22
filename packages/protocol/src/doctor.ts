@@ -89,8 +89,8 @@ export type CopilotCliVersion = z.infer<typeof CopilotCliVersion>;
  * container any other way is gone at the next rebuild, and the user has to know which version to put there.
  */
 export function copilotCliInstallAdvice(tested: string, inContainer: boolean): string {
-  if (!inContainer) return `install Copilot CLI ${tested} the way you installed it (npm, Homebrew or WinGet)`;
-  return `install Copilot CLI ${tested} where the container gets it: run \`mise use -g npm:@github/copilot@${tested}\` in the container, or put that version into its image and rebuild it (an update made any other way is lost at the next rebuild)`;
+  if (!inContainer) return `Install Copilot CLI ${tested} the way you installed it (npm, Homebrew or WinGet).`;
+  return `Install Copilot CLI ${tested} where the container gets it: run \`mise use -g npm:@github/copilot@${tested}\` in the container, or put that version into its image and rebuild it. An update made any other way is lost at the next rebuild.`;
 }
 
 const endpoint = apiEndpoints("doctor");

@@ -15,7 +15,7 @@ export function copilotVersionNotice(found: CopilotCliVersion, hiddenFor: string
   const { version, tested } = found;
   return found.relation === "newer"
     ? `Copilot CLI ${version} is newer than ${tested}, the version this Trackwall is tested with: a session's state may show wrong until Trackwall is updated.`
-    : `Copilot CLI ${version} is older than ${tested}, the version this Trackwall is tested with: ${copilotCliInstallAdvice(tested, found.inContainer)}, since sessions may lack what Trackwall relies on.`;
+    : `Copilot CLI ${version} is older than ${tested}, the version this Trackwall is tested with, so sessions may lack what Trackwall relies on. ${copilotCliInstallAdvice(tested, found.inContainer)}`;
 }
 
 /** The version the strip was hidden for, `null` when it never was. */

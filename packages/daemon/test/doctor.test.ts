@@ -524,14 +524,14 @@ describe("program versions", () => {
     expect(copilotVersionOutcome("9.0.0", false)).toEqual({
       status: "warn",
       summary: `Copilot CLI 9.0.0 is newer than ${TESTED_COPILOT_CLI_VERSION}, the version Trackwall is tested with.`,
-      fix: `Sessions usually work, but a change in Copilot CLI can make Trackwall show a session's state wrong. If one does, install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} the way you installed it (npm, Homebrew or WinGet), and update Trackwall when a version tested with 9.0.0 comes out.`,
+      fix: `Sessions usually work, but a change in Copilot CLI can make Trackwall show a session's state wrong. If one does, go back to the tested version, or update Trackwall when a version tested with 9.0.0 comes out. Install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} the way you installed it (npm, Homebrew or WinGet).`,
     });
     expect(copilotVersionOutcome(null, false).status).toBe("warn");
   });
 
   test("in a container the fix names the version and the mise command, since an update made another way is lost at a rebuild", () => {
     expect(copilotVersionOutcome("1.0.105", true).fix).toBe(
-      `Install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} where the container gets it: run \`mise use -g npm:@github/copilot@${TESTED_COPILOT_CLI_VERSION}\` in the container, or put that version into its image and rebuild it (an update made any other way is lost at the next rebuild).`,
+      `Install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} where the container gets it: run \`mise use -g npm:@github/copilot@${TESTED_COPILOT_CLI_VERSION}\` in the container, or put that version into its image and rebuild it. An update made any other way is lost at the next rebuild.`,
     );
     expect(copilotVersionOutcome("9.0.0", true).fix).toContain(`mise use -g npm:@github/copilot@${TESTED_COPILOT_CLI_VERSION}`);
   });

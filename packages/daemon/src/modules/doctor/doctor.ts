@@ -468,14 +468,11 @@ export function copilotVersionOutcome(version: string | null, inContainer: boole
     case "unknown":
       return warn("Copilot CLI did not say its version.", `Trackwall is tested with Copilot CLI ${tested}.`);
     case "older":
-      return warn(
-        `Copilot CLI ${version} is older than ${tested}, the version Trackwall is tested with.`,
-        `${advice.charAt(0).toUpperCase()}${advice.slice(1)}.`,
-      );
+      return warn(`Copilot CLI ${version} is older than ${tested}, the version Trackwall is tested with.`, advice);
     case "newer":
       return warn(
         `Copilot CLI ${version} is newer than ${tested}, the version Trackwall is tested with.`,
-        `Sessions usually work, but a change in Copilot CLI can make Trackwall show a session's state wrong. If one does, ${advice}, and update Trackwall when a version tested with ${version} comes out.`,
+        `Sessions usually work, but a change in Copilot CLI can make Trackwall show a session's state wrong. If one does, go back to the tested version, or update Trackwall when a version tested with ${version} comes out. ${advice}`,
       );
     case "tested":
       return ok(`Copilot CLI ${version}`);

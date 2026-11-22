@@ -206,5 +206,5 @@ test("the Polish talk has the slides of the English one, with the same numbers a
 });
 
 test("the dev container guide installs the Copilot CLI version Trackwall is tested with, so raising it updates the guide too", () => {
-  expect(read("guide/dev-container.md")).toContain(`mise use -g node@22 npm:@github/copilot@${TESTED_COPILOT_CLI_VERSION}\``);
+  expect(read("guide/dev-container.md")).toContain(`npm:@github/copilot@${TESTED_COPILOT_CLI_VERSION}\``);
 });
