@@ -30,6 +30,7 @@ import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
 import {
   BACKGROUND_AGENT_PROMPT,
+  COPILOT_DEFAULT_COLOURS,
   PARALLEL_TOOLS_PROMPT,
   PROMPT_FRAME_LAYOUT,
   PROMPT_PLACEHOLDER,
@@ -286,6 +287,8 @@ function begin(): void {
   title(startTitle);
   // Like Copilot CLI: every mouse move reported, in the SGR encoding (`copilot-session.contract.ts`).
   process.stdout.write("\x1b[?1003h\x1b[?1006h");
+  // Like Copilot CLI: its own default background and text colour.
+  process.stdout.write(COPILOT_DEFAULT_COLOURS);
   process.stdout.write(`Welcome to the fake, MCP: ${mcpServers.join(", ")}\r\n`);
   process.stdout.write(`Instructions: ${instructionFiles.join(", ")}\r\n`);
   process.stdout.write(`LSP: ${lspServers.join(", ")}\r\n`);
