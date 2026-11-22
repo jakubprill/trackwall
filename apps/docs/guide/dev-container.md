@@ -204,13 +204,26 @@ Docker does not let the sandbox start by default, so Trackwall leaves it off in 
 
 From then on Trackwall sees that the sandbox can run and puts tasks without approvals in it, as on a Linux computer: the New session form says so under the options. `sandbox.tasks` in `workspace.yaml` still chooses otherwise, as described in [Approvals](/features/approvals).
 
-If your image is built from the official `node` images, or installs tools with `npm i -g` in another way, let the sandbox read `/usr/local/lib`. npm keeps its global packages in `/usr/local/lib/node_modules`, with only links to them in `/usr/local/bin`. The sandbox shows `/usr/local/bin` but hides `/usr/local/lib`, so in a sandboxed task `npm`, `npx`, `corepack` and `pnpm` say "command not found", while `node` itself works. Run this once in a terminal of the container:
+The sandbox hides most of the file system from a task's commands, also folders where tools you installed live:
 
-```sh
-copilot config sandbox.userPolicy.filesystem.readonlyPaths /usr/local/lib
+- On an image built from the official `node` images, or any image that installs tools with `npm i -g`, npm keeps its global packages in `/usr/local/lib/node_modules`, with only links to them in `/usr/local/bin`. The sandbox shows `/usr/local/bin` but hides `/usr/local/lib`, so in a sandboxed task `npm`, `npx`, `corepack` and `pnpm` say "command not found", while `node` itself works.
+- Tools installed with mise live in `~/.local/share/mise` (with its shims) and its cache in `~/.cache/mise`, both in your home folder, which the sandbox hides. A sandboxed `mise x` then downloads and installs the tool again on every command, into a throwaway home, and `mise` warns that it cannot fetch its release list.
+
+Let the sandbox read those folders, but not write them, in Copilot CLI's `settings.json` in the container (`~/.copilot/settings.json`, in the `workspace-copilot` volume, so it survives a rebuild). Keep the rest of the file, use your home folder in the container (`/home/vscode` in the example above), and leave out what your image does not have:
+
+```json
+{
+  "sandbox": {
+    "userPolicy": {
+      "filesystem": {
+        "readonlyPaths": ["/usr/local/lib", "/home/vscode/.local/share/mise", "/home/vscode/.cache/mise"]
+      }
+    }
+  }
+}
 ```
 
-It goes into Copilot CLI's `settings.json` in the `workspace-copilot` volume, so it survives a rebuild. If `readonlyPaths` already lists other paths, add `/usr/local/lib` to that list in the file instead. The folder stays read-only in the sandbox, and the other repos and the sign-ins stay hidden.
+The folders stay read-only in the sandbox, so a new tool is installed outside it, and the other repos and the sign-ins stay hidden. `~/.config/mise`, which may hold the key to mise's encrypted secrets, stays hidden too; do not add it.
 
 What each part does, and what it costs:
 
