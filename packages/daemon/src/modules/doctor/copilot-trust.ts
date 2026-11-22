@@ -65,3 +65,8 @@ export async function trustedFolders(env: NodeJS.ProcessEnv): Promise<TrustedFol
 export function trustedFolderOf(dir: string, folders: readonly string[]): string | null {
   return folders.find((folder) => isInside(folder, dir)) ?? null;
 }
+
+/** The trusted folder of `config.json` as read that covers `dir`; a missing or unreadable file trusts nothing. */
+export function trustingFolder(trust: TrustedFolders, dir: string): string | null {
+  return trust.kind === "read" ? trustedFolderOf(dir, trust.folders) : null;
+}
