@@ -9,7 +9,8 @@ type Options = ComponentProps<typeof StartOptions>;
 
 /**
  * The options of the New session form (ADR-266): the worktree pill, which decides between a task and a session, stays
- * in sight, with its tip under it (ADR-296), and the other pills of `StartOptions` stand folded under "More options".
+ * in sight, with its tip under it (ADR-296), and the other pills of `StartOptions` stand folded under "More options",
+ * with the tip of Plan first under them where the form offers it.
  * Folded, the button names the options that differ from a plain start; they open on a click, and at once when one of
  * them already differs.
  */
@@ -40,6 +41,7 @@ export function FoldedStartOptions({ conn, worktree, disabled, ...more }: Option
       </div>
       {worktree && <Tip conn={conn} tip="own-worktree" />}
       {open && <StartOptions {...more} disabled={disabled} />}
+      {open && more.planFirst && <Tip conn={conn} tip="plan-first" />}
     </div>
   );
 }

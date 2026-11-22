@@ -1,25 +1,12 @@
-import type { AgentApproval, SessionList } from "@trackwall/protocol";
+import type { SessionList } from "@trackwall/protocol";
 import { TrayPanelContent } from "@/views/tray-panel/TrayPanel";
 import type { GalleryState } from "./gallery-state.ts";
-import { LONG_REPO, LONG_TITLE, NO_DAEMON, proposal, sessionList, stateOf, waiting } from "./sample-data.ts";
+import { LONG_REPO, LONG_TITLE, MVNW_APPROVAL, NO_DAEMON, proposal, sessionList, stateOf, waiting } from "./sample-data.ts";
 
 /** The tray panel at its window's size for `list`, or before it arrives, or with a failure. */
 function TrayPanelOf({ list, failure }: { list?: SessionList; failure?: string }) {
   return <TrayPanelContent conn={NO_DAEMON} list={list} failure={failure} onOpen={() => {}} className="h-full" />;
 }
-
-const approval: AgentApproval = {
-  id: "dialog",
-  kind: "approval",
-  title: "Run shell command",
-  detail: ["./mvnw -pl orders-api -am verify -Dsurefire.failIfNoSpecifiedTests=false -Dtest=DiscountRulesTest,CartPricingTest"],
-  question: "Do you want to run this command?",
-  options: [
-    { key: "1", label: "Yes" },
-    { key: "2", label: "Yes, and don't ask again for ./mvnw in this repo" },
-  ],
-  alwaysAllow: "shell(./mvnw)",
-};
 
 const busy: GalleryState = {
   name: "Approvals, proposals and waiting sessions",
@@ -27,7 +14,7 @@ const busy: GalleryState = {
     <TrayPanelOf
       list={sessionList({
         sessions: [
-          waiting(1, 135, { repo: LONG_REPO, state: stateOf("Approval"), dialog: approval }),
+          waiting(1, 135, { repo: LONG_REPO, state: stateOf("Approval"), dialog: MVNW_APPROVAL }),
           waiting(2, 4, {
             state: stateOf("Input"),
             windowTitle: LONG_TITLE,

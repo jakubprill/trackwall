@@ -19,7 +19,7 @@ Learn a feature where you meet it, from a tip under the control it explains, and
 
 ## How it works
 
-Tips explain what a new user meets early: "Own worktree" in the New session form, "Next waiting" at the top of the Sessions list, the evidence card in a task's changes, and the "Ready to close" note of a task whose agent says its work is over. The first time one of them is on screen, its tip shows right under it, in the view rather than over it, so it never covers the prompt or the button you reach for next. When several are on screen, one tip shows, the one a new user meets first. "Got it" puts it away for good, and the next one takes its turn. The book button opens the feature's page in your browser.
+Tips explain what a new user meets early: "Own worktree" in the New session form and "Plan first" under its "More options", "Next waiting" at the top of the Sessions list, "Always allow" in a task's approval on Home, "Verify" in a task's header, the evidence card in a task's changes, and the "Ready to close" note of a task whose agent says its work is over. The first time one of them is on screen, its tip shows right under it, in the view rather than over it, so it never covers the prompt or the button you reach for next. When several are on screen, one tip shows, the one a new user meets first. "Got it" puts it away for good, and the next one takes its turn. The book button opens the feature's page in your browser.
 
 After an update, a "What's new" strip above the views lists the changes of the last versions that are worth a look, newest first. "Show" opens the place a change lives in: a view, a category of Settings or the New session form. For a change with a tip, it shows that tip there too, also when you have put it away. "Release notes" opens the notes of every version, "Hide" folds the list to its first line, and "Dismiss" puts the strip away until an update brings a change you have not seen. A new install shows no strip: everything is new then, and the tips show it as you go.
 
@@ -37,4 +37,4 @@ Which tips you put away, and whether tips are on, are kept per browser profile, 
 - To read the tips again, press "Show the tips again" in Settings › App › "Tips and What's new"; each shows the next time its control is on screen.
 - With tips off, "What's new" does not show either. The release notes on GitHub still list every change, and [App updates](/features/updates) says when a new version is out.
 - "What's new" lists only a few recent changes. After skipping several versions, "Release notes" has the rest.
-- The tray panel shows no tips.
+- The tray panel shows no tips, so you meet the tip of "Always allow" on Home.
