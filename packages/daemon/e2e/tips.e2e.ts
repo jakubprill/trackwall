@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { showSessions, useTrackwall } from "./support/trackwall-ui.ts";
+import { showHome, showSessions, typeInTerminal, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
 /**
  * Tips and What's new (ADR-296) on a computer that used Trackwall before an update: its daemon has a projects folder,
@@ -53,4 +53,41 @@ describe("tips and What's new", () => {
     await tip.waitFor();
     await page.getByRole("region", { name: "What's new" }).waitFor();
   });
+
+  test("Plan first, Verify and Always allow show their tips where a new user meets them, each when the one before is answered", async () => {
+    const page = await trackwall().open(undefined, { tips: true });
+    const tip = (label: string) => page.getByRole("region", { name: `Tip: ${label}` });
+    // Out of the way, so that the task's terminal keeps the rows its approval dialog needs.
+    await page.getByRole("region", { name: "What's new" }).getByRole("button", { name: "Dismiss" }).click();
+    await tip("Own worktree").getByRole("button", { name: "Got it" }).click();
+
+    await page.getByRole("button", { name: /^More options/ }).click();
+    await tip("Plan first").getByText("Read the agent's plan before it changes a file").waitFor();
+    await tip("Plan first").getByRole("button", { name: "Got it" }).click();
+
+    await page.getByRole("textbox", { name: "Prompt for the agent" }).fill("Add a discount to the cart");
+    await page.getByRole("button", { name: "Create task" }).click();
+    await waitForTerminal(page, "--interactive=Add a discount to the cart");
+    await typeInTerminal(page, "go on\r");
+    await waitForTerminal(page, "Do you want to run this command?");
+    // The task waits for its approval, so Next waiting is on screen, and its tip comes before the one of Verify.
+    await tip("Next waiting").getByRole("button", { name: "Got it" }).click();
+    await tip("Verify").getByText("Run the task's tests where its agent works").waitFor();
+    await tip("Verify").getByRole("button", { name: "Got it" }).click();
+
+    await showHome(page);
+    await page.getByRole("list", { name: "Sessions that need you" }).getByRole("button").filter({ hasText: "approval" }).click();
+    const answers = page.getByRole("group", { name: "Answers" });
+    await answers.getByRole("button", { name: "Stop the agent" }).waitFor();
+    if (process.platform === "win32") {
+      // A PowerShell command has no "don't ask again" in Copilot CLI, so a task on Windows offers no Always allow (ADR-249).
+      expect(await answers.getByRole("button", { name: /^Always allow/ }).count()).toBe(0);
+      expect(await tip("Always allow").count()).toBe(0);
+      return;
+    }
+    await answers.getByRole("button", { name: /^Always allow/ }).waitFor();
+    await tip("Always allow").getByText("Every task of this repo runs it without asking").waitFor();
+    await tip("Always allow").getByRole("button", { name: "Got it" }).click();
+    await tip("Always allow").waitFor({ state: "detached" });
+  }, 60_000);
 });

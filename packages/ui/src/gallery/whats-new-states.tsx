@@ -1,11 +1,11 @@
 import { WhatsNewStrip } from "@/components/WhatsNew";
-import { WHATS_NEW, type WhatsNewEntry } from "@/lib/whats-new";
+import { WHATS_NEW, WHATS_NEW_MOST, type WhatsNewEntry } from "@/lib/whats-new";
 import type { GalleryState } from "./gallery-state.ts";
 import { LONG_REPO, NO_DAEMON } from "./sample-data.ts";
 
 const nothing = () => {};
 
-/** Two made-up entries that fill the list to the most it holds: one with a long name, one with no place to show. */
+/** Two made-up entries, one with a long name and one with no place to show, which the real ones fill up to the most the list holds. */
 const MORE: readonly WhatsNewEntry[] = [
   {
     id: "sample-long-name",
@@ -28,7 +28,9 @@ const oneLeft: GalleryState = {
 
 const most: GalleryState = {
   name: "As many changes as it lists",
-  render: () => <WhatsNewStrip conn={NO_DAEMON} entries={[...WHATS_NEW, ...MORE]} onShow={nothing} onDismiss={nothing} />,
+  render: () => (
+    <WhatsNewStrip conn={NO_DAEMON} entries={[...MORE, ...WHATS_NEW].slice(0, WHATS_NEW_MOST)} onShow={nothing} onDismiss={nothing} />
+  ),
 };
 
 export const WHATS_NEW_STATES: readonly GalleryState[] = [thisVersion, oneLeft, most];

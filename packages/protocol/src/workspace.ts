@@ -4,7 +4,7 @@ import { apiEndpoints, Done } from "./api.ts";
 import { WorkingTreeChanges } from "./changes.ts";
 import { PutAside, PutAsideFile, PutAsideId } from "./put-aside.ts";
 import { CloneJob, CloneRequest, HostRepos, RemoteRepoSearch, RepoHosts } from "./repo-hosts.ts";
-import { PullResult, SyncRun } from "./sync.ts";
+import { PullResult, SyncResult, SyncRun } from "./sync.ts";
 import { TaskModel } from "./task-model.ts";
 
 /**
@@ -173,16 +173,37 @@ export const ServerCheckState = z.object({
       /** When the round ended. */
       endedAt: z.iso.datetime(),
       /**
-       * The repos whose server moved the branch, each with the moment before it was asked: a fetch after that moment
-       * (`RepoStatusOk.fetchedAt`) has brought what the server had then.
+       * The repos whose server moved a branch since their last fetch, each with the moment before it was asked: a fetch
+       * after that moment (`RepoStatusOk.fetchedAt`) has brought what the server had then. `remoteBranches` are the
+       * remote-tracking branches the server has moved past, as `origin/main`: the one the checked-out branch tracks
+       * (`RepoStatusOk.upstream`), the main remote's default branch, where a new task starts (`NewTaskBase`, ADR-297), or both.
        */
-      newCommits: z.array(z.object({ repo: RepoId, checkedAt: z.iso.datetime() })),
+      newCommits: z.array(z.object({ repo: RepoId, checkedAt: z.iso.datetime(), remoteBranches: z.array(z.string()).min(1) })),
       /** The repos whose server did not answer (or git could not read the repo); the doctor says why (ADR-195). */
       unreached: z.array(RepoId),
     })
     .nullable(),
 });
 export type ServerCheckState = z.infer<typeof ServerCheckState>;
+
+/**
+ * Where a new task of a repo starts (ADR-297): the repo's default branch, which a task branches from (`Task.base`), against
+ * the remote-tracking branch a sync fast-forwards it to, as of the repo's last fetch. The New task form says when a task
+ * would start from older code than the server's, and offers that one repo's sync.
+ */
+export const NewTaskBase = z.object({
+  /** The default branch, `main`. */
+  branch: z.string(),
+  /** The remote-tracking branch a sync moves it to, `origin/main`. */
+  remoteBranch: z.string(),
+  /** Commits of `remoteBranch` the local branch lacks, as of the last fetch; 0 without a local branch (the task starts from `remoteBranch`). */
+  behind: z.number().int().nonnegative(),
+  /** Commits of the local branch that `remoteBranch` lacks, not pushed yet. */
+  ahead: z.number().int().nonnegative(),
+  /** When the repo last fetched, as `RepoStatusOk.fetchedAt`. */
+  fetchedAt: z.iso.datetime().nullable(),
+});
+export type NewTaskBase = z.infer<typeof NewTaskBase>;
 
 /**
  * A Copilot CLI tool permission pattern (ADR-66), `kind` or `kind(argument)` as `copilot help permissions` describes
@@ -594,6 +615,8 @@ export const workspaceApi = {
   unpushedWork: endpoint("unpushed-work", z.object({}).strict(), UnpushedWork),
   /** The last round of the server check (ADR-295), read from the daemon's memory: asking it starts no git. */
   serverCheck: endpoint("server-check", z.object({}).strict(), ServerCheckState),
+  /** Where a new task of the repo starts, against the server as of the last fetch (ADR-297); `null` with nothing to compare. */
+  newTaskBase: endpoint("new-task-base", RepoRequest, NewTaskBase.nullable()),
   /**
    * Turns the server check on or off (ADR-295); `on: true` removes `serverCheck` from `workspace.yaml`. No MCP tool sets
    * it: it is the user's choice of what Trackwall connects to.
@@ -631,6 +654,11 @@ export const workspaceApi = {
   sync: endpoint("sync", z.object({}).strict(), SyncRun),
   /** The last sync of the current projects folder since the daemon started; `null` when there was none. */
   syncRun: endpoint("sync-run", z.object({}).strict(), SyncRun.nullable()),
+  /**
+   * The sync of one repo, as "Sync all" syncs each (ADR-21), answered when it is done: "Sync main" in the New task form
+   * (ADR-297). No MCP tool does it: an agent does not move the user's branches.
+   */
+  syncRepo: endpoint("sync-repo", RepoRequest, SyncResult),
   /**
    * Pulls one repo from its header (ADR-269): the sync of its default branch, then a fast-forward of the checked-out branch
    * to the branch it tracks, never a merge, rebase or overwrite; answers when both are done. No MCP tool does it: an agent

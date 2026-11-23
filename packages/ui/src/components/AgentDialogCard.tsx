@@ -1,6 +1,7 @@
 import { type AgentDialog, agentsApi, type DialogAnswer } from "@trackwall/protocol";
 import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { PatchLines } from "@/components/PatchLines";
+import { Tip } from "@/components/Tip";
 import { Button } from "@/components/ui/button";
 import { alwaysAllowLabel } from "@/lib/always-allow";
 import { post } from "@/lib/api";
@@ -22,7 +23,7 @@ import { useAction } from "@/lib/use-action";
  * (`takesKeyboard`, in the supervisor panel while the keyboard is in it) takes the keyboard to its first option, unless the
  * user is writing a message; the arrows move between its options and Enter picks one, though not in the first moment, so
  * that an Enter meant for the message just sent does not answer it. In a task, "Always allow" remembers the tool Copilot
- * CLI names for the task's repo and answers "Yes" (ADR-249).
+ * CLI names for the task's repo and answers "Yes" (ADR-249), with its tip under it in a window that has tips (ADR-296).
  */
 /** Marks the buttons of Copilot CLI's options, which the arrows move between. */
 const OPTION = "data-dialog-option";
@@ -117,17 +118,20 @@ export function AgentDialogCard({
               </Button>
             ))}
             {dialog.alwaysAllow !== undefined && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-auto justify-start py-1.5 text-left whitespace-normal"
-                disabled={disabled}
-                title="Runs it now, and from now on in every task of this repo without asking; an MCP tool with any arguments. You can remove it in Settings > Agents."
-                {...{ [OPTION]: "" }}
-                onClick={(event) => pick(() => alwaysAllow.run(), event)}
-              >
-                {alwaysAllowLabel(dialog.alwaysAllow)}
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-auto justify-start py-1.5 text-left whitespace-normal"
+                  disabled={disabled}
+                  title="Runs it now, and from now on in every task of this repo without asking; an MCP tool with any arguments. You can remove it in Settings > Agents."
+                  {...{ [OPTION]: "" }}
+                  onClick={(event) => pick(() => alwaysAllow.run(), event)}
+                >
+                  {alwaysAllowLabel(dialog.alwaysAllow)}
+                </Button>
+                <Tip conn={conn} tip="always-allow" />
+              </>
             )}
             <Button
               size="sm"

@@ -218,7 +218,7 @@ The daemon's comparison, every second, of the set of repos in the projects folde
 _Avoid_: file watcher (the daemon does not use file system notifications), working directory watch (the working directory is not watched)
 
 **Server check** (`ServerCheck`, snapshot `ServerCheckState`, `workspaceApi.serverCheck`, key `serverCheck`; in the UI "new on the server", and *Check for new commits* in Settings > Repo hosts):
-The daemon's question, every 15 minutes, to the server of each repo's checked-out branch: has that branch moved since the repo's last fetch? It asks with `git ls-remote` from outside the repo, with only the user's own sign-in, as the doctor does (ADR-195, ADR-295), and fetches nothing. A repo whose server has such commits reads "new on the server" in All repos and the repo list until a fetch counts them. On without the key; `serverCheck: false` turns it off.
+The daemon's question, every 15 minutes, to the server of each repo: has the branch the checked-out branch tracks, or the default branch, moved since the repo's last fetch? It asks with one `git ls-remote` from outside the repo, with only the user's own sign-in, as the doctor does (ADR-195, ADR-295, ADR-297), fetches nothing, and names the remote-tracking branches the server moved past (`remoteBranches`). A repo whose checked-out branch's server has such commits reads "new on the server" in All repos and the repo list, and one whose default branch has gets a line in the New task form (the new task base), until a fetch counts them. On without the key; `serverCheck: false` turns it off.
 _Avoid_: background fetch, auto-fetch (nothing is fetched), remote watch (the repo watch reads only the repo's own files)
 
 **Changes** (working directory changes, `WorkingTreeChanges`, the `changes` action; the "Changes" tab in the UI):
@@ -272,6 +272,10 @@ A separate git working directory for a task, on the task's branch, in `<task wor
 
 **Base commit** (`Task.base`):
 The commit of the default branch from which the task's branch started. The task changes (`TaskChanges`) are the worktree's working directory against it: the task's commits and uncommitted files together.
+
+**New task base** (`NewTaskBase`, `workspaceApi.newTaskBase`, `new-task-base`; in the UI the line above "Create task" and its "Sync main", `NewTaskBaseNote`):
+Where a new task of a repo starts against the server: the repo's local default branch, which a task branches from, against the remote-tracking branch a sync moves it to, as of the repo's last fetch (ADR-297). The New task form says when it is behind, also when the server check found newer commits since, and "Sync main" syncs that one repo (`sync-repo`).
+_Avoid_: base branch (the branch a task already started from), outdated main
 
 **Task port** (`Task.port`, `TASK_PORT_FIRST`…`TASK_PORT_LAST`, `TASK_PORT_ENV`):
 A port of 41000–41999 that a task holds while it exists, the lowest one no other task holds (ADR-61). Every mise task in the task's worktree gets it in `SERVER_PORT` and `PORT`, so the task's service runs next to the one from the repo root. Reserved only among tasks, not checked against other programs.

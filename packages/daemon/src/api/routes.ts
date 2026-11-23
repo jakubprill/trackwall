@@ -101,6 +101,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.changes, (f, b) => f.workspace.changes(b.repo)),
   route(workspaceApi.unpushedWork, (f) => f.workspace.unpushedWork()),
   route(workspaceApi.serverCheck, (f) => f.serverCheck.state()),
+  route(workspaceApi.newTaskBase, (f, b) => f.workspace.newTaskBase(b.repo)),
   route(workspaceApi.openLink, (f, b) => {
     f.openLink(b.url);
     return null;
@@ -121,6 +122,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.clones, (f) => f.workspace.cloneJobs()),
   route(workspaceApi.sync, (f) => f.workspace.sync()),
   route(workspaceApi.syncRun, (f) => f.workspace.syncRun()),
+  route(workspaceApi.syncRepo, (f, b) => f.workspace.syncRepo(b.repo)),
   route(workspaceApi.pull, (f, b) => f.workspace.pullRepo(b.repo, { putAside: b.putAside })),
   route(workspaceApi.putAsideFiles, (f, b) => f.workspace.putAsideFiles(b.repo)),
   route(workspaceApi.putAsides, (f, b) => f.workspace.putAsides(b.repo)),

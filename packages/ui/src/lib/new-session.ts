@@ -137,6 +137,14 @@ export function formChangeStart(
 }
 
 /**
+ * The repos the form would start a task in, each from its own default branch (ADR-297): the task's repo (`firstPart`, also
+ * before the prompt is typed) and the repos added to make a change; none for a session.
+ */
+export function formTaskRepos(firstPart: string | null, added: readonly ChangePartDraft[]): string[] {
+  return firstPart === null ? [] : changePartsOfForm(firstPart, added).map((part) => part.repo);
+}
+
+/**
  * How many tasks the form would start (ADR-248), for the running tasks warning: one for a task, also before its prompt is
  * typed, one per repo for a change (at least the first while its title is missing), none for a session.
  */

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readSeenTips, readTipsOn, saveSeenTips, saveTipsOn, TIPS, tipToShow } from "../src/lib/tips.ts";
+import { readSeenTips, readTipsOn, saveSeenTips, saveTipsOn, TIP_IDS, TIPS, tipToShow } from "../src/lib/tips.ts";
 import { TipsController, type TipsEnvironment } from "../src/lib/tips-controller.ts";
 
 function memoryStorage(initial: Record<string, string> = {}) {
@@ -31,6 +31,16 @@ describe("which tip shows (ADR-296)", () => {
 
   test("with several on screen, one tip shows at a time, the one a new user meets first", () => {
     expect(tipToShow({ present: new Set(["evidence", "own-worktree"]), seen: new Set(), on: true, asked: null })).toBe("own-worktree");
+  });
+
+  test("the tips take turns in the order a new user meets their controls, from the New session form to a task ready to close", () => {
+    expect(TIP_IDS).toEqual(["own-worktree", "plan-first", "next-waiting", "always-allow", "verify", "evidence", "ready-to-close"]);
+  });
+
+  test("More options of the New session form shows the tip of Plan first before the one of Next waiting beside it", () => {
+    expect(tipToShow({ present: new Set(["next-waiting", "plan-first"]), seen: new Set(["own-worktree"]), on: true, asked: null })).toBe(
+      "plan-first",
+    );
   });
 
   test("a seen tip does not show again, and the next one on screen takes its turn", () => {

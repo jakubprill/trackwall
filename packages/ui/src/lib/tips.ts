@@ -1,4 +1,4 @@
-import type { DocsPage } from "@trackwall/protocol";
+import { type DocsPage, VERIFY_MISE_TASK } from "@trackwall/protocol";
 import { z } from "zod";
 import { knownValue } from "./known-value.ts";
 import { sessionShortcutLabel } from "./session-shortcut.ts";
@@ -34,6 +34,15 @@ export const TIPS = {
       "request are there only for a task. Off, the agent works in the repo's own folder.",
     docs: { page: "tasks", title: "Agent tasks" },
   },
+  "plan-first": {
+    label: "Plan first",
+    title: "Read the agent's plan before it changes a file",
+    text: () =>
+      "The task starts in Copilot CLI's Plan mode: the agent reads the code and answers with a plan, Copilot CLI refuses its file " +
+      "changes, and it asks before every command. Reply in the chat to change the plan; Approve plan lets the agent carry it out. " +
+      "It needs Chat (preview), since Trackwall switches the mode in the conversation.",
+    docs: { page: "tasks", title: "Agent tasks" },
+  },
   "next-waiting": {
     label: "Next waiting",
     title: "One click to whatever waits for you",
@@ -41,6 +50,24 @@ export const TIPS = {
       `It opens the next session or task proposal waiting for you. ${sessionShortcutLabel({ kind: "next-waiting" }, isMac)} does it ` +
       `from any view, also from a terminal, and ${isMac ? "⌃⌥J" : "Win+Alt+J"} from any other app in the desktop app.`,
     docs: { page: "sessions", title: "Copilot CLI sessions" },
+  },
+  "always-allow": {
+    label: "Always allow",
+    title: "Every task of this repo runs it without asking",
+    text: () =>
+      "It answers Yes, and from then on the repo's tasks, also the running ones, run exactly the command or MCP tool Copilot CLI " +
+      "names, so git status is not git push. It is never offered for a command that writes files by path, runs code you give it, " +
+      "reaches the network or pushes. Settings › Agents › Always allowed in tasks lists what you allowed and takes it back.",
+    docs: { page: "approvals", title: "Approvals outside the terminal" },
+  },
+  verify: {
+    label: "Verify",
+    title: "Run the task's tests where its agent works",
+    text: () =>
+      `Verify runs the repo's mise task ${VERIFY_MISE_TASK} in the task's worktree and shows the verdict in its details: passed or ` +
+      "failed, the test counts and the first failed tests. The agent gets the same verdict before it reports, and the task's row " +
+      "says Verify again once the files change after a run.",
+    docs: { page: "tasks", title: "Agent tasks" },
   },
   evidence: {
     label: "Evidence",
