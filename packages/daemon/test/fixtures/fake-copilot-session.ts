@@ -30,6 +30,7 @@ import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
 import {
   BACKGROUND_AGENT_PROMPT,
+  COPILOT_DEFAULT_COLOURS,
   PARALLEL_TOOLS_PROMPT,
   PROMPT_FRAME_LAYOUT,
   PROMPT_PLACEHOLDER,
@@ -40,9 +41,11 @@ import { recordBackgroundAgent, recordModelChange, recordUsage } from "../suppor
 import { pluginHooks } from "../support/plugin-hooks.ts";
 import { serveAcp } from "./fake-copilot-acp.ts";
 
-// `--version` answers as Copilot CLI does (`GitHub Copilot CLI 1.0.103.` and a hint), for the doctor (ADR-101).
+// `--version` answers as Copilot CLI does (`GitHub Copilot CLI 1.0.103.` and a hint), for the doctor (ADR-101): the tested
+// version, or `FAKE_COPILOT_VERSION` for a Copilot CLI Trackwall is not tested with (ADR-274).
 if (process.argv[2] === "--version") {
-  process.stdout.write(`GitHub Copilot CLI ${TESTED_COPILOT_CLI_VERSION}.\nRun 'copilot update' to check for updates.\n`);
+  const version = process.env.FAKE_COPILOT_VERSION || TESTED_COPILOT_CLI_VERSION;
+  process.stdout.write(`GitHub Copilot CLI ${version}.\nRun 'copilot update' to check for updates.\n`);
   process.exit(0);
 }
 
@@ -284,6 +287,8 @@ function begin(): void {
   title(startTitle);
   // Like Copilot CLI: every mouse move reported, in the SGR encoding (`copilot-session.contract.ts`).
   process.stdout.write("\x1b[?1003h\x1b[?1006h");
+  // Like Copilot CLI: its own default background and text colour.
+  process.stdout.write(COPILOT_DEFAULT_COLOURS);
   process.stdout.write(`Welcome to the fake, MCP: ${mcpServers.join(", ")}\r\n`);
   process.stdout.write(`Instructions: ${instructionFiles.join(", ")}\r\n`);
   process.stdout.write(`LSP: ${lspServers.join(", ")}\r\n`);

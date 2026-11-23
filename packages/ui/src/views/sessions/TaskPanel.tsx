@@ -1,5 +1,4 @@
 import {
-  mayHandToSupervisor,
   otherAttempts,
   type PausedTask,
   type RunningMiseTask,
@@ -13,11 +12,11 @@ import { Bot, Box, GitBranch, Layers, Plug, ShieldOff, Trash2 } from "lucide-rea
 import { type ComponentProps, useRef, useState } from "react";
 import { CopilotUsageMark } from "@/components/CopilotUsageMark";
 import { FolderShell } from "@/components/FolderShell";
-import { ModelChangeButton } from "@/components/ModelChange";
 import { SessionNotices } from "@/components/SessionNotices";
 import { SessionScreen } from "@/components/SessionScreen";
 import { TabBar } from "@/components/TabBar";
 import { TaskStateLabel } from "@/components/TaskStateLabel";
+import { Tip } from "@/components/Tip";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
@@ -29,21 +28,16 @@ import { useTaskReview } from "@/lib/use-task-review";
 import { JavaNavigationMark } from "./JavaNavigationMark.tsx";
 import { PausedNotice } from "./PausedNotice.tsx";
 import { PlanApprovalNotice } from "./PlanApprovalNotice.tsx";
+import { ReadyToCloseNotice } from "./ReadyToCloseNotice.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
-import {
-  CopyIncludedFilesButton,
-  HandToSupervisorButton,
-  PauseButton,
-  ResumeButton,
-  StopButton,
-  TaskEditorButton,
-} from "./TaskButtons.tsx";
+import { ResumeButton, StopButton, TaskEditorButton } from "./TaskButtons.tsx";
 import { TaskChangesView } from "./TaskChangesView.tsx";
 import { TaskComparison } from "./TaskComparison.tsx";
 import { scrollToSection, TaskDetails } from "./TaskDetails.tsx";
 import { TaskImpact } from "./TaskImpact.tsx";
 import { TaskMcpCalls } from "./TaskMcpCalls.tsx";
 import { TaskModelChange } from "./TaskModelChange.tsx";
+import { TaskMoreMenu } from "./TaskMoreMenu.tsx";
 import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 import { TaskRounds } from "./TaskRounds.tsx";
@@ -53,7 +47,8 @@ import { TokenBudgetMark } from "./TokenBudgetMark.tsx";
 /**
  * The selected task (ADR-31): title or prompt, branch, task port, its model when it has one (ADR-98), a mark when it runs without approvals (ADR-105), how its Java language server is doing (ADR-124) and session state in the header, the session terminal (or its conversation, for a task in the conversation view, ADR-137)
  * and the worktree changes in tabs, its rounds with "Undo round" in a third (ADR-168), and the repos its change reaches in a fourth (ADR-147). A task from a proposal says who proposed it. A task without a running session can
- * be resumed or ended; the worktree always opens in VS Code, and the Verify button runs the task's tests (ADR-64).
+ * be resumed or ended; the worktree always opens in VS Code, and the Verify button runs the task's tests (ADR-64). What is
+ * pressed less often is in the "More" menu (`TaskMoreMenu`, ADR-272).
  * What the task has to say above its session (`TaskDetails`: warnings, messages, summary, verification, merge
  * request, mise tasks) is folded into one strip of notices that "Details" unfolds (ADR-91), so the session keeps the
  * panel's height. The review comments written in the "Changes" tab live here, so that switching tabs keeps them (ADR-62).
@@ -121,23 +116,24 @@ export function TaskPanel({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <VerifyButton state={details.verification} disabled={confirmingRemoval} />
           <TaskEditorButton conn={conn} task={task} label="VS Code" />
-          <CopyIncludedFilesButton conn={conn} task={task} onCopied={onChanged} iconOnly />
-          <ModelChangeButton
-            open={changingModel}
-            onToggle={() => setChangingModel(!changingModel)}
-            disabled={removing}
-            title={liveSession ? "Restart the session on another model" : "Resume the task on another model"}
-            iconOnly
+          <TaskMoreMenu
+            conn={conn}
+            task={task}
+            removing={removing}
+            confirmingRemoval={confirmingRemoval}
+            modelChange={{
+              open: changingModel,
+              title: liveSession ? "Restart the session on another model" : "Resume the task on another model",
+              onToggle: () => setChangingModel(!changingModel),
+            }}
+            onChanged={onChanged}
+            onPaused={paused}
           />
-          {mayHandToSupervisor(task) && (
-            <HandToSupervisorButton conn={conn} task={task} disabled={confirmingRemoval} onHanded={onChanged} />
-          )}
           <SessionButtons
             conn={conn}
             task={task}
             liveSession={liveSession}
             removing={removing}
-            onPaused={paused}
             onResumed={() => {
               setTab("session");
               onChanged();
@@ -147,6 +143,7 @@ export function TaskPanel({
           />
         </div>
       </header>
+      <Tip conn={conn} tip="verify" className="mx-4 my-2" />
       <SessionEnvironment environment={session?.environment} />
       <PausedNotice task={task} stopped={stopped?.task === task.id ? stopped.what : undefined} />
       {changingModel && (
@@ -165,6 +162,7 @@ export function TaskPanel({
       )}
       <SessionNotices conn={conn} session={session} onChanged={onChanged} />
       <PlanApprovalNotice conn={conn} task={task} session={session} onApproved={onChanged} />
+      <ReadyToCloseNotice conn={conn} task={task} session={session} onClosed={onRemoved} onKept={onChanged} />
       {confirmingRemoval && <TaskRemoval conn={conn} task={task} onRemoved={onRemoved} onCancel={() => setRemoving(false)} />}
       <TaskNoticeStrip
         notices={details.notices}
@@ -262,20 +260,12 @@ function taskSubtitle(task: Task, sessions: readonly Session[]): string {
   return task.proposedBy ? `${name} · ${proposerLabel(task.proposedBy, sessions)}` : name;
 }
 
-/**
- * What the task runs with beyond the defaults: its model (ADR-98), running without approvals (ADR-105), its commands in
- * Copilot CLI's sandbox (ADR-181), and its place
- * in a change (ADR-171), whose parts the Sessions list shows in their merge order.
- */
-/**
- * Pause while the task is not paused (ADR-253), then Stop for its running session, or Resume and End task without one.
- */
+/** Stop for the task's running session, or Resume and End task without one. */
 function SessionButtons({
   conn,
   task,
   liveSession,
   removing,
-  onPaused,
   onResumed,
   onStopped,
   onEnd,
@@ -284,28 +274,27 @@ function SessionButtons({
   task: Task;
   liveSession: Session | undefined;
   removing: boolean;
-  onPaused: (paused: PausedTask) => void;
   onResumed: () => void;
   onStopped: () => void;
   onEnd: () => void;
 }) {
-  return (
+  return liveSession ? (
+    <StopButton conn={conn} session={liveSession} onStopped={onStopped} />
+  ) : (
     <>
-      {task.paused === null && <PauseButton conn={conn} task={task} disabled={removing} onPaused={onPaused} iconOnly />}
-      {liveSession ? (
-        <StopButton conn={conn} session={liveSession} onStopped={onStopped} />
-      ) : (
-        <>
-          <ResumeButton conn={conn} task={task} disabled={removing} onResumed={onResumed} />
-          <Button variant="outline" size="sm" onClick={onEnd} disabled={removing}>
-            <Trash2 /> End task
-          </Button>
-        </>
-      )}
+      <ResumeButton conn={conn} task={task} disabled={removing} onResumed={onResumed} />
+      <Button variant="outline" size="sm" onClick={onEnd} disabled={removing}>
+        <Trash2 /> End task
+      </Button>
     </>
   );
 }
 
+/**
+ * What the task runs with beyond the defaults: its model (ADR-98), running without approvals (ADR-105), its commands in
+ * Copilot CLI's sandbox (ADR-181), and its place
+ * in a change (ADR-171), whose parts the Sessions list shows in their merge order.
+ */
 function TaskMarks({ task }: { task: Task }) {
   return (
     <>

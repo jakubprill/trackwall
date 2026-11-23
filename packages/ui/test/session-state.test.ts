@@ -13,6 +13,7 @@ import {
   agentsInTurn,
   closeCutsOffTurn,
   inTurn,
+  repoSessionRepo,
   sessionPlace,
   sessionStateLabel,
   taskStateLabel,
@@ -248,22 +249,29 @@ describe("a task's state (ADR-253)", () => {
   const pause = { at: "2026-11-13T18:00:00Z", service: null };
 
   test("a paused task reads paused, not stopped, although its session was stopped by the pause", () => {
-    expect(taskStateLabel({ paused: pause, inReview: false }, session("a", change("Working"), exited(null, true)))).toEqual({
+    expect(
+      taskStateLabel({ paused: pause, inReview: false, readyToClose: false }, session("a", change("Working"), exited(null, true))),
+    ).toEqual({
       label: "Paused",
     });
   });
 
   test("a paused task reads paused also without a session, as after a daemon restart", () => {
-    expect(taskStateLabel({ paused: pause, inReview: false }, undefined)).toEqual({ label: "Paused" });
+    expect(taskStateLabel({ paused: pause, inReview: false, readyToClose: false }, undefined)).toEqual({ label: "Paused" });
   });
 
   test("a task that is not paused reads its session's state, or no session", () => {
-    expect(taskStateLabel({ paused: null, inReview: false }, session("a", change("Working")))).toEqual({ tone: "ok", label: "Working" });
-    expect(taskStateLabel({ paused: null, inReview: false }, session("a", null, exited(null, true)))).toEqual({ label: "Stopped" });
-    expect(taskStateLabel({ paused: null, inReview: false }, undefined)).toEqual({ label: "No session" });
+    expect(taskStateLabel({ paused: null, inReview: false, readyToClose: false }, session("a", change("Working")))).toEqual({
+      tone: "ok",
+      label: "Working",
+    });
+    expect(taskStateLabel({ paused: null, inReview: false, readyToClose: false }, session("a", null, exited(null, true)))).toEqual({
+      label: "Stopped",
+    });
+    expect(taskStateLabel({ paused: null, inReview: false, readyToClose: false }, undefined)).toEqual({ label: "No session" });
   });
   test("a task handed over for review reads Ready for review while its agent is idle, ended or gone (ADR-261)", () => {
-    const handedOver = { paused: null, inReview: true };
+    const handedOver = { paused: null, inReview: true, readyToClose: false };
     const ready = { tone: "review", label: "Ready for review" } as const;
     expect(taskStateLabel(handedOver, session("a", change("Input")))).toEqual(ready);
     expect(taskStateLabel(handedOver, session("a", change("Done"), exited(0)))).toEqual(ready);
@@ -272,13 +280,37 @@ describe("a task's state (ADR-253)", () => {
   });
 
   test("a task handed over for review that works again, needs you or failed says that instead (ADR-261)", () => {
-    const handedOver = { paused: null, inReview: true };
+    const handedOver = { paused: null, inReview: true, readyToClose: false };
     expect(taskStateLabel(handedOver, session("a", change("Working", "low")))).toEqual({ tone: "ok", label: "Working", guess: true });
     expect(taskStateLabel(handedOver, waiting("a", change("Approval")))).toEqual({ tone: "warning", label: "Needs you: approval" });
     expect(taskStateLabel(handedOver, session("a", change("Error"), exited(1)))).toEqual({ tone: "error", label: "Error" });
   });
 
+  test("a task whose agent said its work is over reads Ready to close while it is idle, ended or gone, and its session's state once it works again (ADR-282)", () => {
+    const over = { paused: null, inReview: true, readyToClose: true };
+    const toClose = { tone: "review", label: "Ready to close" } as const;
+    expect(taskStateLabel(over, session("a", change("Input")))).toEqual(toClose);
+    expect(taskStateLabel(over, session("a", change("Input"), exited(null, true)))).toEqual(toClose);
+    expect(taskStateLabel(over, undefined)).toEqual(toClose);
+    expect(taskStateLabel(over, session("a", change("Working")))).toEqual({ tone: "ok", label: "Working" });
+    expect(taskStateLabel({ ...over, paused: pause }, undefined)).toEqual({ label: "Paused" });
+  });
+
   test("a paused task reads Paused even when it was handed over for review", () => {
-    expect(taskStateLabel({ paused: pause, inReview: true }, undefined)).toEqual({ label: "Paused" });
+    expect(taskStateLabel({ paused: pause, inReview: true, readyToClose: false }, undefined)).toEqual({ label: "Paused" });
+  });
+});
+
+describe("the repo of a repo session, which its VS Code button opens", () => {
+  test("a session in a repo's root without its own worktree works in that repo", () => {
+    expect(repoSessionRepo({ repo: "shop", task: null })).toBe("shop");
+  });
+
+  test("a task's session has none, because the task's own button opens its worktree", () => {
+    expect(repoSessionRepo({ repo: "shop", task: "task-1" })).toBeNull();
+  });
+
+  test("the supervisor and a free session in the projects folder have none", () => {
+    expect(repoSessionRepo({ repo: null, task: null })).toBeNull();
   });
 });

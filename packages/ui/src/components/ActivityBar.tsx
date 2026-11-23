@@ -9,8 +9,11 @@ export type ActivityView<Id extends string> = {
   label: string;
   icon: LucideIcon;
   shortcut: ViewShortcut;
-  /** Work views are at the top of the bar, and settings and the app state at the bottom edge, as in VS Code. */
-  placement: "top" | "bottom";
+  /**
+   * Work views are at the top of the bar, and settings and the app state at the bottom edge, as in VS Code. A view the
+   * user keeps off the bar (Home, ADR-294) has no icon, and its shortcut still opens it.
+   */
+  placement: "top" | "bottom" | "none";
 };
 
 /**
@@ -29,12 +32,12 @@ export function ActivityBar<Id extends string>({
   onSelect: (id: Id) => void;
   /** Views in new windows (ADR-49): the Ctrl+Shift shortcuts and the icon's context menu; absent outside the shell. */
   newWindow?: { open: (id: Id) => void; showMenu: (id: Id) => void };
-  /** The number at a view's icon, for example sessions waiting for you; zero and none show nothing. */
+  /** The number at a view's icon of what needs the user there, such as sessions waiting for you; zero and none show nothing. */
   badges?: Partial<Record<Id, number>>;
 }) {
   useViewShortcuts(views, active, onSelect, newWindow?.open);
 
-  const group = (placement: ActivityView<Id>["placement"]) =>
+  const group = (placement: "top" | "bottom") =>
     views
       .filter((v) => v.placement === placement)
       .map((v) => (
@@ -93,7 +96,7 @@ function ActivityButton<Id extends string>({
     <li>
       <button
         type="button"
-        aria-label={count === undefined ? view.label : `${view.label} (waiting: ${count})`}
+        aria-label={count === undefined ? view.label : `${view.label} (needs you: ${count})`}
         aria-current={active ? "page" : undefined}
         aria-keyshortcuts={ariaShortcut(view.shortcut, IS_MAC)}
         onClick={onSelect}

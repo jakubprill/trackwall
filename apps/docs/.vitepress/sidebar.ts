@@ -28,6 +28,8 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
       { text: "mise tasks", link: "/features/mise-tasks" },
       { text: "Shell", link: "/features/shell" },
       { text: "Local config backup", link: "/features/local-config" },
+      { text: "Container work backup", link: "/features/work-backup" },
+      { text: "Container health", link: "/features/container-health" },
       { text: "Environment from mise", link: "/features/mise-environment" },
       { text: "Services", link: "/features/services" },
       { text: "Batch command", link: "/features/batch-command" },
@@ -64,6 +66,7 @@ export const FEATURE_GROUPS: FeatureGroup[] = [
     text: "Desktop",
     items: [
       { text: "Get started", link: "/features/get-started" },
+      { text: "Tips and What's new", link: "/features/tips" },
       { text: "Home dashboard", link: "/features/home" },
       { text: "Navigation and windows", link: "/features/navigation-and-windows" },
       { text: "trackwall:// links", link: "/features/links" },
@@ -88,6 +91,7 @@ export const SIDEBAR: DefaultTheme.SidebarItem[] = [
       { text: "Install", link: "/guide/install" },
       { text: "Connect Copilot CLI", link: "/guide/connect-copilot-cli" },
       { text: "Run in a dev container", link: "/guide/dev-container" },
+      { text: "Troubleshooting", link: "/guide/troubleshooting" },
     ],
   },
   {

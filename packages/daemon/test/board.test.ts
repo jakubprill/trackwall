@@ -215,6 +215,21 @@ describe("the board (ADR-133)", () => {
     }
   });
 
+  test("closing the last task of an item makes only an item in review done; any other column stays (ADR-282)", async () => {
+    const { board: b } = board();
+    const item = await b.create({ ...NEW, kind: "item", title: "Fix README typo", column: "review" }, USER);
+
+    expect((await b.closeWithTasks(item.id))?.column).toBe("done");
+    for (const column of ["ideas", "ready", "in_progress", "dropped"] as const) {
+      await b.update(item.id, { column });
+      expect(await b.closeWithTasks(item.id)).toBeNull();
+      expect((await b.item(item.id)).column).toBe(column);
+    }
+    const project = await b.create({ ...NEW, kind: "project", title: "Checkout", column: "review" }, USER);
+    expect(await b.closeWithTasks(project.id)).toBeNull();
+    expect(await b.closeWithTasks("5b0c6a7e-0000-4000-8000-0000000000ff")).toBeNull();
+  });
+
   test("a read beside the daemon's own writes in the background still finds every item (ADR-213)", async () => {
     const { board: b } = board();
     const items = [];

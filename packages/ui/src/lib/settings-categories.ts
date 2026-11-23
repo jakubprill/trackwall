@@ -17,16 +17,18 @@ export const SETTINGS_CATEGORIES = [
   {
     id: "workspace",
     label: "Workspace",
-    description: "Where your repos and task worktrees live, which git reads them, and the backup of their local config.",
-    sections: ["projects-folder", "worktrees-dir", "git-program", "local-config-store"],
+    description:
+      "Where your repos and task worktrees live, which git reads them, and the backups of their local config and of a container's work.",
+    sections: ["projects-folder", "worktrees-dir", "git-program", "workspace-store", "work-backup"],
     wide: false,
     group: "settings",
   },
   {
     id: "repo-hosts",
     label: "Repo hosts",
-    description: "The GitLab and GitHub hosts the Repos view searches and clones from.",
-    sections: ["repo-hosts"],
+    description:
+      "The GitLab and GitHub hosts the Repos view searches and clones from, and how Trackwall asks your repos' servers for new commits.",
+    sections: ["repo-hosts", "server-check"],
     wide: false,
     group: "settings",
   },
@@ -62,7 +64,8 @@ export const SETTINGS_CATEGORIES = [
       "browser-notifications",
       "vscode-extension",
       "theme",
-      "home-scene",
+      "home",
+      "tips",
     ],
     wide: false,
     group: "settings",
@@ -89,7 +92,7 @@ export const SETTINGS_CATEGORIES = [
     id: "diagnostics",
     label: "Diagnostics",
     description: "Where to look when something does not work.",
-    sections: ["doctor", "daemon", "trackwall-errors"],
+    sections: ["doctor", "container-health", "daemon", "trackwall-errors"],
     wide: false,
     group: "reports",
   },
@@ -104,11 +107,26 @@ export type SettingsGroup = (typeof SETTINGS_CATEGORIES)[number]["group"];
 export const SETTINGS_GROUP_LABELS: Record<SettingsGroup, string | null> = { start: null, settings: "Settings", reports: "Reports" };
 
 /**
- * The category Settings opens on: "Get started" until a session exists, which shows the setup is behind the user, and
- * from then on the folders, the settings changed most often.
+ * The category Settings opens on: "Diagnostics" while the container's health warns, since the number on Settings' icon
+ * counts those warnings (ADR-294); else "Get started" until a session exists, which shows the setup is behind the user,
+ * and also later while the doctor's last run left a step open (ADR-268); otherwise the folders, the settings changed
+ * most often.
  */
-export function firstSettingsCategory(sessionCount: number | undefined): SettingsCategory {
-  return sessionCount !== undefined && sessionCount > 0 ? "workspace" : "get-started";
+export function firstSettingsCategory({
+  sessions,
+  openSteps,
+  containerWarnings,
+}: {
+  /** How many sessions the list holds; `undefined` until the daemon answers. */
+  sessions: number | undefined;
+  /** The steps the doctor's last run left open; `null` before it ever ran. */
+  openSteps: number | null;
+  /** The warnings of the container's health (`containerAttentionCount`). */
+  containerWarnings: number;
+}): SettingsCategory {
+  if (containerWarnings > 0) return "diagnostics";
+  const started = sessions !== undefined && sessions > 0;
+  return started && (openSteps ?? 0) === 0 ? "workspace" : "get-started";
 }
 
 export function settingsCategory(id: SettingsCategory): (typeof SETTINGS_CATEGORIES)[number] {

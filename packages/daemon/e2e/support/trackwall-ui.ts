@@ -7,6 +7,7 @@ import { ONE_REPO, type SessionApiOptions, startSessionApi } from "../../test/su
 import { onCspViolation } from "./csp-violations.ts";
 import { openDesktopWindow } from "./desktop-window.ts";
 import { UI_DIR } from "./ui-dir.ts";
+import { withoutTips } from "./without-tips.ts";
 
 const VIEWPORT = { width: 1600, height: 1000 };
 /** A small screen: 1920×1080 at 150 % scaling, the window maximised, without the taskbar and the window's title bar. */
@@ -57,12 +58,17 @@ async function startTrackwall(options: Omit<SessionApiOptions, "uiDir"> = ONE_RE
      */
     openWithoutToken: async () => {
       const context = await browser.newContext({ viewport: VIEWPORT, colorScheme: "dark" });
+      await withoutTips(context);
       const page = await watched(context.newPage());
       await page.goto(origin);
       return page;
     },
-    /** The main window as the Tauri shell opens it, on Home. */
-    open: async (viewport = VIEWPORT) => openMainWindow(await watched(browser.newPage({ viewport, colorScheme: "dark" })), pageAddress()),
+    /** The main window as the Tauri shell opens it, on Sessions (ADR-288); with tips and What's new only when the test asks. */
+    open: async (viewport = VIEWPORT, { tips = false } = {}) => {
+      const page = await watched(browser.newPage({ viewport, colorScheme: "dark" }));
+      if (!tips) await withoutTips(page.context());
+      return openMainWindow(page, pageAddress());
+    },
     /** The main window as the Tauri shell shows it: under the window's origin and CSP, connected through the shell. */
     openDesktopWindow: (failingFiles?: RegExp) => openDesktopWindow(browser, { baseUrl: origin, token }, VIEWPORT, failingFiles),
     /** The tray panel (ADR-50): the same UI under `#tray-panel`, at the size of its window. */
@@ -116,13 +122,15 @@ async function signIn(page: Page, address: string): Promise<void> {
 }
 
 /**
- * The main window. The supervisor's panel is folded, so a session terminal is wider than the screen the fake Copilot
- * CLI draws: the fake does not redraw when the terminal shrinks, as Copilot CLI does, and its approval dialog wrapped
- * over two rows is no dialog the daemon can read.
+ * The main window, on Sessions as every start opens it (ADR-288), with the supervisor's panel folded as a new window
+ * opens it (ADR-286), so a session terminal is wider than the screen the fake Copilot CLI draws: the fake does not
+ * redraw when the terminal shrinks, as Copilot CLI does, and its approval dialog wrapped over two rows is no dialog the
+ * daemon can read.
  */
 async function openMainWindow(page: Page, address: string): Promise<Page> {
   await signIn(page, address);
-  await page.getByRole("button", { name: "Fold the supervisor panel" }).click();
+  await viewButton(page, "Sessions").and(page.locator('[aria-current="page"]')).waitFor();
+  await page.getByRole("button", { name: /^Pin the supervisor panel open/ }).waitFor();
   return page;
 }
 
@@ -136,12 +144,31 @@ async function openTrayPanel(page: Page, origin: string, address: string): Promi
   return page;
 }
 
-/** Opens the Sessions view from the view bar, as the user clicks it (its label carries the waiting count). */
+/** A view's icon on the view bar, by the view's name: its label also carries a count of what needs the user there. */
+function viewButton(page: Page, view: "Sessions" | "Home" | "Settings"): Locator {
+  return page.getByRole("navigation", { name: "Views" }).getByRole("button", { name: new RegExp(`^${view}`) });
+}
+
+/** Opens the Sessions view from the view bar, as the user clicks it. */
 export async function showSessions(page: Page): Promise<void> {
-  await page
-    .getByRole("navigation", { name: "Views" })
-    .getByRole("button", { name: /^Sessions/ })
-    .click();
+  await viewButton(page, "Sessions").click();
+}
+
+/** Opens the Home view with its shortcut, Ctrl+6 (⌘6), as Home has no icon on the view bar until the user shows it (ADR-294). */
+export async function showHome(page: Page): Promise<void> {
+  // The shortcut listens from the window's first render on, which draws the view bar.
+  await viewButton(page, "Sessions").waitFor();
+  await page.keyboard.press("ControlOrMeta+6");
+  await page.getByRole("heading", { name: /^Needs you/ }).waitFor();
+}
+
+/** Shows Home's icon on the view bar, as the user does in Settings › App › Home (ADR-294); the bar follows at once. */
+export async function showHomeOnBar(page: Page): Promise<void> {
+  await viewButton(page, "Settings").click();
+  await page.getByRole("navigation", { name: "Settings categories" }).getByRole("button", { name: /^App/ }).click();
+  await page.getByRole("button", { name: /^Home/, expanded: false }).click();
+  await page.getByRole("radio", { name: /^Shown/ }).check();
+  await viewButton(page, "Home").waitFor();
 }
 
 /** The list on the left of the Sessions view. */

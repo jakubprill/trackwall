@@ -1,6 +1,7 @@
 ---
 title: Routines
 description: Save a task you repeat, such as updating an API client and checking it compiles, and run it again with one click.
+status: stable
 ---
 
 # Routines
@@ -18,7 +19,7 @@ Save a task you repeat, such as updating an API client and checking it compiles,
 
 Ask an agent in any session or the [supervisor](/features/supervisor) to prepare a routine, and describe what you want, for example "prepare a routine that downloads the new OpenAPI spec of the orders service, regenerates our client, compiles the frontend, and tells me what changed and whether it is safe to merge". The agent looks at the repo and the tools Trackwall gives it. Fixed steps, such as the download and the compile, it suggests as a [mise task](/features/mise-tasks), so every run does exactly the same; the routine's prompt keeps only what needs judgement. Then it saves the routine.
 
-The routine appears under "Routines" below the "New task" form, with its prompt open and "needs your approval". Read it, then press "Approve this version". From then on "Run" starts a task with the routine's prompt, repo, model and approvals mode. The task's agent ends with a summary: what happened, what changed, and its recommendation, for example a merge request or what a developer has to look at. You see it in the task and in [While you were away](/features/while-you-were-away).
+The routine appears under "Routines" below the "New task" form, a section that shows from your first routine on, with its prompt open and "needs your approval". Read it, then press "Approve this version". From then on "Run" starts a task with the routine's prompt, repo, model and approvals mode. The task's agent ends with a summary: what happened, what changed, and its recommendation, for example a merge request or what a developer has to look at. You see it in the task and in [While you were away](/features/while-you-were-away).
 
 When the routine changes, whether an agent saved a new version or someone edited its file, it waits for your approval again and shows the new prompt. Trackwall also refuses to approve or run a version other than the one on your screen.
 

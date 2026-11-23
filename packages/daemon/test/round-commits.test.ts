@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-const vcs = new Vcs(systemTempFolder);
+const vcs = new Vcs(systemTempFolder, tmpdir());
 const head = (dir: string) => gitIn(dir, "rev-parse", "HEAD").trim();
 /** Subject and author of each commit, newest first. */
 const history = (dir: string, range: string) =>

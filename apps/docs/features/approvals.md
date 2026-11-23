@@ -1,6 +1,7 @@
 ---
 title: Approvals outside the terminal
 description: Approve or stop an agent's command from the tray panel or the Home dashboard, and let safe commands through without asking at all.
+status: stable
 ---
 
 # Approvals outside the terminal
@@ -63,7 +64,7 @@ sandbox:
 - When the agent runs several commands at once, Copilot CLI asks about them one after another. The session keeps "Needs you: approval" until you have answered all of them, and the panel shows the next request as soon as the terminal does, never the one you just answered.
 - If you move the selection in the terminal to "No, and tell Copilot what to do differently", the buttons disappear until the agent asks again, so a click cannot type into the text you are writing there.
 - Answering from outside the terminal is for approvals only. The option "No, and tell Copilot what to do differently" needs text, so it stays in the terminal.
-- Trackwall reads requests in the layout of Copilot CLI 1.0.103. A request it cannot read is still in the terminal and still makes the session "Needs you: approval", it only has no buttons.
+- Trackwall reads requests in the layout of the Copilot CLI version it is tested with, and checks it against the newest Copilot CLI every night; the doctor warns when yours is older. A request it cannot read is still in the terminal and still makes the session "Needs you: approval", it only has no buttons.
 - A request taller than the session's terminal, such as the arguments of an MCP tool on a small screen, loses its top in the terminal. Trackwall still shows its buttons, with Copilot CLI's short description ("Use MCP tool: …") as the heading and only the part of the request the terminal shows. A newer Copilot CLI (from 1.0.112) scrolls such a request inside its box instead and, in a very short terminal, shows only the option that is selected: Trackwall then offers that option, usually "Yes", and the beginning of the request; for the rest, open the terminal.
 - Agents connected to the [MCP server](/features/mcp) never see these requests and cannot answer them.
 - The sandbox needs your system's isolation: built into macOS and Windows, and the `bubblewrap` package on Linux (with `slirp4netns`, `iproute2` and `iptables`). Where it cannot run, or cannot make its namespaces, Trackwall refuses to start a task that should run in it and says why; the [doctor](/features/doctor) shows the same. Choose "No task" in "Settings > Agents > Sandbox" to start such tasks without it.

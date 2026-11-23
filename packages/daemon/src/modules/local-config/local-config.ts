@@ -1,26 +1,27 @@
-import { randomUUID } from "node:crypto";
-import { lstat, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
   type Commit,
   LOCAL_CONFIG_FILES,
   type LocalConfigFileName,
   type LocalConfigFileState,
-  type LocalConfigPush,
-  type LocalConfigStore,
   MAX_LOCAL_CONFIG_BYTES,
   type RepoLocalConfig,
+  type WorkspaceStore,
+  type WorkspaceStorePush,
   withoutUserInfo,
 } from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { fileKey } from "../../infra/file-key.ts";
-import { localConfigStoreDir } from "../../infra/old-trackwall-folders.ts";
+import { workspaceStoreDir } from "../../infra/old-trackwall-folders.ts";
 import { readRegularFile } from "../../infra/regular-file.ts";
 import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
+import { removeStoreCopy, writeStoreCopy } from "./store-copies.ts";
+import { moveToReposFolder, storePath } from "./store-layout.ts";
 
 /**
  * The `local-config` module (§4.13, ADR-86): the files a repo keeps outside git on purpose (`LOCAL_CONFIG_FILES`), backed
- * up into the local config store, `.trackwall/local` in the projects folder (ADR-125), as `<repo folder>/<file>`. The store is a git
+ * up into the workspace store, `.trackwall/local` in the projects folder (ADR-125), as `repos/<repo folder>/<file>` (ADR-298). The store is a git
  * repo the daemon commits to and, when the user allowed its remote (ADR-127), pushes, so every version is in its history and a new computer
  * clones it. The store's last commit is the backup: every few seconds the daemon compares each repo's files by `stat`,
  * reads only the changed ones and commits those whose content differs from the last commit's. The repo's file wins: a
@@ -52,7 +53,13 @@ interface LocalConfigVcs {
   ignoredPaths(dir: string, paths: readonly string[]): Promise<Set<string>>;
   excludeLocally(dir: string, paths: readonly string[]): Promise<void>;
   ensureBackupRepo(dir: string): Promise<void>;
-  commitBackups(dir: string, files: readonly { path: string; content: Buffer }[], message: string): Promise<boolean>;
+  commitBackups(
+    dir: string,
+    files: readonly { path: string; content: Buffer }[],
+    removed: readonly string[],
+    message: string,
+  ): Promise<boolean>;
+  commitFiles(dir: string, commit: string, maxBytes: number): Promise<{ files: { path: string }[]; truncated: boolean }>;
   storeHead(dir: string): Promise<string | null>;
   readFiles(dir: string, commit: string, paths: readonly string[], maxBytes: number): Promise<Map<string, Buffer>>;
   backupRemote(dir: string): Promise<{ url: string; problem: string | null } | null>;
@@ -84,11 +91,13 @@ export class LocalConfig {
   readonly #seen = new Map<string, string | null>();
   /** The store and its last commit the comparisons in `#seen` were made against. */
   #compared: { store: string; head: string | null } | undefined;
+  /** The store and its last commit known to be in the current layout (`store-layout.ts`). */
+  #laidOut: { store: string; head: string } | undefined;
   #timer: NodeJS.Timeout | undefined;
   /** A slow drive must not stack comparisons: the next one starts only after the previous one ended. */
   #checking: Promise<void> | undefined;
   #problem: string | null = null;
-  #push: LocalConfigPush = { kind: "none" };
+  #push: WorkspaceStorePush = { kind: "none" };
   /**
    * The store commit and the address of the last push (or of a pass without an address to push to); `undefined` at the
    * start, since the last run may have ended before its push.
@@ -128,7 +137,7 @@ export class LocalConfig {
     await this.#pushing;
   }
 
-  async store(): Promise<LocalConfigStore> {
+  async store(): Promise<WorkspaceStore> {
     const dir = await this.#storeDir();
     const base = { push: this.#push, problem: this.#problem };
     const allowed = this.#allowedRemote();
@@ -152,7 +161,7 @@ export class LocalConfig {
    * Pushes the store to its remote from now on (ADR-127), the address the user saw as `shown`; a remote that changed since,
    * or one the store cannot be pushed to, is refused. The next backup pass pushes.
    */
-  async allowRemote(shown: string): Promise<LocalConfigStore> {
+  async allowRemote(shown: string): Promise<WorkspaceStore> {
     const dir = await this.#storeDir();
     const remote = dir === null ? null : await this.#deps.vcs.backupRemote(dir);
     if (remote === null || withoutUserInfo(remote.url) !== shown)
@@ -163,7 +172,7 @@ export class LocalConfig {
   }
 
   /** Pushes the store nowhere from now on; the backups stay on this computer (ADR-127). */
-  stopPushing(): Promise<LocalConfigStore> {
+  stopPushing(): Promise<WorkspaceStore> {
     this.#deps.repos.setLocalConfigRemote(null);
     return this.store();
   }
@@ -223,7 +232,7 @@ export class LocalConfig {
   async restore(id: string): Promise<RepoLocalConfig> {
     const dir = await this.#deps.repos.repoPath(id);
     if ((await this.#restoreInto(id, dir)) === null)
-      throw new DomainError("bad_request", `${id}: the local config store has nothing this repo lacks`);
+      throw new DomainError("bad_request", `${id}: the workspace store has nothing this repo lacks`);
     return this.repo(id);
   }
 
@@ -286,17 +295,17 @@ export class LocalConfig {
   /** A problem is logged once, not every few seconds, and shown with the store until a backup has none. */
   #setProblems(problems: readonly string[]): void {
     const message = problems.length === 0 ? null : problems.join("; ");
-    if (message !== null && message !== this.#problem) this.#deps.log(`local config backup: ${message}`);
+    if (message !== null && message !== this.#problem) this.#deps.log(`workspace store backup: ${message}`);
     this.#problem = message;
   }
 
   async #backUp(): Promise<void> {
     const store = await this.#storeDir();
     if (store === null) return;
-    const head = await this.#deps.vcs.storeHead(store);
+    const problems: string[] = [];
+    const head = await this.#layOut(store, await this.#deps.vcs.storeHead(store), problems);
     if (this.#compared?.store !== store || this.#compared.head !== head) this.#seen.clear();
     this.#compared = { store, head };
-    const problems: string[] = [];
     const changed: Changed[] = [];
     for (const entry of await this.#deps.repos.repoEntries()) {
       try {
@@ -359,11 +368,55 @@ export class LocalConfig {
     if (toBackUp.length > 0) {
       await this.#ensureStore(store);
       const files = toBackUp.map((c) => ({ path: storePath(c.dir, c.file), content: c.content }));
-      await this.#deps.vcs.commitBackups(store, files, backupMessage(toBackUp));
-      this.#compared = { store, head: await this.#deps.vcs.storeHead(store) };
+      await this.#deps.vcs.commitBackups(store, files, [], backupMessage(toBackUp));
+      const committed = await this.#deps.vcs.storeHead(store);
+      this.#compared = { store, head: committed };
+      // A commit of this pass is in the current layout, so the next pass need not list the store again.
+      if (committed !== null) this.#laidOut = { store, head: committed };
       for (const file of files) await writeStoreCopy(store, file.path, file.content).catch((err: unknown) => problems.push(messageOf(err)));
     }
     for (const c of changed) this.#seen.set(join(c.dir, c.file), c.key);
+  }
+
+  /**
+   * Moves the files of a store from before ADR-298 into `repos/` with one commit, and their copies in the store's folder
+   * with them; the store's commit after it. Only when the commit is new to this pass, so a pass with nothing changed
+   * still starts no git process; a store an older Trackwall on another computer pushed to is moved again after a pull.
+   */
+  async #layOut(store: string, head: string | null, problems: string[]): Promise<string | null> {
+    if (head === null || (this.#laidOut?.store === store && this.#laidOut.head === head)) return head;
+    // A commit someone else made comes with a store someone else may have configured, so it is checked before git reads it.
+    await this.#ensureStore(store);
+    const { files } = await this.#deps.vcs.commitFiles(store, head, MAX_STORE_LISTING_BYTES);
+    const moves = moveToReposFolder(files.map((f) => f.path));
+    if (moves.length > 0) {
+      const read = await this.#deps.vcs.readFiles(
+        store,
+        head,
+        moves.map((m) => m.from),
+        readLimit(moves.length),
+      );
+      const moved = moves.flatMap((m) => {
+        const content = read.get(m.from);
+        return content === undefined ? [] : [{ ...m, content }];
+      });
+      const unread = moves.length - moved.length;
+      if (unread > 0) problems.push(`${unread} file(s) in the old place of the store could not be read and stay there`);
+      await this.#deps.vcs.commitBackups(
+        store,
+        moved.map((m) => ({ path: m.to, content: m.content })),
+        moved.map((m) => m.from),
+        LAYOUT_MESSAGE,
+      );
+      for (const m of moved) {
+        await writeStoreCopy(store, m.to, m.content)
+          .then(() => removeStoreCopy(store, m.from))
+          .catch((err: unknown) => problems.push(messageOf(err)));
+      }
+    }
+    const laidOut = await this.#deps.vcs.storeHead(store);
+    if (laidOut !== null) this.#laidOut = { store, head: laidOut };
+    return laidOut;
   }
 
   /** The files whose repo does not track them, asking git once per repo. */
@@ -408,7 +461,7 @@ export class LocalConfig {
       this.#pushed = { head, url };
     } catch (err) {
       const message = messageOf(err);
-      if (this.#push.kind !== "failed" || this.#push.message !== message) this.#deps.log(`local config push: ${message}`);
+      if (this.#push.kind !== "failed" || this.#push.message !== message) this.#deps.log(`workspace store push: ${message}`);
       this.#push = { kind: "failed", at: new Date().toISOString(), message };
     }
   }
@@ -427,7 +480,7 @@ export class LocalConfig {
 
   async #storeDir(): Promise<string | null> {
     try {
-      return localConfigStoreDir(await this.#deps.repos.projectsDir());
+      return workspaceStoreDir(await this.#deps.repos.projectsDir());
     } catch (err) {
       if (err instanceof DomainError && err.code === "bad_request") return null;
       throw err;
@@ -435,32 +488,15 @@ export class LocalConfig {
   }
 }
 
-/** A repo's file in the store, with `/`: under the name of the repo's folder, which stays when its identifier gets a suffix. */
-function storePath(dir: string, file: LocalConfigFileName): string {
-  return `${basename(dir)}/${file}`;
-}
+/** The message of the commit that brings a store from before ADR-298 into its layout. */
+const LAYOUT_MESSAGE = "Move the repos' local config into repos/";
+
+/** A store holds a few files per repo; a listing past this is not one Trackwall wrote, and only its first part is moved. */
+const MAX_STORE_LISTING_BYTES = 4 * 1024 * 1024;
 
 /** Room for `count` files at the size limit and `cat-file`'s header lines. */
 function readLimit(count: number): number {
   return count * (MAX_LOCAL_CONFIG_BYTES + 128);
-}
-
-/**
- * The copy in the store's folder for the user to browse; the commit already holds the content. Written to a new file and
- * renamed over the old one, and only in a real folder, never through a link planted in the store.
- */
-async function writeStoreCopy(store: string, path: string, content: Buffer): Promise<void> {
-  const [repo = "", file = ""] = path.split("/");
-  const folder = join(store, repo);
-  await mkdir(folder, { recursive: true });
-  if (!(await lstat(folder)).isDirectory()) throw new Error(`${folder} in the local config store is not a folder`);
-  const temp = join(folder, `.${file}.${randomUUID()}.tmp`);
-  await writeFile(temp, content, { flag: "wx" });
-  // On Windows a rename fails while an editor holds the old file open; the next backup of the file writes it again.
-  await rename(temp, join(folder, file)).catch(async (err: unknown) => {
-    await rm(temp, { force: true });
-    throw err;
-  });
 }
 
 /** Whether anything is at `path`; a file that cannot be checked counts as there, so its repo is shown with the reason. */

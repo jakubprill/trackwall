@@ -15,6 +15,7 @@ import {
   ADDRESS_COMMAND,
   APPLY_UPDATE_COMMAND,
   CONTAINER_COMMAND,
+  CONTAINER_RELAY,
   CONTAINER_START,
   CONTAINER_UPDATE,
   type CommandLine,
@@ -26,6 +27,7 @@ import {
   USAGE,
 } from "./infra/args.ts";
 import { appendNote } from "./infra/container-log.ts";
+import { runContainerRelay } from "./infra/container-relay.ts";
 import { containerStart } from "./infra/container-start.ts";
 import { DAEMON_LOG, superviseDaemon } from "./infra/container-supervisor.ts";
 import { applyUpdate, containerUpdate } from "./infra/container-update.ts";
@@ -182,13 +184,17 @@ async function start(
     }
     // After the API: the first comparison hands every repo to the card warm-up, and its git processes must not delay the start.
     facade.repoWatch.start();
+    facade.serverCheck.start();
     facade.localConfig.start();
     facade.mergeRequests.start();
+    facade.containerHealth.start();
     facade.verifications.startOutdatedCheck();
     // After the API: the viewer token goes into `viewer.json` with the port it answers on (ADR-221).
     facade.viewerAccess.open({ port: api.port, instance: api.instance });
     // After the API too: a resumed session's hooks and MCP server need its port (ADR-95).
     void facade.agents.resumeLeftSessions();
+    // After the API too, so the UI hears of each shell as it opens; a shell needs no port of its own (ADR-283).
+    void facade.terminals.reopenLeft();
     const self = { pid: process.pid, port: api.port, token, startedAt, version: VERSION };
     writeDaemonFile(home, self);
     return { kind: "started" as const, self, pageCode: api.pageCode };
@@ -348,6 +354,16 @@ function runContainerCommand(line: ContainerCommandLine): void {
       return;
     case APPLY_UPDATE_COMMAND:
       runApplyUpdate(home, line.port, line.target);
+      return;
+    case CONTAINER_RELAY:
+      runContainerRelay(join(home, DAEMON_LOG), line.port)
+        .then((started) => {
+          if (!started) process.exitCode = 1;
+        })
+        .catch((err: unknown) => {
+          process.stderr.write(`[relay] ${messageOf(err)}\n`);
+          process.exitCode = 1;
+        });
       return;
   }
 }

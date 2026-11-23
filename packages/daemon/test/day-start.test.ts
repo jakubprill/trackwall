@@ -41,7 +41,7 @@ function setup(
   const workspace = new Workspace({
     inContainer: false,
     file: new WorkspaceFile(yaml),
-    vcs: new Vcs(systemTempFolder),
+    vcs: new Vcs(systemTempFolder, tmpdir()),
     hosting: fakeHosting().hosting,
     openEditor: () => {},
     openFolder: () => {},
@@ -51,7 +51,7 @@ function setup(
   const logged: string[] = [];
   const dayStart = new DayStart({
     workspace,
-    vcs: new Vcs(systemTempFolder),
+    vcs: new Vcs(systemTempFolder, tmpdir()),
     file: new DayStartFile(join(home, "day-start.json"), (msg) => logged.push(msg)),
     log: (msg) => logged.push(msg),
     agents: {
@@ -160,6 +160,7 @@ function task(fields: Partial<Task> & Pick<Task, "base">): Task {
     view: "terminal",
     summary: null,
     inReview: false,
+    readyToClose: false,
     port: 41000,
     included: { files: [], problems: [] },
     change: null,

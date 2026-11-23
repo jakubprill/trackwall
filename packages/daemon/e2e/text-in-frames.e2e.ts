@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Page } from "playwright";
 import { layoutFaults, WIDER_FONT } from "./support/layout-faults.ts";
-import { changeSessionLists, SMALL_SCREEN, showSessions, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
+import { changeSessionLists, SMALL_SCREEN, showHomeOnBar, showSessions, useTrackwall, waitForTerminal } from "./support/trackwall-ui.ts";
 
 const trackwall = useTrackwall();
 
@@ -39,21 +39,33 @@ describe("text in the UI", () => {
     await page.getByRole("button", { name: "New task or Copilot CLI session" }).click();
     await page.getByRole("button", { name: "Own worktree", pressed: true }).click();
     await page.getByRole("button", { name: "Start session" }).click();
+    // The supervisor's terminal shows the fake's welcome too: the form going away says that the session started and
+    // opened, which would otherwise take the window back to Sessions in the middle of the walk below.
+    await page.getByRole("button", { name: "Start session" }).waitFor({ state: "detached" });
     await waitForTerminal(page, "Welcome to the fake");
     await page.getByRole("button", { name: /The supervisor is waiting for you/ }).waitFor();
+    // Home has no icon until the user shows it (ADR-294): shown, it is one of the views below too.
+    const views = page.getByRole("navigation", { name: "Views" }).getByRole("button");
+    expect(await page.getByRole("navigation", { name: "Views" }).getByRole("button", { name: /^Home/ }).count()).toBe(0);
+    await showHomeOnBar(page);
 
     const found: string[] = [];
-    const views = page.getByRole("navigation", { name: "Views" }).getByRole("button");
-    for (const name of await views.allInnerTexts()) {
-      const view = name.split("\n")[0] ?? name;
-      await views.filter({ hasText: view }).click();
+    // By position, named by the label: a view's text can be only a number (a shortcut, a waiting count), which another
+    // view's text holds too, such as the "1" of Sessions' shortcut and the "1" waiting in it.
+    for (let i = 0; i < (await views.count()); i++) {
+      const button = views.nth(i);
+      const view = await button.getAttribute("aria-label");
+      if (view === null) throw new Error(`view button ${i} has no aria-label`);
+      await button.click();
       // A view loads its data after it shows; the network quiets down once it has.
       await page.waitForLoadState("networkidle");
       found.push(...(await outside(page, view)));
     }
     const categories = page.getByRole("navigation", { name: "Settings categories" }).getByRole("button");
     await categories.first().waitFor();
-    for (const category of await categories.allInnerTexts()) {
+    for (const entry of await categories.allInnerTexts()) {
+      // "Get started" has a second line that says what is left to do, which changes once the doctor ran.
+      const category = entry.split("\n")[0] ?? entry;
       await categories.filter({ hasText: category }).click();
       await page.waitForLoadState("networkidle");
       found.push(...(await outside(page, `Settings, ${category}`)));

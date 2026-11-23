@@ -10,6 +10,7 @@ import type { Connection } from "@/lib/connection";
 import { useRemote } from "@/lib/use-remote";
 import type { TaskReview } from "@/lib/use-task-review";
 import { TaskAutoReview } from "./TaskAutoReview.tsx";
+import { TaskEvidenceCard } from "./TaskEvidenceCard.tsx";
 import { TaskRefreshBar } from "./TaskRefreshBar.tsx";
 
 /**
@@ -23,7 +24,7 @@ const POLL_MS = 2000;
  * the tab is open, so you can see what the agent is doing before it commits anything. `paused` stops polling
  * (the worktree disappears while the task is being ended) and keeps the last data. Lines of the diff take review comments
  * for the task's agent (ADR-62), and the automatic review above the diff offers findings as such comments (ADR-182), under the explanation of the
- * changes (ADR-250).
+ * changes (ADR-250). Above them all, the evidence card says what backs the change and whose word each fact is (ADR-276).
  */
 export function TaskChangesView({
   conn,
@@ -50,6 +51,7 @@ export function TaskChangesView({
       {baseBranch !== null && <TaskRefreshBar conn={conn} task={task} baseBranch={baseBranch} onRefreshed={changes.reload} />}
       {changes.data.files.length > 0 && (
         <>
+          <TaskEvidenceCard conn={conn} task={task} patch={changes.data.patch} />
           <TaskAutoReview conn={conn} task={task} kind="explain" patch={changes.data.patch} paused={paused} review={review} />
           <TaskAutoReview conn={conn} task={task} kind="code" patch={changes.data.patch} paused={paused} review={review} />
           <TaskAutoReview conn={conn} task={task} kind="rules" patch={changes.data.patch} paused={paused} review={review} />

@@ -1,6 +1,7 @@
 ---
 title: Java navigation
 description: Give an agent in a Java repo a language server, so it finds definitions, usages and implementations instead of searching text.
+status: stable
 ---
 
 # Java navigation

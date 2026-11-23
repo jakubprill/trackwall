@@ -76,7 +76,7 @@ function setup(config: object, command: readonly string[] = FAKE_MISE) {
     procs,
     repos,
     tasks,
-    vcs: new Vcs(systemTempFolder),
+    vcs: new Vcs(systemTempFolder, tmpdir()),
     command,
     env: async () => process.env,
     onTrusted: () => {},

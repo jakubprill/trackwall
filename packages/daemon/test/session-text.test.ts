@@ -52,6 +52,7 @@ const task: Task = {
     reportedAt: "2026-11-05T09:19:00.000Z",
   },
   inReview: true,
+  readyToClose: false,
   port: 41001,
   included: { files: [], problems: [] },
   change: null,

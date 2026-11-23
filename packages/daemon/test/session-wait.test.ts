@@ -61,3 +61,37 @@ describe("what wait_for_session sees of a session", () => {
     expect(sessionWaitStatus({ ...working, stuck: { lastStepAt: "2026-10-31T09:00:00.000Z" } })).toBe("stale");
   });
 });
+
+const turnEnded = { state: "Input", source: "hook", confidence: "high", reason: "hook agentStop", at: "2026-10-31T09:05:00.000Z" } as const;
+const inInputBox: Session = { ...working, state: turnEnded };
+
+describe("when wait_for_session says another agent is done or blocked", () => {
+  test("a session that ended its turn and waits for the user ends the wait as needs_attention", () => {
+    expect(sessionWaitStatus({ ...inInputBox, needsAttention: true })).toBe("needs_attention");
+  });
+
+  test("a session that ended its turn, which the user has already seen, ends the wait as idle instead of working on", () => {
+    expect(sessionWaitStatus({ ...inInputBox, needsAttention: false })).toBe("idle");
+  });
+
+  test("a session blocked on an approval or a plan approval ends the wait as needs_attention", () => {
+    for (const state of ["Approval", "Plan"] as const)
+      expect(sessionWaitStatus({ ...working, needsAttention: true, state: { ...turnEnded, state } })).toBe("needs_attention");
+  });
+
+  test("a session whose input box has a message on its way to the agent goes on being waited for", () => {
+    for (const waitsFor of ["sent", "pending"] as const) {
+      const readRequest = { prompt: "Read your messages with get_messages.", since: "2026-10-31T09:06:00.000Z", waitsFor };
+      expect(sessionWaitStatus({ ...inInputBox, needsAttention: true, readRequest })).toBe("working");
+      expect(sessionWaitStatus({ ...inInputBox, needsAttention: false, readRequest })).toBe("working");
+    }
+  });
+
+  test("a message nothing will deliver (text in the input box, no turn to end) does not keep the wait going", () => {
+    for (const waitsFor of ["user_text", "idle"] as const) {
+      const readRequest = { prompt: "Read your messages with get_messages.", since: "2026-10-31T09:06:00.000Z", waitsFor };
+      expect(sessionWaitStatus({ ...inInputBox, needsAttention: true, readRequest })).toBe("needs_attention");
+      expect(sessionWaitStatus({ ...inInputBox, needsAttention: false, readRequest })).toBe("idle");
+    }
+  });
+});

@@ -1,9 +1,10 @@
-import { homedir } from "node:os";
+import { arch, availableParallelism, homedir, platform, release, totalmem } from "node:os";
 import { join } from "node:path";
 import {
   type AppConfig,
   type agentsApi,
   DEFAULT_TASK_BRANCH_PREFIX,
+  type Diagnostics,
   KnowledgeName,
   MAX_DROP_BYTES,
   type MiseTarget,
@@ -16,12 +17,14 @@ import {
   type StateDirSource,
   type Task,
   type TaskChangedEndpoints,
+  type TaskEvidence,
   type TaskOutcome,
   type TerminalPlace,
 } from "@trackwall/protocol";
 import type { z } from "zod";
 import { approvalsFormat } from "./infra/approved-folder.ts";
 import { copilotHome } from "./infra/copilot-home.ts";
+import { readRestarts } from "./infra/daemon-restarts.ts";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { configOrProblem, DomainError, messageOf } from "./infra/errors.ts";
@@ -29,7 +32,7 @@ import { runProgram } from "./infra/run-program.ts";
 import { STATE_BACKUPS_DIR, type StateFiles } from "./infra/state-backup.ts";
 import { extractTarGz } from "./infra/tar.ts";
 import { ensureTrackwallDir } from "./infra/trackwall-dir.ts";
-import { userShell } from "./infra/user-shell.ts";
+import { shellStart, userShell } from "./infra/user-shell.ts";
 import { AGENT_QUEUES_FORMAT } from "./modules/agents/agent-queues.ts";
 import {
   AGENT_QUEUES_FILE,
@@ -59,10 +62,12 @@ import type { AppConfigQuery } from "./modules/cards/app-config.ts";
 import { CardCache } from "./modules/cards/card-cache.ts";
 import { Cards } from "./modules/cards/cards.ts";
 import { ConfigFiles } from "./modules/config-files/config-files.ts";
+import { CONTAINER_HEALTH_DIR, ContainerHealth } from "./modules/container-health/container-health.ts";
+import { readContainerStart } from "./modules/container-health/container-start.ts";
+import { CONTROL_GROUP_ROOT } from "./modules/container-health/control-group.ts";
 import { DayStart } from "./modules/day-start/day-start.ts";
 import { DayStartFile } from "./modules/day-start/day-start-file.ts";
 import { trustedFolderOf, trustedFolders } from "./modules/doctor/copilot-trust.ts";
-import { type DiskSpace, diskSpace } from "./modules/doctor/disk-space.ts";
 import { Doctor } from "./modules/doctor/doctor.ts";
 import { measureFileWrites } from "./modules/doctor/file-scanning.ts";
 import { profileEnvironment } from "./modules/doctor/model-provider-check.ts";
@@ -91,16 +96,21 @@ import { TaskTemplates } from "./modules/task-templates/task-templates.ts";
 import { DroppedFiles } from "./modules/terminals/dropped-files.ts";
 import { FolderFiles } from "./modules/terminals/folder-files.ts";
 import { FolderTerminals } from "./modules/terminals/folder-terminals.ts";
+import { SHELL_PLACES_FILE, SHELL_PLACES_FORMAT, ShellPlaces } from "./modules/terminals/shell-places.ts";
 import { TestReports } from "./modules/test-results/test-reports.ts";
 import { UsageReport } from "./modules/usage-report/usage-report.ts";
 import type { KnownPlaces } from "./modules/usage-report/work-place.ts";
 import { Hosting, type HostingClis } from "./modules/vcs/hosting.ts";
-import { systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
+import { SERVER_QUESTIONS_DIR, systemTempFolder, Vcs } from "./modules/vcs/vcs.ts";
 import { VERIFICATIONS_FILE, VERIFICATIONS_FORMAT, Verifications } from "./modules/verification/verifications.ts";
 import { ViewerAccess } from "./modules/viewer-access/viewer-access.ts";
+import { WORK_BACKUP_DIR, WORK_BACKUP_INFO_FILE, WORK_BACKUP_INFO_FORMAT, WorkBackup } from "./modules/work-backup/work-backup.ts";
+import { WorkRestore } from "./modules/work-backup/work-restore.ts";
 import { RepoWatch } from "./modules/workspace/repo-watch.ts";
+import { ServerCheck } from "./modules/workspace/server-check.ts";
 import { Workspace } from "./modules/workspace/workspace.ts";
 import { WorkspaceFile } from "./modules/workspace/workspace-file.ts";
+import { type DiskSpace, diskSpace, LOW_DISK_BYTES } from "./platform/disk-space.ts";
 import { groupPlatform } from "./platform/group-platform.ts";
 import { mountTable } from "./platform/mount-table.ts";
 import { terminalPlatform } from "./platform/terminal.ts";
@@ -113,9 +123,11 @@ export interface Facade {
   workspace: Workspace;
   /** HEAD and refs of the repos in the projects folder, compared every second (ADR-63); `main.ts` starts it. */
   repoWatch: RepoWatch;
+  /** The repos' servers asked for new commits every 15 minutes, without a fetch (ADR-295); `main.ts` starts it. */
+  serverCheck: ServerCheck;
   cards: Cards;
   graph: Graph;
-  /** The local config files of the repos, backed up into the local config store every few seconds (ADR-86); `main.ts` starts it. */
+  /** The local config files of the repos, backed up into the workspace store every few seconds (ADR-86); `main.ts` starts it. */
   localConfig: LocalConfig;
   mise: Mise;
   procs: ProcessGroups;
@@ -137,6 +149,12 @@ export interface Facade {
   folderFiles: FolderFiles;
   /** Files dropped on a terminal from another computer, saved in `.trackwall/drops` (ADR-226). */
   droppedFiles: DroppedFiles;
+  /** The backup of the work that lives only in the container, for the user to download (ADR-275). */
+  workBackup: WorkBackup;
+  /** Bringing a work backup back into the repos of a new container, after a look at what it does (ADR-275). */
+  workRestore: WorkRestore;
+  /** How the container Trackwall runs in is doing, with a day of history and its warnings (ADR-279). */
+  containerHealth: ContainerHealth;
   testReports: TestReports;
   verifications: Verifications;
   /** Whether a task's reproduction test fails without its fix and passes with it, in a copy of the repo (ADR-227). */
@@ -197,8 +215,21 @@ export interface Facade {
    */
   taskOutcomes: () => TaskOutcome[];
   /**
+   * What Trackwall knows about a task's change (ADR-276), for the evidence card above its diff and the draft of its
+   * merge request: the plan and the reproduction test from `agents`, the last reproduction check of that test with its
+   * freshness from `reproduction`, the last verification from `verification`, the rules check and what the
+   * conversation used from `agents`.
+   */
+  taskEvidence: (task: string) => Promise<TaskEvidence>;
+  /**
+   * The diagnostics for a bug report (§4.14): a run of `doctor` and the `error-journal`, anonymized, with the version and
+   * the system this daemon runs on, for "Copy diagnostics".
+   */
+  diagnostics: () => Promise<Diagnostics>;
+  /**
    * Daemon exit, before `procs.stopAll`: what a restart is to bring back stays as it is now, the sessions to resume
-   * (ADR-95), the agent queues and the verifications (ADR-115), so what the stop of the groups changes does not reach it.
+   * (ADR-95), the agent queues and the verifications (ADR-115) and the places of the shells to open again (ADR-283), so
+   * what the stop of the groups changes does not reach it.
    */
   keepForRestart: () => void;
 }
@@ -216,8 +247,8 @@ export { HOSTING_CLIS } from "./modules/vcs/hosting.ts";
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
 const CARDS_DIR = "cards";
-/** The bare repo the local config store is pushed from (ADR-127). */
-const LOCAL_CONFIG_PUSH_DIR = "local-config-push";
+/** The repo the workspace store is pushed from (ADR-127); its folder keeps the name it had before the store was renamed (ADR-298), so an existing push repo stays in use. */
+const WORKSPACE_STORE_PUSH_DIR = "local-config-push";
 const DAY_START_FILE = "day-start.json";
 const ROUTINE_APPROVALS_FILE = "routine-approvals.json";
 const KNOWLEDGE_APPROVALS_FILE = "knowledge-approvals.json";
@@ -237,6 +268,8 @@ export const STATE_FILES: StateFiles = {
   [REPRODUCTION_CHECKS_FILE]: REPRODUCTION_CHECKS_FORMAT,
   [ROUTINE_APPROVALS_FILE]: approvalsFormat(RoutineName),
   [KNOWLEDGE_APPROVALS_FILE]: approvalsFormat(KnowledgeName),
+  [WORK_BACKUP_INFO_FILE]: WORK_BACKUP_INFO_FORMAT,
+  [SHELL_PLACES_FILE]: SHELL_PLACES_FORMAT,
 };
 const LOGS_DIR = "logs";
 /** The limit of one source JSONL file; with the previous file after rotation a source takes at most twice that. */
@@ -285,6 +318,8 @@ export interface FacadeOptions {
   diskSpace?: (folder: string) => Promise<DiskSpace>;
   /** Only for tests, like `diskSpace`, so that the report does not depend on the runner's antivirus; the daemon leaves it out for `measureFileWrites` (ADR-255). */
   measureFileWrites?: (folder: string, files: number) => Promise<number>;
+  /** Only for tests, which point the container's health at a folder of control group files; the daemon leaves it out for `/sys/fs/cgroup` (ADR-279). */
+  controlGroupRoot?: string;
   /** The folder the daemon serves the UI from: the error journal maps the UI's frames with its source maps (ADR-94). */
   uiDir?: string;
   log: (msg: string) => void;
@@ -310,11 +345,13 @@ export function createErrorJournal(
 
 export function createFacade(o: FacadeOptions): Facade {
   // `workspace` is set right below, before any git command asks for the folder.
-  const vcs: Vcs = new Vcs(() =>
-    workspace.projectsDir().then(
-      (projects: string) => ensureTrackwallDir(projects, "scratch"),
-      () => systemTempFolder(),
-    ),
+  const vcs: Vcs = new Vcs(
+    () =>
+      workspace.projectsDir().then(
+        (projects: string) => ensureTrackwallDir(projects, "scratch"),
+        () => systemTempFolder(),
+      ),
+    join(o.home, SERVER_QUESTIONS_DIR),
   );
   const hosting = new Hosting(o.hostingClis);
   const openEditor = (path: string, line?: number) => o.openUrl(vscodeUrl(path, line));
@@ -329,7 +366,7 @@ export function createFacade(o: FacadeOptions): Facade {
     afterClone: async (dir) => {
       try {
         const restored = await localConfig.restoreCloned(dir);
-        if (restored.length > 0) o.log(`restored ${restored.join(", ")} from the local config store into ${dir}`);
+        if (restored.length > 0) o.log(`restored ${restored.join(", ")} from the workspace store into ${dir}`);
       } catch (err) {
         o.log(`restoring local config into ${dir} failed: ${messageOf(err)}`);
       }
@@ -350,7 +387,14 @@ export function createFacade(o: FacadeOptions): Facade {
   const cards = new Cards({ vcs, repos: workspace, cache, log: o.log });
   // A new repo or one whose HEAD moved gets its card in the background, so the next graph does not wait for it (ADR-63).
   const repoWatch = new RepoWatch({ repos: workspace, vcs, onHeadMoved: (repos) => cards.warmUp(repos), log: o.log });
-  const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, LOCAL_CONFIG_PUSH_DIR) });
+  const serverCheck = new ServerCheck({
+    repos: workspace,
+    vcs,
+    on: () => workspace.serverCheckOn(),
+    now: () => new Date(),
+    log: o.log,
+  });
+  const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, WORKSPACE_STORE_PUSH_DIR) });
   const board = new Board({ projectsDir: () => workspace.projectsDir() });
   const routines = new Routines({
     projectsDir: () => workspace.projectsDir(),
@@ -396,6 +440,7 @@ export function createFacade(o: FacadeOptions): Facade {
     openEditor,
     boardHas: (item) => board.has(item),
     followTasks: (item, column) => board.followTasks(item, column),
+    closeBoardItem: (item) => board.closeWithTasks(item),
     knowledge: (repo) => knowledge.forSession(repo),
     // `providerModels` is made further down; a session starts only after the facade is built.
     wireApi: (model: string, env: NodeJS.ProcessEnv) => providerModels.wireApiFor(model, env),
@@ -462,7 +507,7 @@ export function createFacade(o: FacadeOptions): Facade {
     repoHosts: () => workspace.repoHosts(),
     openUrl: o.openUrl,
     jobLogExcerpt: async (raw, cut) => logs.jobLogExcerpt(raw, await o.userEnv(), cut),
-    reproductionCheck: (task) => reproductionChecks.get(task),
+    taskEvidence: (task) => taskEvidence(task),
     onPipelineFailed: (task, mergeRequest) => agents.pipelineFailed(task.id, mergeRequest),
     log: o.log,
   });
@@ -518,6 +563,7 @@ export function createFacade(o: FacadeOptions): Facade {
     worktreesDir: () => workspace.worktreesDir().catch(() => null),
     measureFileWrites: o.measureFileWrites ?? measureFileWrites,
     inContainer: o.inContainer,
+    platform: process.platform,
     workspaceFile: workspace.configFile(),
     workspaceKeys: () => workspace.workspaceKeys(),
     javaNavigation: javaNavigationReadiness,
@@ -550,6 +596,7 @@ export function createFacade(o: FacadeOptions): Facade {
       "tasks-file": join(o.home, TASKS_FILE),
       "task-rounds-file": join(o.home, TASK_ROUNDS_FILE),
       "resumable-sessions-file": join(o.home, RESUMABLE_SESSIONS_FILE),
+      "folder-terminals-file": join(o.home, SHELL_PLACES_FILE),
       "last-supervisor-file": join(o.home, LAST_SUPERVISOR_FILE),
       "agent-queues-file": join(o.home, AGENT_QUEUES_FILE),
       "verifications-file": join(o.home, VERIFICATIONS_FILE),
@@ -561,9 +608,12 @@ export function createFacade(o: FacadeOptions): Facade {
       "knowledge-approvals-file": join(o.home, KNOWLEDGE_APPROVALS_FILE),
       "cards-dir": join(o.home, CARDS_DIR),
       "logs-dir": join(o.home, LOGS_DIR),
-      "local-config-push-repo": join(o.home, LOCAL_CONFIG_PUSH_DIR),
+      "workspace-store-push-repo": join(o.home, WORKSPACE_STORE_PUSH_DIR),
       "legacy-worktrees-dir": join(o.home, LEGACY_WORKTREES_DIR),
       "state-backups-dir": join(o.home, STATE_BACKUPS_DIR),
+      "work-backup-dir": join(o.home, WORK_BACKUP_DIR),
+      "container-health-dir": join(o.home, CONTAINER_HEALTH_DIR),
+      "server-questions-dir": join(o.home, SERVER_QUESTIONS_DIR),
     },
     // A projects folder that is not set or cannot be read is a state the view shows, not an error of the whole list.
     projectsDir: () => workspace.projectsDir().catch(() => null),
@@ -576,9 +626,61 @@ export function createFacade(o: FacadeOptions): Facade {
       const env = await mise.projectsEnv();
       return { variables: Object.keys(env.vars), secrets: env.secretNames, problem: env.problem };
     },
-    localConfigStore: () => localConfig.store(),
+    workspaceStore: () => localConfig.store(),
     openEditor: (path) => o.openUrl(vscodeUrl(path)),
     openFolder: o.openFolder,
+  });
+  async function taskEvidence(id: string): Promise<TaskEvidence> {
+    const task = agents.task(id);
+    const test = task.summary?.reproTest ?? null;
+    const [check, rules, use] = await Promise.all([
+      test && reproductionChecks.withFreshness(id, test),
+      agents.rulesCheck(id),
+      agents.taskConversationUse(id),
+    ]);
+    return {
+      task: id,
+      planApproved: task.plan === "approved",
+      reproduction: test && check && { test, ...check },
+      verification: verifications.get(id),
+      rules,
+      ...use,
+    };
+  }
+
+  const workBackup = new WorkBackup({
+    inContainer: o.inContainer,
+    stateDir: o.home,
+    stateFiles: [WORKSPACE_FILE, TASK_JOURNAL_FILE, ...Object.keys(STATE_FILES)],
+    unpushedWork: () => workspace.unpushedWork(),
+    repoPath: (repo) => workspace.repoPath(repo),
+    projectsDir: () => workspace.projectsDir(),
+    bundleWork: (dir, out) => vcs.bundleWork(dir, out),
+    version: o.version,
+    now: () => new Date(),
+    log: o.log,
+  });
+  const containerHealth = new ContainerHealth({
+    inContainer: o.inContainer,
+    stateDir: o.home,
+    controlGroupRoot: o.controlGroupRoot ?? CONTROL_GROUP_ROOT,
+    machine: () => ({ memoryBytes: totalmem(), processors: availableParallelism() }),
+    daemonStartedAt: new Date(),
+    containerStartedAt: () => readContainerStart(),
+    restarts: (since) => readRestarts(o.home, since),
+    diskSpace: async () => {
+      const folder = await workspace.projectsDir().catch(() => null);
+      return folder === null ? null : (o.diskSpace ?? diskSpace)(folder).catch(() => null);
+    },
+    lowDiskBytes: LOW_DISK_BYTES,
+    lastBackupAt: async () => (await workBackup.state()).last?.createdAt ?? null,
+    reposWithUnpushedWork: () =>
+      workspace.unpushedWork().then(
+        (work) => work.repos.length,
+        () => 0,
+      ),
+    now: () => new Date(),
+    log: o.log,
   });
   /** The outcome of every task with a verification or a merge request (ADR-154), for the UI and the supervisor (ADR-156). */
   function taskOutcomes(): TaskOutcome[] {
@@ -593,6 +695,13 @@ export function createFacade(o: FacadeOptions): Facade {
     });
   }
 
+  /** The diagnostics for a bug report: the doctor's checks need the facade's other modules, the journal anonymizes them. */
+  async function diagnostics(): Promise<Diagnostics> {
+    const runtime = process.versions.bun ? `Bun ${process.versions.bun}` : `Node ${process.versions.node}`;
+    const system = { system: `${platform()} ${arch()} ${release()}`, runtime, inContainer: o.inContainer };
+    return { text: await errorJournal.diagnostics(await doctor.run(), system) };
+  }
+
   const placeFolder = async ({ repo, task }: TerminalPlace): Promise<string> => {
     if (repo === null) {
       if (task !== null) throw new DomainError("bad_request", "a task's place names its repo");
@@ -604,13 +713,15 @@ export function createFacade(o: FacadeOptions): Facade {
     procs,
     folder: placeFolder,
     env: o.userEnv,
-    shell: (env) => userShell(env),
+    shell: (env, firstLine) => shellStart(userShell(env), firstLine),
+    places: new ShellPlaces(join(o.home, SHELL_PLACES_FILE), o.log),
     log: o.log,
   });
 
   return {
     workspace,
     repoWatch,
+    serverCheck,
     cards,
     graph,
     localConfig,
@@ -627,6 +738,17 @@ export function createFacade(o: FacadeOptions): Facade {
     terminals,
     folderFiles: new FolderFiles({ folder: placeFolder }),
     droppedFiles: new DroppedFiles({ projectsDir: () => workspace.projectsDir(), now: () => new Date(), maxBytes: MAX_DROP_BYTES }),
+    workBackup,
+    containerHealth,
+    workRestore: new WorkRestore({
+      inContainer: o.inContainer,
+      stateDir: o.home,
+      repoPath: (repo) => workspace.repoPath(repo),
+      projectsDir: () => workspace.projectsDir(),
+      planRestore: (dir, bundle, source) => vcs.planRestore(dir, bundle, source),
+      restoreWork: (dir, bundle, source) => vcs.restoreWork(dir, bundle, source),
+      now: () => new Date(),
+    }),
     testReports,
     verifications,
     reproductionChecks,
@@ -667,10 +789,13 @@ export function createFacade(o: FacadeOptions): Facade {
       return { repo, task, profile, ...read, envProblem: run.problem === null ? null : mask(run.problem) };
     },
     taskOutcomes,
+    taskEvidence,
+    diagnostics,
     keepForRestart: () => {
       agents.keepRunningSessionsForResume();
       verifications.keepForRestart();
       reproductionChecks.keepForRestart();
+      terminals.keepForRestart();
     },
   };
 }

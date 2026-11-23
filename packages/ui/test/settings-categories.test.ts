@@ -25,7 +25,7 @@ describe("Settings categories", () => {
   });
 
   test("the daemon's state and Trackwall's errors are under Diagnostics, connecting Copilot CLI under Agents", () => {
-    expect(settingsCategory("diagnostics").sections).toEqual(["doctor", "daemon", "trackwall-errors"]);
+    expect(settingsCategory("diagnostics").sections).toEqual(["doctor", "container-health", "daemon", "trackwall-errors"]);
     expect(settingsCategory("agents").sections).toContain("copilot-cli");
   });
 
@@ -50,15 +50,15 @@ describe("Settings categories", () => {
     expect(SETTINGS_CATEGORIES.filter((c) => c.wide).map((c) => c.id)).toEqual(["usage"]);
   });
 
-  test("how Home draws its scene is under App, with the other settings of this computer", () => {
-    expect(settingsCategory("app").sections).toContain("home-scene");
+  test("whether the view bar shows Home and how Home draws its scene are under App, with the other settings of this computer", () => {
+    expect(settingsCategory("app").sections).toContain("home");
   });
 
-  test("the theme is under App, right before the Home scene, the other way this computer's Trackwall looks", () => {
-    expect(settingsCategory("app").sections.slice(-2)).toEqual(["theme", "home-scene"]);
+  test("the theme is under App, right before Home, the other way this computer's Trackwall looks, and tips and What's new end it", () => {
+    expect(settingsCategory("app").sections.slice(-3)).toEqual(["theme", "home", "tips"]);
   });
 
-  test("App starts with the desktop app (sign-in, the screen, where the daemon runs, updates), then the browser and VS Code, then how it looks", () => {
+  test("App starts with the desktop app (sign-in, the screen, where the daemon runs, updates), then the browser and VS Code, then how it looks and helps", () => {
     expect(settingsCategory("app").sections).toEqual([
       "start-at-sign-in",
       "keep-screen-on",
@@ -67,14 +67,26 @@ describe("Settings categories", () => {
       "browser-notifications",
       "vscode-extension",
       "theme",
-      "home-scene",
+      "home",
+      "tips",
     ]);
   });
 
   test("Settings opens on Get started until a session exists, and on Workspace with the projects folder first after that", () => {
-    expect(firstSettingsCategory(undefined)).toBe("get-started");
-    expect(firstSettingsCategory(0)).toBe("get-started");
-    expect(firstSettingsCategory(3)).toBe("workspace");
+    expect(firstSettingsCategory({ sessions: undefined, openSteps: null, containerWarnings: 0 })).toBe("get-started");
+    expect(firstSettingsCategory({ sessions: 0, openSteps: 0, containerWarnings: 0 })).toBe("get-started");
+    expect(firstSettingsCategory({ sessions: 3, openSteps: null, containerWarnings: 0 })).toBe("workspace");
+    expect(firstSettingsCategory({ sessions: 3, openSteps: 0, containerWarnings: 0 })).toBe("workspace");
     expect(settingsCategory("workspace").sections[0]).toBe("projects-folder");
+  });
+
+  test("Settings opens on Get started also after a session exists, while the doctor's last run left a step open", () => {
+    expect(firstSettingsCategory({ sessions: 3, openSteps: 1, containerWarnings: 0 })).toBe("get-started");
+  });
+
+  test("Settings opens on Diagnostics, where the container's health is, while it warns, as the number on Settings' icon says", () => {
+    expect(firstSettingsCategory({ sessions: 3, openSteps: 0, containerWarnings: 2 })).toBe("diagnostics");
+    expect(firstSettingsCategory({ sessions: undefined, openSteps: 1, containerWarnings: 1 })).toBe("diagnostics");
+    expect(settingsCategory("diagnostics").sections).toContain("container-health");
   });
 });

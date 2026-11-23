@@ -1,6 +1,6 @@
 import { TRACKWALL_DOCS_LLMS_URL, TRACKWALL_DOCS_URL } from "./docs-site.ts";
 import { trackwallLink } from "./links.ts";
-import { mcpTools, TASK_MESSAGE_USES } from "./mcp.ts";
+import { mcpTools, SEVERAL_REPOS_RULE, TASK_MESSAGE_USES } from "./mcp.ts";
 
 /**
  * The MCP instruction: how an agent works with Trackwall (ADR-46). The MCP server announces it in `initialize`
@@ -27,6 +27,7 @@ const {
   listSessions,
   getSession,
   getDayReport,
+  getContainerHealth,
   getTaskChanges,
   getChangedEndpoints,
   proposeChange,
@@ -119,8 +120,7 @@ export const MCP_INSTRUCTIONS = [
     `needs someone, goes stale or exits; when it times out (still pending, starting or working), call it again. ${getSession.name} shows ` +
     `the task's changed files and ${getTaskChanges.name} their diff (narrow it with paths): review it before you tell the ` +
     "user the work is done. Propose related tasks together, so the user can review them as one plan. " +
-    `Work whose parts in several repos must fit together (an endpoint and its callers) is one ${proposeChange.name}: a ` +
-    "task per repo on one branch name in the order their merge requests are to be merged, approved on one card. " +
+    `${SEVERAL_REPOS_RULE} A change is a task per repo on one branch name, approved on one card. ` +
     `A task whose session proposed yours handed you its work: ${getHandoff.name} says where its branch is now and what changed since you last read it, and ` +
     `${getChangedEndpoints.name} with its task which endpoints it changed.`,
   `- Keep ideas and split work on the user's board: when the user asks you to note something for later, or you find work ` +
@@ -141,6 +141,8 @@ export const MCP_INSTRUCTIONS = [
   `- Catch up after a break: ${getDayReport.name} says what changed since the user's previous day start (new commits ` +
     "on each repo's default branch, repos the sync could not update, open tasks and how far behind they are), computed " +
     "once when the user started their day; read it instead of walking every repo.",
+  `- In a dev container, when a build, test or server dies without a clear reason (exit code 137, a vanished JVM), ` +
+    `${getContainerHealth.name} says whether the kernel killed it for lack of memory before you look for a bug in the code.`,
   `- ${listSessions.name} shows the Copilot CLI sessions and tasks Trackwall runs (caller is your own session); a session ` +
     `that runs a task ends its work with ${reportResult.name}. When the user sends a review of its changes, Trackwall asks ` +
     `it to call ${getReviewComments.name}, which returns the comments to address; when the session that proposed the task ` +

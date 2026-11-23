@@ -6,6 +6,8 @@ import type {
   Commit,
   FileContent,
   HostedProject,
+  PullResult,
+  PutAside,
   RepoHost,
   RepoStatusOk,
   StatusRead,
@@ -35,6 +37,7 @@ import {
 import { ConfigMemo } from "./config-memo.ts";
 import { checkGitProgram, type GitVersion, git, gitRead, gitVersion, readConfigFile } from "./git.ts";
 import { mainRemote, readConfig } from "./git-config.ts";
+import { lastFetch } from "./git-dir.ts";
 import { useGitProgram } from "./git-program.ts";
 import { type GitState, GitStateReader, gitDirKey } from "./git-state.ts";
 import { grep, grepCounts, grepFiles } from "./grep.ts";
@@ -43,6 +46,8 @@ import { hostedProject } from "./hosted-project.ts";
 import { IndexPlaces } from "./index-place.ts";
 import { excludeLocally, ignoredPaths, trackedPaths } from "./local-files.ts";
 import { searchLog } from "./log-search.ts";
+import { newOnServer } from "./new-on-server.ts";
+import { newTaskBase } from "./new-task-base.ts";
 import {
   type CommitFile,
   type GitObject,
@@ -57,6 +62,8 @@ import {
   wholeCharacters,
 } from "./parse.ts";
 import { pathKey } from "./path-key.ts";
+import { pullRepo } from "./pull.ts";
+import { bringBack, changedTrackedFiles, dropPutAside, listPutAsides } from "./put-aside.ts";
 import { remoteAddress } from "./remote.ts";
 import { networkRemote, reachRemote } from "./remote-reach.ts";
 import {
@@ -82,6 +89,8 @@ import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
 import { mergeIntoRepo, trialMergeConflicts, trialMergeInput } from "./trial-merge.ts";
 import { type RepoUnpushed, readUnpushed } from "./unpushed.ts";
+import { bundleWork, type WorkBundle } from "./work-bundle.ts";
+import { planRestore, type RestorePlan, type RestoreSource, restoreWork } from "./work-restore.ts";
 import { addCheckout, addWorktree, defaultBase, deleteBranch, pendingWork, removeWorktree } from "./worktree.ts";
 import { type ChangesScratch, changedPaths, workingTreeChanges, worktreeChanges } from "./worktree-changes.ts";
 import { discardFingerprint, worktreeFingerprint } from "./worktree-fingerprint.ts";
@@ -93,8 +102,11 @@ const GIT_PROGRAM_CHECK_TIMEOUT_MS = 15_000;
 /** Trial merges remembered: a pair for every two tasks of a repo with shared files, and the pairs their earlier commits made. */
 const TRIAL_MERGES_KEPT = 200;
 
-/** The system temp folder for git's scratch files, while there is no projects folder to keep them in. */
+/** The system temp folder for git's scratch files, while there is no projects folder to keep them in, and in tests. */
 export const systemTempFolder = async (): Promise<string> => tmpdir();
+
+/** The folder of the daemon's state folder git asks the repos' servers in, each question in a fresh empty folder of it. */
+export const SERVER_QUESTIONS_DIR = "server-questions";
 
 /**
  * The `vcs` module (§4, §4.5): the local git adapter. It knows directories, not repo identifiers; `workspace` translates those.
@@ -104,7 +116,7 @@ export const systemTempFolder = async (): Promise<string> => tmpdir();
  * of the default branch and an update of the working directory when that branch is checked out, agent task worktrees
  * (ADR-31): a new branch with a worktree, its removal and the removal of the branch, the push of a task branch at the
  * user's request (ADR-77), and for local config (ADR-86) the lines it adds to a repo's `info/exclude` and the commits and
- * push of the local config store, a repo only the daemon writes to.
+ * push of the workspace store, a repo only the daemon writes to.
  */
 export class Vcs {
   /**
@@ -114,9 +126,16 @@ export class Vcs {
    */
   private readonly scratchDir: () => Promise<string>;
 
+  /**
+   * `serverQuestionsDir` is the folder git asks the repos' servers in (`remote-reach.ts`): a folder of the daemon's state
+   * folder, which a sandboxed task cannot write, never the system temp folder, where it may plant a `.git`.
+   */
+  private readonly serverQuestionsDir: string;
+
   /** `now` is the clock of the status memo (ADR-141), monotonic milliseconds; tests move it by hand. */
-  constructor(scratchDir: () => Promise<string>, now: () => number = () => performance.now()) {
+  constructor(scratchDir: () => Promise<string>, serverQuestionsDir: string, now: () => number = () => performance.now()) {
     this.scratchDir = scratchDir;
+    this.serverQuestionsDir = serverQuestionsDir;
     this.statuses = new StatusMemo({ now, gitDirKey });
   }
 
@@ -184,6 +203,21 @@ export class Vcs {
     return this.statuses.get(dir, how, () => this.readStatus(dir));
   }
 
+  /** The work of `dir` on no remote as a verified bundle in `out` (ADR-275); `null` when there is none. */
+  async bundleWork(dir: string, out: string): Promise<WorkBundle | null> {
+    return bundleWork(dir, out, await this.scratch(), this.indexPlaces);
+  }
+
+  /** What restoring a work backup's bundle into `dir` would do, read without writing into the repo (ADR-275). */
+  async planRestore(dir: string, bundle: string, source: RestoreSource): Promise<RestorePlan> {
+    return planRestore(dir, bundle, source, await this.scratch());
+  }
+
+  /** Restores a work backup's bundle into `dir`; in the sync queue, since a fetch writes refs of the same `.git`. */
+  async restoreWork(dir: string, bundle: string, source: RestoreSource): Promise<RestorePlan> {
+    return this.syncing.run(await this.commonDir(dir), () => restoreWork(dir, bundle, source));
+  }
+
   /**
    * The repo's work on no remote, across all its worktrees (ADR-162); each worktree's changes come from `status`, so a
    * list refreshed often reuses them like the repo list.
@@ -199,14 +233,29 @@ export class Vcs {
 
   /** Whether git reaches `url` with the user's sign-in, outside every repo (ADR-195); git's error otherwise. */
   reachRemote(url: string): Promise<void> {
-    return reachRemote(url);
+    return reachRemote(url, this.serverQuestionsDir);
   }
 
+  /**
+   * The remote-tracking branches the server moved past since the last fetch, out of the one the checked-out branch tracks
+   * and the default branch, asked outside the repo (ADR-295, ADR-297); git's error when a server does not answer.
+   */
+  newOnServer(dir: string): Promise<string[]> {
+    return newOnServer(dir, this.serverQuestionsDir);
+  }
+
+  /** Where a new task of the repo starts, against the server as of the last fetch (ADR-297); `null` with nothing to compare. */
+  readonly newTaskBase = newTaskBase;
+
   private async readStatus(dir: string): Promise<TimedStatus> {
-    const { stdout, ranMs } = await gitRead(dir, ["status", "--porcelain=v2", "--branch", "-z"]);
+    const [{ stdout, ranMs }, fetchedAt] = await Promise.all([
+      gitRead(dir, ["status", "--porcelain=v2", "--branch", "-z"]),
+      // A `FETCH_HEAD` that cannot be read this time (a network drive's timeout) leaves only this read without its time.
+      lastFetch(dir).catch(() => null),
+    ]);
     const { headOid, ...status } = parseStatus(stdout.toString("utf8"));
     const head = headOid === null ? null : await this.headCommits.get(headOid, () => this.newestCommit(dir, headOid));
-    return { status: { ...status, head }, ranMs };
+    return { status: { ...status, head, fetchedAt }, ranMs };
   }
 
   private async newestCommit(dir: string, commit: string): Promise<Commit | null> {
@@ -245,6 +294,35 @@ export class Vcs {
     return this.syncing.run(await this.commonDir(dir), () => syncRepo(dir));
   }
 
+  /**
+   * The sync of the default branch, then a fast-forward of the checked-out branch to the branch it tracks (ADR-269), in the
+   * same queue as sync: both fetch into the same remote-tracking refs.
+   */
+  async pull(dir: string, options: { putAside: boolean }): Promise<PullResult> {
+    return this.syncing.run(await this.commonDir(dir), () => pullRepo(dir, options));
+  }
+
+  /** What a pull with `putAside` would move into the stash (ADR-271). */
+  readonly putAsideFiles = changedTrackedFiles;
+
+  /** Trackwall's put-asides in the repo's stash list, newest first (ADR-271). */
+  readonly putAsides = listPutAsides;
+
+  /** Brings a put-aside back and returns the ones left; in the sync queue, since a pull may be putting changes aside. */
+  async restorePutAside(dir: string, id: string): Promise<PutAside[]> {
+    return this.syncing.run(await this.commonDir(dir), async () => {
+      await bringBack(dir, id);
+      return listPutAsides(dir);
+    });
+  }
+
+  async deletePutAside(dir: string, id: string): Promise<PutAside[]> {
+    return this.syncing.run(await this.commonDir(dir), async () => {
+      await dropPutAside(dir, id);
+      return listPutAsides(dir);
+    });
+  }
+
   /** A task branch against the main remote's branch of the same name, from refs only (ADR-77); `null` without a main remote. */
   readonly branchOnRemote = branchOnRemote;
 
@@ -256,7 +334,7 @@ export class Vcs {
     return this.syncing.run(await this.commonDir(dir), () => pushBranch(dir, branch, source));
   }
 
-  // Local config (ADR-86): what a repo tracks or ignores, ignoring in one clone, and the local config store's commits and push.
+  // Local config (ADR-86): what a repo tracks or ignores, ignoring in one clone, and the workspace store's commits and push.
   readonly trackedPaths = trackedPaths;
   readonly ignoredPaths = ignoredPaths;
   readonly excludeLocally = excludeLocally;
@@ -264,8 +342,8 @@ export class Vcs {
   readonly backupRemote = backupRemote;
   readonly storeHead = storeHead;
 
-  async commitBackups(dir: string, files: readonly BackupFile[], message: string): Promise<boolean> {
-    return commitBackups(dir, files, message, await this.scratch());
+  async commitBackups(dir: string, files: readonly BackupFile[], removed: readonly string[], message: string): Promise<boolean> {
+    return commitBackups(dir, files, removed, message, await this.scratch());
   }
   readonly pushBackups = pushBackups;
 

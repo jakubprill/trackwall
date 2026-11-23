@@ -1,21 +1,14 @@
 import { expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { CONFIG_ENTRIES, WORKSPACE_KEYS } from "@trackwall/protocol";
+import { CONFIG_ENTRIES, TESTED_COPILOT_CLI_VERSION, WORKSPACE_KEYS } from "@trackwall/protocol";
 import { FEATURE_GROUPS, SIDEBAR } from "../.vitepress/sidebar.ts";
-import { TALK_PAGES } from "../.vitepress/talk-pages.ts";
 
 // Every feature page follows TEMPLATE.md, so "All features", the sidebar and llms.txt stay complete (ADR-56).
 const DOCS = join(import.meta.dir, "..");
 const featurePages = readdirSync(join(DOCS, "features")).filter((file) => file.endsWith(".md") && file !== "index.md");
 const guidePages = readdirSync(join(DOCS, "guide")).filter((file) => file.endsWith(".md"));
-const sitePages = [
-  "index.md",
-  "features/index.md",
-  ...featurePages.map((f) => `features/${f}`),
-  ...guidePages.map((f) => `guide/${f}`),
-  ...TALK_PAGES,
-];
+const sitePages = ["index.md", "features/index.md", ...featurePages.map((f) => `features/${f}`), ...guidePages.map((f) => `guide/${f}`)];
 const read = (path: string) => readFileSync(join(DOCS, path), "utf8");
 /** A field of a parsed YAML or JSON value, or undefined when the value is not an object. */
 const field = (value: unknown, key: string): unknown => (typeof value === "object" && value !== null ? Reflect.get(value, key) : undefined);
@@ -77,6 +70,19 @@ test("a feature page has the sections of the template in its order, with only re
       between: [],
       end: "Good to know",
     });
+  }
+});
+
+test("every feature page says whether it is stable or a preview, and a preview page says so under its lede", () => {
+  for (const file of featurePages) {
+    const { fields, body } = frontmatter(`features/${file}`);
+    const [, , , , notice] = body.split("\n");
+    expect({ file, status: fields.status, notice }).toEqual({
+      file,
+      status: fields.status === "preview" ? "preview" : "stable",
+      notice: fields.status === "preview" ? "::: warning Preview" : notice,
+    });
+    if (fields.status !== "preview") expect({ file, notice: body.includes("::: warning Preview") }).toEqual({ file, notice: false });
   }
 });
 
@@ -165,29 +171,6 @@ test("the table of workspace.yaml keys on the Config files page lists every key,
   expect(rows).toEqual(keys);
 });
 
-test("a talk page is left out of the site search", () => {
-  for (const path of TALK_PAGES) expect({ path, search: frontmatter(path).fields.search }).toEqual({ path, search: false });
-});
-
-test("only the talk pages link to each other, and nothing else on the site links to them", () => {
-  const talkLinks = (path: string) => [...read(path).matchAll(/\]\((\/(?:pl\/)?talk)\)/g)].map((m) => m[1]);
-  const linking = sitePages.filter((path) => !TALK_PAGES.includes(path) && talkLinks(path).length > 0);
-  const inSidebar = SIDEBAR.flatMap((entry) => entry.items ?? []).filter((item) => item.link?.endsWith("/talk"));
-  expect({ linking, inSidebar, english: talkLinks("talk.md"), polish: talkLinks("pl/talk.md") }).toEqual({
-    linking: [],
-    inSidebar: [],
-    english: ["/pl/talk"],
-    polish: ["/talk"],
-  });
-});
-
-test("the Polish talk has the slides of the English one, with the same numbers and times", () => {
-  const slides = (path: string) =>
-    [...read(path).matchAll(/<p class="slide-meta">(\d+) · [^·<]+ · (\d+:\d\d)/g)].map((m) => `${m[1]} ${m[2]}`);
-  const sections = (path: string) => read(path).match(/<section class="slide">/g)?.length ?? 0;
-  expect(slides("talk.md").length).toBe(sections("talk.md"));
-  expect({ slides: slides("pl/talk.md"), sections: sections("pl/talk.md") }).toEqual({
-    slides: slides("talk.md"),
-    sections: sections("talk.md"),
-  });
+test("the dev container guide installs the Copilot CLI version Trackwall is tested with, so raising it updates the guide too", () => {
+  expect(read("guide/dev-container.md")).toContain(`npm:@github/copilot@${TESTED_COPILOT_CLI_VERSION}\``);
 });

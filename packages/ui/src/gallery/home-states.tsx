@@ -1,9 +1,9 @@
-import type { Repo, Session, TaskProposal, UnpushedWork } from "@trackwall/protocol";
+import type { HealthWarning, Repo, Session, Task, TaskProposal, UnpushedWork } from "@trackwall/protocol";
 import { homeModel } from "@/lib/home-model";
 import { unpushedRows } from "@/lib/unpushed-work";
 import { NeedsYouPanel } from "@/views/home/NeedsYouPanel";
 import type { GalleryState } from "./gallery-state.ts";
-import { exited, LONG_REPO, LONG_TITLE, proposal, session, stateOf, waiting } from "./sample-data.ts";
+import { exited, LONG_REPO, LONG_TITLE, proposal, session, stateOf, task, waiting } from "./sample-data.ts";
 
 function repo(id: string, status: Repo["status"]): Repo {
   return { id, path: `/projects/${id}`, remote: `gitlab.example.com/shop/${id}`, status };
@@ -18,6 +18,7 @@ function repoWith(id: string, changes: number, behind = 0): Repo {
     changes,
     untracked: 0,
     upstream: { name: "origin/main", ahead: 0, behind },
+    fetchedAt: null,
   });
 }
 
@@ -27,28 +28,41 @@ function NeedsYouOf({
   sessions = [],
   proposals = [],
   unpushed,
+  containerWarnings = [],
+  readyToClose = [],
+  closeOutcome,
   loading = false,
 }: {
   repos: readonly Repo[];
   sessions?: readonly Session[];
   proposals?: readonly TaskProposal[];
   unpushed?: UnpushedWork;
+  containerWarnings?: readonly HealthWarning[];
+  readyToClose?: readonly Task[];
+  closeOutcome?: string;
   loading?: boolean;
 }) {
   const model = homeModel({ repos, sessions, graph: undefined, running: [], services: [], daemonRunning: true });
   const first = model.sessions[0];
   return (
-    <NeedsYouPanel
-      loading={loading}
-      model={model}
-      sessions={new Map(sessions.map((s) => [s.id, s]))}
-      proposals={proposals}
-      unpushed={unpushedRows(unpushed)}
-      selected={first ? `session:${first.id}` : null}
-      onSelect={() => {}}
-      onOpen={() => {}}
-      onOpenProposal={() => {}}
-    />
+    // A grid that fills the frame, as Home's grid fills the window's height, so the column gets the frame's height.
+    <div className="grid min-h-0 flex-1 grid-cols-1">
+      <NeedsYouPanel
+        loading={loading}
+        model={model}
+        sessions={new Map(sessions.map((s) => [s.id, s]))}
+        proposals={proposals}
+        closeAll={{ ready: readyToClose, pending: false, outcome: closeOutcome, run: () => {} }}
+        unpushed={unpushedRows(unpushed)}
+        containerWarnings={containerWarnings}
+        selected={first ? `session:${first.id}` : null}
+        onSelect={() => {}}
+        onOpen={() => {}}
+        onOpenProposal={() => {}}
+        onOpenTask={() => {}}
+        onOpenContainerHealth={() => {}}
+      />
+    </div>
   );
 }
 
@@ -69,6 +83,7 @@ const busy: GalleryState = {
         session(4, { repo: "billing" }),
       ]}
       proposals={[proposal(10, 1, { title: LONG_TITLE }), proposal(11, 1)]}
+      readyToClose={[readyTask(20, { repo: LONG_REPO, title: LONG_TITLE }), readyTask(21)]}
       unpushed={{
         inContainer: true,
         repos: [
@@ -77,6 +92,27 @@ const busy: GalleryState = {
         ],
         unreadable: [{ repo: "billing", message: "not a git repository" }],
       }}
+      containerWarnings={[
+        { id: "oom-kill", text: "The kernel killed 2 processes in the last hour because the container ran out of memory." },
+        { id: "processes-full", text: "3700 of the container's 4096 processes are in use; new ones will fail to start." },
+        { id: "backup-old", text: "2 repos have work on no remote, and the last backup is not made yet." },
+      ]}
+    />
+  ),
+};
+
+/** A task whose agent said its work is over (ADR-282). */
+function readyTask(n: number, of: Partial<Task> = {}): Task {
+  return task(n, { inReview: true, readyToClose: true, title: "Fix the footer links", ...of });
+}
+
+const readyToClose: GalleryState = {
+  name: "Tasks ready to close, one left open by Close all",
+  render: () => (
+    <NeedsYouOf
+      repos={[repoWith("shop", 0)]}
+      readyToClose={[readyTask(31, { repo: LONG_REPO, title: LONG_TITLE }), readyTask(32, { repo: "orders-api" })]}
+      closeOutcome={`Closed 2 tasks. Still open, 1 task: ${LONG_REPO} · ${LONG_TITLE}: ending the task would delete: uncommitted changes in the worktree (3).`}
     />
   ),
 };
@@ -85,4 +121,4 @@ const quiet: GalleryState = { name: "Nothing needs you", render: () => <NeedsYou
 
 const loading: GalleryState = { name: "Loading", render: () => <NeedsYouOf repos={[]} loading /> };
 
-export const HOME_STATES: readonly GalleryState[] = [busy, quiet, loading];
+export const HOME_STATES: readonly GalleryState[] = [busy, readyToClose, quiet, loading];

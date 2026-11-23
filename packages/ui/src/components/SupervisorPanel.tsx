@@ -48,6 +48,8 @@ export function SupervisorPanel({
   focused,
   onFocusedChange,
   onOpenInSessions,
+  projectsDir,
+  onOpenGetStarted,
   onChanged,
 }: {
   conn: Connection;
@@ -57,6 +59,10 @@ export function SupervisorPanel({
   focused: boolean;
   onFocusedChange: (focused: boolean) => void;
   onOpenInSessions: (selection: SessionSelection) => void;
+  /** The projects folder (`useWorkspaceSettings`): the start card waits for it. */
+  projectsDir: string | null | undefined;
+  /** Opens Settings › Get started, where the start card sends the user while no projects folder is set. */
+  onOpenGetStarted: () => void;
   onChanged: () => void;
 }) {
   // Here rather than in the start card, which folding the panel unmounts: an old day start failure must not come back then.
@@ -95,6 +101,8 @@ export function SupervisorPanel({
         onStart={setLastStart}
         focused={focused}
         onOpenInSessions={onOpenInSessions}
+        projectsDir={projectsDir}
+        onOpenGetStarted={onOpenGetStarted}
         onChanged={onChanged}
         layout={layout}
         onLayout={onLayout}
@@ -138,6 +146,8 @@ function SupervisorBody({
   onStart,
   focused,
   onOpenInSessions,
+  projectsDir,
+  onOpenGetStarted,
   onChanged,
   layout,
   onLayout,
@@ -149,6 +159,8 @@ function SupervisorBody({
   onStart: (button: StartButton) => void;
   focused: boolean;
   onOpenInSessions: (selection: SessionSelection) => void;
+  projectsDir: string | null | undefined;
+  onOpenGetStarted: () => void;
   onChanged: () => void;
   layout: SupervisorLayout;
   onLayout: (layout: SupervisorLayout) => void;
@@ -171,7 +183,16 @@ function SupervisorBody({
       />
       <SessionNotices conn={conn} session={session} onChanged={onChanged} />
       {!running && (
-        <SupervisorStart conn={conn} supervisor={supervisor} day={day} lastStart={lastStart} onStart={onStart} onChanged={onChanged} />
+        <SupervisorStart
+          conn={conn}
+          supervisor={supervisor}
+          day={day}
+          lastStart={lastStart}
+          projectsDir={projectsDir}
+          onStart={onStart}
+          onChanged={onChanged}
+          onOpenGetStarted={onOpenGetStarted}
+        />
       )}
       <DelegatedWork work={supervisor.work} onOpen={onOpenInSessions} />
       {session && <SessionScreen conn={conn} session={session} selected={focused} />}

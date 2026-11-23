@@ -65,3 +65,11 @@ export function attentionCount(list: SessionList | undefined): number {
 export function waitingInTab(list: SessionList | undefined): number {
   return list ? list.sessions.filter((s) => s.needsAttention).length + list.proposals.length : 0;
 }
+
+/**
+ * The repo a repo session works in, in the repo's root without a worktree of its own (ADR-100, ADR-175); `null` for a
+ * task's session, which works in the task's worktree, and for the supervisor and a free session above every repo.
+ */
+export function repoSessionRepo(session: Pick<Session, "repo" | "task">): Session["repo"] {
+  return session.task === null ? session.repo : null;
+}

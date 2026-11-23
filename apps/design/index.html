@@ -142,6 +142,13 @@ code { font-family: var(--font-mono); font-size: 12px; }
         </div>
       </article>
       <article class="card">
+        <div class="preview"><iframe src="mockups/task-start-outdated-main.html" title="Task form: a main behind the server" loading="lazy" tabindex="-1"></iframe><a href="mockups/task-start-outdated-main.html" tabindex="-1"><span class="sr">Open the main behind the server mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/task-start-outdated-main.html">Task form: a main behind the server</a></h3><span class="state built">built · ADR-297</span></div>
+          <p class="variants"><b>Chosen</b> a line above "Create task" with "Sync main", which never holds the start; the diverged line names the Shell without a link; <b>rejected</b> a sync before every task, starting from <code>origin/main</code>, holding the start.</p>
+        </div>
+      </article>
+      <article class="card">
         <div class="preview"><iframe src="mockups/session-environment-tile.html" title="Session environment on a grid tile" loading="lazy" tabindex="-1"></iframe><a href="mockups/session-environment-tile.html" tabindex="-1"><span class="sr">Open the session environment mockup</span></a></div>
         <div class="meta">
           <div class="row"><h3><a href="mockups/session-environment-tile.html">Session environment on a grid tile</a></h3><span class="state built">built · ADR-93</span></div>
@@ -174,6 +181,19 @@ code { font-family: var(--font-mono); font-size: 12px; }
         <div class="meta">
           <div class="row"><h3><a href="mockups/conversation-review.html">Conversation view for reviewing changes</a></h3><span class="state built">partly built · ADR-107</span></div>
           <p class="variants"><b>Built</b> the optional diff panel beside a wide conversation, the line actions. <b>Waiting</b> the plan (Copilot CLI sends it empty). <b>Chosen</b> review first; the files a turn changed beside the conversation in an optional panel, closed at first and closable (cards in the conversation when narrow); the agent's plan above; on a line: comment, open in VS Code, ask about this. <b>Not chosen</b> diffs only in the conversation or only in Changes; thoughts or nothing in place of the plan; a read-only diff.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="view" aria-labelledby="repos">
+    <h2 id="repos">Repos</h2>
+    <div class="cards">
+      <article class="card">
+        <div class="preview"><iframe src="mockups/home-and-repo-state.html" title="All repos, and Home as an option" loading="lazy" tabindex="-1"></iframe><a href="mockups/home-and-repo-state.html" tabindex="-1"><span class="sr">Open the All repos, and Home as an option mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/home-and-repo-state.html">All repos, and Home as an option</a></h3><span class="state built">built · ADR-293, ADR-294, ADR-295</span></div>
+          <p class="variants"><b>1</b> "Repos" opens on All repos, every repo's state against the server with the step that fixes it, chosen and built, with the clean repos folded into one line instead of a filter and the branch under the repo's name; "new on the server", a check of the server that does not fetch, built since; <b>2</b> Home off the view bar by default, its own parts on the Settings icon and at the top of Sessions, chosen and built, with a "View bar" choice of Shown or Hidden on the Home row of Settings › App instead of a switch; <b>3</b> Home rebuilt as a start page, rejected.</p>
         </div>
       </article>
     </div>
@@ -262,6 +282,20 @@ code { font-family: var(--font-mono); font-size: 12px; }
   <section class="view" aria-labelledby="app-wide">
     <h2 id="app-wide">Whole app</h2>
     <div class="cards">
+      <article class="card">
+        <div class="preview"><iframe src="mockups/first-use.html" title="First use" loading="lazy" tabindex="-1"></iframe><a href="mockups/first-use.html" tabindex="-1"><span class="sr">Open the First use mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/first-use.html">First use: start where the work starts</a></h3><span class="state built">built · ADR-286, ADR-287, ADR-288, ADR-289, ADR-290, ADR-292, ADR-294</span></div>
+          <p class="variants"><b>A</b> open on Sessions with what is left of setup above its form, the supervisor folded and Home last on the view bar, chosen and built, with two sections less on an empty Sessions view and mise among the recommended steps; in a container the count went on Home's icon instead of a Repos section, and later on the Settings icon; <b>B</b> open on "Get started" until ready, rejected; <b>C</b> Home off until turned on in Settings, rejected at first, built later once Repos opened on All repos.</p>
+        </div>
+      </article>
+      <article class="card">
+        <div class="preview"><iframe src="mockups/tips-and-whats-new.html" title="Tips and What's new" loading="lazy" tabindex="-1"></iframe><a href="mockups/tips-and-whats-new.html" tabindex="-1"><span class="sr">Open the Tips and What's new mockup</span></a></div>
+        <div class="meta">
+          <div class="row"><h3><a href="mockups/tips-and-whats-new.html">Tips and What's new</a></h3><span class="state built">built · ADR-296</span></div>
+          <p class="variants"><b>A</b> a tip under the control it explains, in the page's flow and one at a time, built; <b>B</b> What's new after an update with "Show" for each change, built; <b>C</b> suggestions from how you work and <b>D</b> lessons on a practice shop, left for later.</p>
+        </div>
+      </article>
       <article class="card">
         <div class="preview"><iframe src="mockups/light-theme.html" title="Light and system theme" loading="lazy" tabindex="-1"></iframe><a href="mockups/light-theme.html" tabindex="-1"><span class="sr">Open the Light and system theme mockup</span></a></div>
         <div class="meta">

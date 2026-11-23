@@ -1,13 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { type DoctorCheckId, type DoctorStatus, TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { createFacade } from "../src/facade.ts";
 import { defaultSandboxTasks } from "../src/modules/agents/copilot-sandbox.ts";
 import { trustedFolderOf } from "../src/modules/doctor/copilot-trust.ts";
-import { copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
-import { FILES_PER_ROUND, folderCosts, measureFileWrites } from "../src/modules/doctor/file-scanning.ts";
+import { COPILOT_CONFIG_BACKUP, withTrustedFolder } from "../src/modules/doctor/copilot-trust-write.ts";
+import { copilotCliSource, copilotVersionOutcome, Doctor, type DoctorDeps } from "../src/modules/doctor/doctor.ts";
+import { FILES_PER_ROUND, folderCosts, measureFileWrites, writeCheckFile } from "../src/modules/doctor/file-scanning.ts";
 import { folderStorage } from "../src/modules/doctor/folder-storage.ts";
 import type { TlsProbe } from "../src/modules/doctor/tls-probe.ts";
 import { compareVersions, versionIn } from "../src/modules/doctor/version.ts";
@@ -37,6 +38,7 @@ function fakeDeps(overrides: Partial<DoctorDeps>): DoctorDeps {
     worktreesDir: async () => null,
     measureFileWrites: async () => 0.1,
     inContainer: false,
+    platform: "linux",
     unpushedWork: async () => ({ inContainer: false, repos: [], unreadable: [] }),
     remoteReach: async () => [],
     workspaceFile: join(tmpdir(), "trackwall-doctor-no-such-workspace.yaml"),
@@ -63,6 +65,8 @@ interface Setup {
   /** The fake mise of the session tests instead of one that prints `mise`'s version (`fake-mise.json` in the projects folder). */
   fakeMise?: boolean;
   connectionProbe?: TlsProbe;
+  /** What the fake Copilot CLI says as its version instead of the tested one (`FAKE_COPILOT_VERSION`). */
+  copilotVersion?: string;
 }
 
 /** A facade on a fresh state directory, with the fake Copilot CLI and a mise that prints its version, or none of them. */
@@ -92,7 +96,12 @@ function doctorFacade(o: Setup) {
     sessionMcpServer: () => ({ url: "http://127.0.0.1:9/mcp", headers: {} }),
     hostingClis: fakeHostingClis({ authErrors: o.authErrors }).clis,
     // With the sandbox programs in PATH, so that the sandbox check is ok also on a Linux runner without them (ADR-181).
-    userEnv: async () => ({ ...process.env, COPILOT_HOME: copilotHome, PATH: `${sandboxPrograms}${delimiter}${process.env.PATH ?? ""}` }),
+    userEnv: async () => ({
+      ...process.env,
+      COPILOT_HOME: copilotHome,
+      PATH: `${sandboxPrograms}${delimiter}${process.env.PATH ?? ""}`,
+      FAKE_COPILOT_VERSION: o.copilotVersion ?? "",
+    }),
     tlsProbe: async () => ({ kind: "ok" }),
     connectionProbe: o.connectionProbe,
     diskSpace: async () => ({ disk: 1, free: 100 * 1024 ** 3, total: 200 * 1024 ** 3 }),
@@ -273,6 +282,116 @@ describe("doctor", () => {
     );
   });
 
+  test("trusting the projects folder adds it to Copilot CLI's config.json, keeps the comment lines and the other keys, copies the file as it was, and the check turns ok", async () => {
+    const config = [
+      "// User settings belong in settings.json.",
+      "{",
+      '  "banner": "never",',
+      '  "trustedFolders": ["/somewhere/else"]',
+      "}",
+      "",
+    ].join("\n");
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: config });
+    await facade.workspace.setProjectsDir(projects);
+    const file = join(copilotHome, "config.json");
+
+    const written = await facade.doctor.trustProjectsFolder();
+
+    // The native call, as the daemon resolves the file: on Windows it also expands a short name of the temporary folder.
+    const backup = join(realpathSync.native(copilotHome), COPILOT_CONFIG_BACKUP);
+    expect(written).toEqual({ file, folder: projects, added: true, backup });
+    expect(readFileSync(file, "utf8")).toBe(
+      `// User settings belong in settings.json.\n${JSON.stringify({ banner: "never", trustedFolders: ["/somewhere/else", projects] }, null, 2)}\n`,
+    );
+    expect(readFileSync(backup, "utf8")).toBe(config);
+    const check = (await facade.doctor.run()).checks.find((c) => c.id === "copilot-trusted-folder");
+    expect(check).toMatchObject({ status: "ok", summary: `Copilot CLI trusts ${projects}.` });
+  });
+
+  test("trusting the projects folder without a config.json creates Copilot CLI's home and the file with that one folder", async () => {
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: null });
+    await facade.workspace.setProjectsDir(projects);
+    rmSync(copilotHome, { recursive: true });
+
+    const written = await facade.doctor.trustProjectsFolder();
+
+    expect(written).toEqual({ file: join(copilotHome, "config.json"), folder: projects, added: true, backup: null });
+    expect(JSON.parse(readFileSync(join(copilotHome, "config.json"), "utf8"))).toEqual({ trustedFolders: [projects] });
+  });
+
+  test("trusting a projects folder that a trusted folder covers already writes nothing and names that folder", async () => {
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: trusting });
+    await facade.workspace.setProjectsDir(projects);
+    const file = join(copilotHome, "config.json");
+    const before = readFileSync(file, "utf8");
+
+    expect(await facade.doctor.trustProjectsFolder()).toEqual({ file, folder: projects, added: false, backup: null });
+
+    expect(readFileSync(file, "utf8")).toBe(before);
+    expect(readdirSync(copilotHome)).toEqual(["config.json"]);
+  });
+
+  test.each([
+    ["{ not json", "not valid JSON"],
+    ['{"trustedFolders":"<projects>"}', "trustedFolders is not a list of folders"],
+    ["[]", "trustedFolders is not a list of folders"],
+  ])("a config.json %j that is not Copilot CLI's is refused and left as it is", async (config, why) => {
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: config });
+    await facade.workspace.setProjectsDir(projects);
+    const file = join(copilotHome, "config.json");
+    const before = readFileSync(file, "utf8");
+
+    expect(facade.doctor.trustProjectsFolder()).rejects.toMatchObject({ code: "bad_request", message: expect.stringContaining(why) });
+
+    expect(readFileSync(file, "utf8")).toBe(before);
+    expect(readdirSync(copilotHome)).toEqual(["config.json"]);
+  });
+
+  test("without a projects folder there is nothing to trust, and Copilot CLI's home is not touched", async () => {
+    const { facade, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: null });
+
+    expect(facade.doctor.trustProjectsFolder()).rejects.toMatchObject({
+      code: "bad_request",
+      message: expect.stringContaining("No projects folder"),
+    });
+
+    expect(readdirSync(copilotHome)).toEqual([]);
+  });
+
+  test("whether Copilot CLI trusts the projects folder is no until Trust folder adds it, and yes after", async () => {
+    const { facade, projects } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: null });
+    await facade.workspace.setProjectsDir(projects);
+
+    expect(await facade.doctor.projectsFolderTrust()).toEqual({ folder: projects, trusted: false });
+    await facade.doctor.trustProjectsFolder();
+    expect(await facade.doctor.projectsFolderTrust()).toEqual({ folder: projects, trusted: true });
+  });
+
+  test("a trusted folder above the projects folder makes it trusted too", async () => {
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: null });
+    await facade.workspace.setProjectsDir(projects);
+    writeFileSync(join(copilotHome, "config.json"), JSON.stringify({ trustedFolders: [dirname(projects)] }));
+
+    expect(await facade.doctor.projectsFolderTrust()).toEqual({ folder: projects, trusted: true });
+  });
+
+  test("a config.json that is not Copilot CLI's trusts nothing, and is left as it is", async () => {
+    const { facade, projects, copilotHome } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: "{ not json" });
+    await facade.workspace.setProjectsDir(projects);
+
+    expect(await facade.doctor.projectsFolderTrust()).toEqual({ folder: projects, trusted: false });
+    expect(readFileSync(join(copilotHome, "config.json"), "utf8")).toBe("{ not json");
+  });
+
+  test("without a projects folder there is no folder whose trust to tell", async () => {
+    const { facade } = doctorFacade({ copilot: true, mise: "2026.10.1", copilotConfig: trusting });
+
+    expect(facade.doctor.projectsFolderTrust()).rejects.toMatchObject({
+      code: "bad_request",
+      message: expect.stringContaining("No projects folder"),
+    });
+  });
+
   test("gh not signed in to two repo hosts names both with their login commands; a kind without hosts is not checked", async () => {
     const { facade } = doctorFacade({
       copilot: true,
@@ -293,6 +412,23 @@ describe("doctor", () => {
       fix: "Run `gh auth login --hostname a.example.org`, then `gh auth login --hostname b.example.org` in a terminal.",
     });
     expect(checks.some((c) => c.id === "gitlab-cli")).toBe(false);
+  });
+
+  test("glab not signed in says why, not only that NO_PROMPT is deprecated (glab 1.131 and newer)", async () => {
+    const { facade } = doctorFacade({
+      copilot: true,
+      mise: "2026.10.1",
+      copilotConfig: null,
+      authErrors: { "gitlab.example.com": "gitlab.example.com has not been authenticated with glab" },
+    });
+    facade.workspace.setRepoHosts([{ kind: "gitlab", host: "gitlab.example.com" }]);
+    const checks = (await facade.doctor.run()).checks;
+    expect(checks.find((c) => c.id === "gitlab-cli")).toEqual({
+      id: "gitlab-cli",
+      status: "fail",
+      summary: "glab is not signed in to gitlab.example.com: gitlab.example.com has not been authenticated with glab",
+      fix: "Run `glab auth login --hostname gitlab.example.com` in a terminal.",
+    });
   });
 
   test("a program's error goes into its check as one line, and a check that throws fails alone", async () => {
@@ -350,6 +486,41 @@ describe("the check of Copilot CLI's sandbox (ADR-181)", () => {
         "Copilot CLI's sandbox cannot run here: bubblewrap (bwrap), which Copilot CLI's sandbox runs on, is not in PATH, so Trackwall refuses to start tasks without approvals.",
       fix: 'Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables, and the tun kernel module), or choose "No task" in Settings › Agents › Sandbox.',
     });
+  });
+
+  test("on Windows it warns when git leaves ALL APPLICATION PACKAGES out of its ACL, since a sandboxed task cannot commit", async () => {
+    const git = "C:\\Tools\\Git\\mingw64\\bin\\git.exe";
+    const windows = (acl: string) =>
+      fakeDeps({
+        platform: "win32",
+        sandbox: async () => ({ tasks: "auto", problem: null, chosen: true }),
+        gitVersion: async () => ({ output: "git version 2.47.1.windows.1", program: git, source: "path", chosen: null }),
+        run: async (command) => (command === "powershell.exe" ? acl : ""),
+      });
+    const check = async (acl: string) => (await new Doctor(windows(acl)).run()).checks.find((c) => c.id === "copilot-sandbox");
+    const ownAcl = "S-1-5-32-544|Allow|FullControl\r\nS-1-5-18|Allow|FullControl\r\nS-1-1-0|Allow|ReadAndExecute, Synchronize\r\n";
+
+    expect(await check(ownAcl)).toEqual({
+      id: "copilot-sandbox",
+      status: "warn",
+      summary: `Tasks without approvals run their commands in Copilot CLI's sandbox, but git cannot start there: ${git} does not let Windows apps (ALL APPLICATION PACKAGES) run it, so such a task cannot commit.`,
+      fix: 'Reinstall Git for Windows with its default permissions, or grant them as an administrator: icacls "C:\\Tools\\Git" /grant "*S-1-15-2-1:(OI)(CI)RX" /T',
+    });
+    expect((await check(`${ownAcl}S-1-15-2-1|Allow|ReadAndExecute, Synchronize\r\n`))?.status).toBe("ok");
+    expect((await check(""))?.status).toBe("ok");
+  });
+
+  test("on macOS and Linux it does not read git's ACL", async () => {
+    const commands: string[] = [];
+    const deps = fakeDeps({
+      sandbox: async () => ({ tasks: "auto", problem: null, chosen: true }),
+      run: async (command) => {
+        commands.push(command);
+        return "";
+      },
+    });
+    expect((await new Doctor(deps).run()).checks.find((c) => c.id === "copilot-sandbox")?.status).toBe("ok");
+    expect(commands).not.toContain("powershell.exe");
   });
 
   const refused = "bubblewrap cannot make the sandbox's namespaces here (bwrap: No permissions to create new namespace)";
@@ -426,15 +597,84 @@ describe("program versions", () => {
     expect(compareVersions("1.0.103", "1.0.103")).toBe(0);
   });
 
-  test("a Copilot CLI older than the tested version is a warning; the tested or a newer one is ok", () => {
-    expect(copilotVersionOutcome("1.0.90").status).toBe("warn");
-    expect(copilotVersionOutcome(TESTED_COPILOT_CLI_VERSION).summary).toBe(`Copilot CLI ${TESTED_COPILOT_CLI_VERSION}`);
-    expect(copilotVersionOutcome("9.0.0")).toEqual({
+  test("a Copilot CLI older or newer than the tested version is a warning; only the tested one is ok", () => {
+    expect(copilotVersionOutcome("1.0.90", "computer")).toEqual({
+      status: "warn",
+      summary: `Copilot CLI 1.0.90 is older than ${TESTED_COPILOT_CLI_VERSION}, the version Trackwall is tested with.`,
+      fix: `Install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} the way you installed it (npm, Homebrew or WinGet).`,
+    });
+    expect(copilotVersionOutcome(TESTED_COPILOT_CLI_VERSION, "computer")).toEqual({
       status: "ok",
-      summary: `Copilot CLI 9.0.0 (Trackwall is tested with ${TESTED_COPILOT_CLI_VERSION})`,
+      summary: `Copilot CLI ${TESTED_COPILOT_CLI_VERSION}`,
       fix: null,
     });
-    expect(copilotVersionOutcome(null).status).toBe("warn");
+    expect(copilotVersionOutcome("9.0.0", "computer")).toEqual({
+      status: "warn",
+      summary: `Copilot CLI 9.0.0 is newer than ${TESTED_COPILOT_CLI_VERSION}, the version Trackwall is tested with.`,
+      fix: `Sessions usually work, but a change in Copilot CLI can make Trackwall show a session's state wrong. If one does, go back to the tested version, or update Trackwall when a version tested with 9.0.0 comes out. Install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} the way you installed it (npm, Homebrew or WinGet).`,
+    });
+    expect(copilotVersionOutcome(null, "computer").status).toBe("warn");
+  });
+
+  test("in a container the fix names the tested version and the way to it from where Copilot CLI comes: mise or the image", () => {
+    expect(copilotVersionOutcome("1.0.105", "container-mise").fix).toBe(
+      `Install Copilot CLI ${TESTED_COPILOT_CLI_VERSION} with mise, which the container runs it from: \`mise use -g npm:@github/copilot@${TESTED_COPILOT_CLI_VERSION}\` in the container.`,
+    );
+    expect(copilotVersionOutcome("1.0.105", "container-image").fix).toBe(
+      `Copilot CLI comes with the container's image: install ${TESTED_COPILOT_CLI_VERSION} where the image installs it, for example \`npm i -g @github/copilot@${TESTED_COPILOT_CLI_VERSION}\` in its Dockerfile, and rebuild the container. An update made inside the container is lost at the next rebuild.`,
+    );
+  });
+
+  test("a Copilot CLI other than the tested one is named by the program that runs, so a fix reaches that copy", async () => {
+    const deps = fakeDeps({
+      inContainer: true,
+      resolveCopilot: () => ({ program: "/usr/local/bin/copilot", args: [] }),
+      run: async (command) => (command === "/usr/local/bin/copilot" ? "GitHub Copilot CLI 1.0.105" : ""),
+    });
+    const check = (await new Doctor(deps).run()).checks.find((c) => c.id === "copilot-cli");
+    expect(check?.summary).toBe(
+      `Copilot CLI 1.0.105 is older than ${TESTED_COPILOT_CLI_VERSION}, the version Trackwall is tested with. It runs from /usr/local/bin/copilot.`,
+    );
+    expect(check?.fix).toContain(`npm i -g @github/copilot@${TESTED_COPILOT_CLI_VERSION}`);
+  });
+
+  test("in a container, a Copilot CLI under mise's data folder, wherever MISE_DATA_DIR or XDG_DATA_HOME puts it, is mise's copy, and any other, such as npm's in /usr/local/bin, the image's", () => {
+    const home = "/home/vscode";
+    expect(copilotCliSource("/home/vscode/.local/share/mise/installs/npm-github-copilot/1.0.114/bin/copilot", true, {}, home)).toBe(
+      "container-mise",
+    );
+    expect(copilotCliSource("/home/vscode/.local/share/mise/shims/copilot", true, {}, home)).toBe("container-mise");
+    expect(copilotCliSource("/opt/tools/shims/copilot", true, { MISE_DATA_DIR: "/opt/tools" }, home)).toBe("container-mise");
+    expect(copilotCliSource("/data/mise/shims/copilot", true, { XDG_DATA_HOME: "/data" }, home)).toBe("container-mise");
+    expect(copilotCliSource("/srv/mise/bin/copilot", true, {}, home)).toBe("container-image");
+    expect(copilotCliSource("/usr/local/bin/copilot", true, {}, home)).toBe("container-image");
+    expect(copilotCliSource("/usr/local/bin/copilot", false, {}, home)).toBe("computer");
+  });
+
+  test("the version alone says where the Copilot CLI of sessions stands against the tested one", async () => {
+    const newer = doctorFacade({ copilot: true, mise: null, copilotConfig: null, copilotVersion: "9.0.0" });
+    expect(await newer.facade.doctor.copilotCliVersion()).toEqual({
+      version: "9.0.0",
+      tested: TESTED_COPILOT_CLI_VERSION,
+      relation: "newer",
+      source: "computer",
+    });
+    const older = doctorFacade({ copilot: true, mise: null, copilotConfig: null, copilotVersion: "1.0.1" });
+    expect((await older.facade.doctor.copilotCliVersion()).relation).toBe("older");
+    const same = doctorFacade({ copilot: true, mise: null, copilotConfig: null });
+    expect(await same.facade.doctor.copilotCliVersion()).toEqual({
+      version: TESTED_COPILOT_CLI_VERSION,
+      tested: TESTED_COPILOT_CLI_VERSION,
+      relation: "tested",
+      source: "computer",
+    });
+    const missing = doctorFacade({ copilot: false, mise: null, copilotConfig: null });
+    expect(await missing.facade.doctor.copilotCliVersion()).toEqual({
+      version: null,
+      tested: TESTED_COPILOT_CLI_VERSION,
+      relation: "unknown",
+      source: "computer",
+    });
   });
 });
 
@@ -568,7 +808,7 @@ describe("the doctor on free disk space", () => {
   });
 
   test("the real disk of the system's temp folder can be read, and a folder in it is on the same disk", async () => {
-    const { diskSpace } = await import("../src/modules/doctor/disk-space.ts");
+    const { diskSpace } = await import("../src/platform/disk-space.ts");
     const space = await diskSpace(tmpdir());
     expect(space.total).toBeGreaterThan(0);
     expect(space.free).toBeGreaterThan(0);
@@ -678,10 +918,55 @@ describe("the doctor on antivirus scanning (ADR-255)", () => {
     ]);
   });
 
+  test("a measurement never writes through a file or link already under a check file's name", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "trackwall-doctor-planted-"));
+    try {
+      const planted = join(folder, "Check0.java");
+      writeFileSync(planted, "the user's own file");
+
+      await expect(writeCheckFile(planted, "measurement")).rejects.toMatchObject({ code: "EEXIST" });
+      expect(readFileSync(planted, "utf8")).toBe("the user's own file");
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+
   test("a measurement writes and reads real files and leaves nothing behind", async () => {
     const folder = mkdtempSync(join(tmpdir(), "trackwall-doctor-measure-"));
     const ms = await measureFileWrites(folder, 5);
     expect(ms).toBeGreaterThan(0);
     expect(readdirSync(folder)).toEqual([]);
+  });
+});
+
+describe("withTrustedFolder: Copilot CLI's config.json with one more trusted folder (ADR-270)", () => {
+  test("a Windows path is written as JSON escapes it, after the folders that were there", () => {
+    const edit = withTrustedFolder('{"trustedFolders":["C:\\\\Other"],"theme":"dark"}', "C:\\Users\\me\\Dev");
+    expect(edit).toEqual({
+      kind: "edit",
+      text: '{\n  "trustedFolders": [\n    "C:\\\\Other",\n    "C:\\\\Users\\\\me\\\\Dev"\n  ],\n  "theme": "dark"\n}\n',
+    });
+  });
+
+  test("comment lines with CRLF line ends stay before the object, each on its own line", () => {
+    const edit = withTrustedFolder("// managed automatically\r\n// second line\r\n{}\r\n", "/projects");
+    expect(edit).toEqual({
+      kind: "edit",
+      text: '// managed automatically\n// second line\n{\n  "trustedFolders": [\n    "/projects"\n  ]\n}\n',
+    });
+  });
+
+  test("a string value with a line separator followed by slashes is no comment line and stays whole", () => {
+    const banner = "first\u2028// second";
+    const edit = withTrustedFolder(JSON.stringify({ banner }), "/projects");
+    expect(edit).toEqual({ kind: "edit", text: `${JSON.stringify({ banner, trustedFolders: ["/projects"] }, null, 2)}\n` });
+  });
+
+  test("a folder inside a trusted folder is covered by it", () => {
+    const projects = join(tmpdir(), "dev", "projects");
+    expect(withTrustedFolder(JSON.stringify({ trustedFolders: [join(tmpdir(), "dev")] }), projects)).toEqual({
+      kind: "covered",
+      folder: join(tmpdir(), "dev"),
+    });
   });
 });

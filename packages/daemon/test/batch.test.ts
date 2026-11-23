@@ -59,7 +59,7 @@ function setup(
     procs,
     repos: { repoPath, projectsDir: async () => home, sessionProfile: () => null },
     tasks: NO_TASKS,
-    vcs: new Vcs(systemTempFolder),
+    vcs: new Vcs(systemTempFolder, tmpdir()),
     command: FAKE_MISE,
     env: async () => process.env,
     onTrusted: () => {},
@@ -139,7 +139,7 @@ describe("batch command", () => {
   );
 
   test(
-    "a repo without the mise task has the step skipped, and a skipped sync does not stop the next steps",
+    "a repo without the mise task has the step skipped, and a skipped sync names its reason and does not stop the next steps",
     async () => {
       const { batch, dir } = setup(
         { web: { tasks: [BUILD], exits: { build: 0 } } },
@@ -157,8 +157,8 @@ describe("batch command", () => {
       const run = await finished(batch);
 
       expect(run.repos[0]?.steps).toEqual([
-        { step: "sync", state: "skipped", message: "main is checked out and has uncommitted changes" },
-        { step: "setup", state: "skipped", message: "the repo has no mise task setup" },
+        { step: "sync", state: "skipped", message: "main is checked out and has uncommitted changes", syncReason: "dirty" },
+        { step: "setup", state: "skipped", message: "the repo has no mise task setup", syncReason: null },
         { step: "build", state: "done", detail: null },
       ]);
       expect(calls(dir("web"))).toEqual(["run build"]);
@@ -179,7 +179,7 @@ describe("batch command", () => {
 
       expect(run.repos[0]?.steps).toEqual([
         { step: "setup", state: "failed", message: "exited with code 3", lastLines: ["[setup] $ done"] },
-        { step: "build", state: "skipped", message: "skipped after step setup failed" },
+        { step: "build", state: "skipped", message: "skipped after step setup failed", syncReason: null },
       ]);
       expect(calls(dir("api"))).toEqual(["run setup"]);
       expect(run.repos[1]?.steps.map((s) => s.state)).toEqual(["done", "done"]);
@@ -252,8 +252,8 @@ describe("batch command", () => {
 
       expect(run.repos[0]?.steps).toEqual([
         { step: "tools", state: "failed", message: "exited with code 1", lastLines: ["mise all tools are installed"] },
-        { step: "setup", state: "skipped", message: "skipped after step tools failed" },
-        { step: "build", state: "skipped", message: "skipped after step tools failed" },
+        { step: "setup", state: "skipped", message: "skipped after step tools failed", syncReason: null },
+        { step: "build", state: "skipped", message: "skipped after step tools failed", syncReason: null },
       ]);
       expect(calls(dir("web"))).toEqual(["install"]);
       const installLog = logs.tail({ source: { kind: "mise-install", repo: "web" }, limit: 10 });

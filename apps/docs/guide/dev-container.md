@@ -9,7 +9,7 @@ Run Trackwall next to your repos in a Linux dev container and use it from the br
 
 Where security software checks every program that starts and every file it opens, git and builds can be slow on Windows. Inside a Linux container whose files live in a Docker volume, the same work is much faster. Trackwall can run there too: everything that touches your repos (git, mise tasks, services, Copilot CLI sessions and the MCP server) runs in the container, and you use Trackwall from the browser or the desktop app on your computer through a forwarded port.
 
-This page uses VS Code's Dev Containers extension. Any container works the same way as long as port forwarding keeps the port number.
+This page uses VS Code's Dev Containers extension. Another container works too, but Trackwall listens only on 127.0.0.1 inside it, so Docker's published ports (`docker run -p`, Docker Compose's `ports:`) reach it only through the Feature's relay: see [Publish the ports instead of forwarding them](#publish-the-ports-instead-of-forwarding-them). Either way the port on your computer must be the same as in the container.
 
 ## What you need
 
@@ -57,7 +57,7 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
 - `requireLocalPort` keeps the forwarded port at 7700 on your computer. Keep VS Code's `remote.localPortHost` at its default, `localhost`: with `allInterfaces` other computers on your network reach the forwarded port. Trackwall accepts a page only from `127.0.0.1:<port>` or `localhost:<port>` with the port it listens on, so a forward to another number does not load.
 - Port 7701 is Trackwall's service proxy: "Open" on a ready [service](/features/services) shows it in your browser at `http://<repo>.localhost:7701/`, so you need not forward each service's port. Trackwall opens the proxy on the port after its own, so with the Feature's `port` option set to 7800, forward 7801 instead. Without the forward, "Open" leads nowhere.
 - `TRACKWALL_DEVCONTAINER_HOST_FOLDER` tells Trackwall which folder on your computer the container was opened from, so "Open in VS Code" opens the same kind of window as opening that folder in a container yourself, with the extensions and settings of this `devcontainer.json`. Without it, VS Code attaches to the running container without them. Use it when you open the container from a folder on Windows or macOS; from a folder inside WSL it may not open.
-- `shutdownAction` keeps the container running when you close its last VS Code window. Trackwall and its sessions live in the container, and by default VS Code stops the container with its last window, which stops every running session; "Open in VS Code" in Trackwall can replace or close that window too. The container then runs until you stop it in Docker or Rancher Desktop (`docker stop <container name>`), and its sessions keep working while no window is open. VS Code forwards port 7700 only while one of its windows is open on the container, so Trackwall's page and the desktop app reach it again when you open one; a session waiting for your approval waits until then.
+- `shutdownAction` keeps the container running when you close its last VS Code window. Trackwall and its sessions live in the container, and by default VS Code stops the container with its last window, which stops every running session; "Open in VS Code" in Trackwall can replace or close that window too. The container then runs until you stop it in Docker or Rancher Desktop (`docker stop <container name>`), and its sessions keep working while no window is open. VS Code forwards port 7700 only while one of its windows is open on the container, so Trackwall's page and the desktop app reach it again when you open one; a session waiting for your approval waits until then. With [published ports](#publish-the-ports-instead-of-forwarding-them) they reach it without a window.
 - Behind a proxy, set `HTTPS_PROXY` and `HTTP_PROXY` in `containerEnv` too, and keep `NO_PROXY` as above. A proxy that replaces certificates also needs its certificate in the image, and `NODE_EXTRA_CA_CERTS` pointing at it in `containerEnv`, because Copilot CLI does not read the system's certificates; the [doctor](/features/doctor) names the file when the image already has it.
 - The container's clock runs in UTC, so the times in logs, in builds and of new commits are in UTC rather than your time zone. Add your time zone to `containerEnv`, for example `"TZ": "Europe/Berlin"`, and rebuild the container. The time zone names come from the `tzdata` package, which the Dev Containers base images have; in an image of your own, install it if `date` in the container still says UTC.
 
@@ -65,10 +65,12 @@ A `.devcontainer/devcontainer.json` that keeps the repos, Trackwall's state, the
 
 Rebuild the container ("Dev Containers: Rebuild Container" in VS Code). From then on Trackwall starts with the container, on port 7700, and starts again by itself if it crashes. From 0.5.17 it starts also when the container starts without VS Code, for example after `docker restart` or from Docker or Rancher Desktop; with 0.5.16 and older, run `trackwall-container start` in the container then. Trackwall then starts before VS Code connects, so keep its settings, such as `TRACKWALL_HOME` and a proxy, in `containerEnv`, not `remoteEnv`. A Docker Compose dev container started with `docker compose up` instead of VS Code does not start Trackwall by itself. Then, in a terminal of the container:
 
-1. Install [mise](https://mise.jdx.dev/getting-started.html) as its guide describes, then Copilot CLI with it: `mise use -g node@22 npm:@github/copilot`. Trackwall finds tools installed with mise without further setup.
+1. Install [mise](https://mise.jdx.dev/getting-started.html) as its guide describes, then Copilot CLI with it, at the version Trackwall is tested with: `mise use -g node@22 npm:@github/copilot@1.0.114`. Trackwall finds tools installed with mise without further setup.
 2. Point Trackwall at the repos: in Settings › Workspace choose `/workspaces`, or run `echo "projectsDir: /workspaces" > ~/.trackwall/workspace.yaml` before the first start.
 3. Print the address: `trackwall-container address`, and open it in the browser on your computer within a minute. The address carries a one-time code instead of Trackwall's token, so the copy your browser's history keeps opens nothing later; print a new one for another browser or after the minute.
 4. Sign in to Copilot CLI once: run `copilot login --device-code`, open the address it prints in the browser on your computer and enter the code it shows. Without `--device-code` the browser tries to send you back to an address inside the container, which it cannot reach. The sign-in stays in the `workspace-copilot` volume.
+
+Copilot CLI's version is pinned because the container gets whatever version its mise config or image names, and a version other than the tested one makes the doctor warn. When you update Trackwall (the Feature's `<version>`), the doctor's "Copilot CLI" line names the version the new Trackwall is tested with: run `mise use -g npm:@github/copilot@<that version>` in the container. The version stays in your mise config in the `workspace-mise` volume, so after a rebuild `mise install` in the container brings back the same one. An image of your own that installs Copilot CLI itself, for example with `npm i -g @github/copilot@<version>` in its Dockerfile, pins the version there: change it with every Trackwall update (an `ARG` in the Dockerfile keeps it in one line) and rebuild the container. `mise use` there would only add a second copy beside the image's, and an update made inside the container is lost at the next rebuild. The doctor's "Copilot CLI" line names the program that runs, and its fix says which of the two ways applies.
 
 The browser keeps the token for that address, so a bookmark of `http://127.0.0.1:7700` and a new tab open Trackwall without it. The token changes every time Trackwall starts: after a restart, open or reload the page, and it asks for the address; print a new one as in step 3 and paste it there. Trackwall's output goes to `~/.trackwall/logs/daemon.log` in the container; look there when it does not answer. It stops when the container stops, or when you stop it from the app; with `shutdownAction` set as above, closing VS Code does not stop the container.
 
@@ -114,11 +116,36 @@ The app can do what you would otherwise do by hand: open the dev container, wait
 3. In the app, open Settings › App › Daemon in a container. Under the dev container, enter the folder on your computer that holds `.devcontainer` (the folder you open in a container yourself) and the folder VS Code opens inside it, `/workspaces` in the example, and click "Save". While the app is connected to Trackwall in a container that sets `TRACKWALL_DEVCONTAINER_HOST_FOLDER`, the first field is already filled in.
 4. Click "Start the dev container and connect".
 
-Docker Desktop or Rancher Desktop has to be running. If the container already runs with Trackwall in it, the app connects right away, and starts Trackwall there first when it is not running; if Trackwall there is another version than the app, it says so at once and offers "Update Trackwall in the container", which installs the app's version there with `trackwall-container update` (see the last points below) and connects once it answers, after a few minutes. If the new version does not start, Trackwall in the container goes back to the one it had and the app says so. "Cancel" stops the app's wait, not the update in the container. Otherwise it opens VS Code on the dev container, as your own shortcut or "Reopen in Container" does; VS Code may ask once whether to open it. The first start builds the container and can take several minutes. Once Trackwall in the container answers on the forwarded port, the app restarts and connects. Keep the VS Code window open: it forwards the port. When Trackwall in the container restarts later, the app shows the same button again on the screen it shows when it cannot connect.
+Docker Desktop or Rancher Desktop has to be running. If the container already runs with Trackwall in it, the app connects right away, and starts Trackwall there first when it is not running; if Trackwall there is another version than the app, it says so at once and offers "Update Trackwall in the container", which installs the app's version there with `trackwall-container update` (see the last points below) and connects once it answers, after a few minutes. If the new version does not start, Trackwall in the container goes back to the one it had and the app says so. "Cancel" stops the app's wait, not the update in the container. Otherwise it opens VS Code on the dev container, as your own shortcut or "Reopen in Container" does; VS Code may ask once whether to open it. The first start builds the container and can take several minutes. Once Trackwall in the container answers on the forwarded port, the app restarts and connects. Keep the VS Code window open: it forwards the port, unless Docker [publishes the ports](#publish-the-ports-instead-of-forwarding-them). When Trackwall in the container restarts later, the app shows the same button again on the screen it shows when it cannot connect.
 
 While it waits, **Cancel** stops the start, for example when VS Code shows an error in its own window; the app shows "Starting…" and Cancel also after the window reloads or in another window. If a container for the folder runs under the same path written with other upper- and lower-case letters (`c:\Users\...` instead of `C:\Users\...`, as the `devcontainer` command line may write it), VS Code does not reuse it and, when the configuration names the container in `runArgs`, cannot create its own: after a minute the app says so and names the `docker rm -f` command that removes it.
 
 The app finds the container by the folder you entered and reads Trackwall's address and token from it with `docker`; nothing is sent anywhere else. A dev container opened from a folder inside WSL instead of Windows is not supported yet.
+
+## Publish the ports instead of forwarding them
+
+VS Code's port forwarding starts a program for every new connection. Where security software checks every program that starts, that can take seconds each time, and the app loses Trackwall in the container or keeps reconnecting. The forward also works only while a VS Code window is open on the container. Docker can publish the ports instead. Every connection is then as fast as a local one, and the app reaches Trackwall with or without VS Code, also after `docker restart`.
+
+Trackwall listens only on 127.0.0.1 inside the container, which Docker cannot publish, so the Feature's `publish` option starts a small relay with the container. The relay passes connections from the container's own address on to Trackwall. In `devcontainer.json`, turn the option on, publish the two ports on your computer's 127.0.0.1, and remove `forwardPorts` and `portsAttributes`:
+
+```json
+{
+  "features": {
+    "https://github.com/jakubprill/trackwall/releases/download/v<version>/devcontainer-feature-trackwall.tgz": { "publish": true }
+  },
+  "runArgs": ["-p", "127.0.0.1:7700:7700", "-p", "127.0.0.1:7701:7701"]
+}
+```
+
+Keep the rest of the example as it is, and rebuild the container. In Docker Compose, the same ports go under the service's `ports:` as `"127.0.0.1:7700:7700"` and `"127.0.0.1:7701:7701"`.
+
+Other containers on the same Docker network can reach the relay too. Trackwall still asks every request for its token and checks where it comes from, as it does for programs on your computer, but [services](/features/services) opened through port 7701 need no token. To keep other containers out, give the container a network of its own, for example `"--network", "trackwall-net"` in `runArgs` after `docker network create trackwall-net`.
+
+- The port on your computer must be the same as the port in the container: the app and the browser find Trackwall by the port it listens on. With the Feature's `port` option set to 7800, publish `127.0.0.1:7800:7800` and `127.0.0.1:7801:7801`.
+- Write `127.0.0.1:` before each port. Without it Docker publishes the port to every network of your computer, and other computers can reach it.
+- Choose `publish` or `forwardPorts`, not both: both want port 7700 on your computer.
+
+When the published port does not answer, check in a terminal on your computer that Docker published it: `docker port <container name>` should list `7700/tcp -> 127.0.0.1:7700`. If it does not, the container was created before `runArgs` changed: rebuild it. In the container, `grep relay ~/.trackwall/logs/daemon.log` shows where the relay listens or why it could not start. If it says nothing, check that the Feature has `"publish": true` and rebuild. The relay listens on the networks the container had when it started: after `docker network connect`, restart the container.
 
 ## MCP servers on your computer
 
@@ -177,6 +204,27 @@ Docker does not let the sandbox start by default, so Trackwall leaves it off in 
 
 From then on Trackwall sees that the sandbox can run and puts tasks without approvals in it, as on a Linux computer: the New session form says so under the options. `sandbox.tasks` in `workspace.yaml` still chooses otherwise, as described in [Approvals](/features/approvals).
 
+The sandbox hides most of the file system from a task's commands, also folders where tools you installed live:
+
+- On an image built from the official `node` images, or any image that installs tools with `npm i -g`, npm keeps its global packages in `/usr/local/lib/node_modules`, with only links to them in `/usr/local/bin`. The sandbox shows `/usr/local/bin` but hides `/usr/local/lib`, so in a sandboxed task `npm`, `npx`, `corepack` and `pnpm` say "command not found", while `node` itself works.
+- Tools installed with mise live in `~/.local/share/mise` (with its shims) and its cache in `~/.cache/mise`, both in your home folder, which the sandbox hides. A sandboxed `mise x` then downloads and installs the tool again on every command, into a throwaway home, and `mise` warns that it cannot fetch its release list.
+
+Let the sandbox read those folders, but not write them, in Copilot CLI's `settings.json` in the container (`~/.copilot/settings.json`, in the `workspace-copilot` volume, so it survives a rebuild). Keep the rest of the file, use your home folder in the container (`/home/vscode` in the example above), and leave out what your image does not have:
+
+```json
+{
+  "sandbox": {
+    "userPolicy": {
+      "filesystem": {
+        "readonlyPaths": ["/usr/local/lib", "/home/vscode/.local/share/mise", "/home/vscode/.cache/mise"]
+      }
+    }
+  }
+}
+```
+
+The folders stay read-only in the sandbox, so a new tool is installed outside it, and the other repos and the sign-ins stay hidden. `~/.config/mise`, which may hold the key to mise's encrypted secrets, stays hidden too; do not add it.
+
 What each part does, and what it costs:
 
 - The `sandbox` option installs bubblewrap, slirp4netns, iproute2 and iptables with the image's package manager (`apt-get`, `apk` or `dnf`). With another one, install them in your image yourself. It also makes `~/.trackwall`, `~/.copilot`, `~/.config/mise` and `/workspaces` yours in the image, so new volumes there are yours too and need no `sudo chown`. A volume of your own elsewhere, such as one for your skills, needs its folder made yours in your image (`RUN mkdir -p ... && chown vscode:vscode ...`).
@@ -192,7 +240,15 @@ What each part does, and what it costs:
 
 ## Back up the repos
 
-Commits you have not pushed, stashes and task worktrees live only in the `workspace-repos` volume. Before you remove the volume, reset Docker, or move to another computer, copy the volume into one file on your computer:
+Commits you have not pushed, stashes and task worktrees live only in the `workspace-repos` volume. Removing the volume, resetting Docker or a broken virtual disk deletes them.
+
+### Back up your work from Trackwall
+
+Trackwall puts everything only this container has into one small file while your sessions keep running: in Settings › Workspace › Container work backup, click "Back up now", then "Download backup" to keep the file on your computer. [Container work backup](/features/work-backup) says what goes in and how to get your work back from it.
+
+### Copy the whole volume
+
+To keep everything, files git ignores and builds included, for example before you move to another computer, copy the volume into one file on your computer:
 
 1. Stop the container, so that neither Trackwall nor git changes the repos while they are copied: `docker stop <container name>`, or stop it in Docker or Rancher Desktop.
 2. On your computer, not in the container, in the folder where the file should go, run:
@@ -222,6 +278,6 @@ Trackwall's state (`workspace-trackwall`) and the Copilot CLI sign-in (`workspac
 - "Open in VS Code" opens the repo, task worktree or file in VS Code on your computer, inside the running container through the Dev Containers extension: with the extensions and settings of your `devcontainer.json` when it sets `TRACKWALL_DEVCONTAINER_HOST_FOLDER` (see [Set up the container](#set-up-the-container)), attached to the container otherwise. It reuses the running container of that folder; if none is running, VS Code starts or builds it as when you open the folder yourself. The browser asks once whether to open VS Code. "Show in the file manager" is not there, since a folder of the container means nothing to your computer. With Podman instead of Docker, set `dev.containers.dockerPath` to `podman` in VS Code first.
 - The command from [Connect Copilot CLI](/guide/connect-copilot-cli) is a path inside the container, so it works for a Copilot CLI in the container, not on your computer.
 - To update without rebuilding, run `trackwall-container update <version>` in the container, for example `trackwall-container update 0.6.0`. It answers at once and does the rest in the background: it downloads that version from GitHub, checks that it was signed by Trackwall's release key, restarts Trackwall on it, and goes back to the version you had when the new one does not start within a minute. Running sessions stop and resume as after any restart. `logs/daemon.log` in Trackwall's state folder says how it went, and `trackwall-container address` gives the new address with its token. The update stays in the state volume; rebuilding the container returns to the version in the Feature's address unless you change `<version>` there too, which is the other way to update.
-- VS Code's port forward starts a program for every new connection, which can take a few seconds when the computer is busy or its security software checks every program that starts. The desktop app waits up to 10 seconds for Trackwall in a container before it says it lost the connection. If it still loses it while Trackwall in the container runs (inside the container `curl http://127.0.0.1:7700/api/health` answers at once), the forward is slower than that: close other work or ask whoever runs the security software to exclude `docker.exe`.
+- VS Code's port forward starts a program for every new connection, which can take a few seconds when the computer is busy or its security software checks every program that starts. The desktop app waits up to 10 seconds for Trackwall in a container before it says it lost the connection. If it still loses it while Trackwall in the container runs (inside the container `curl http://127.0.0.1:7700/api/health` answers at once), the forward is slower than that: let Docker [publish the ports](#publish-the-ports-instead-of-forwarding-them) instead, which starts no program per connection.
 - When the app cannot connect, its message says which way it failed. "No Trackwall daemon answers at 127.0.0.1:7700" means nothing takes connections on the port: start the container and check that VS Code forwards 7700. "Something accepted the connection at 127.0.0.1:7700, but no answer came back" means the port is forwarded but no answer came through it: forward the port again in VS Code's Ports view and check that Trackwall runs in the container. "Something answers at 127.0.0.1:7700, but not as a Trackwall daemon" means the port leads to another program.
-- Repos with changes you have not pushed live only in the `workspace-repos` volume. Removing the volume, or "Reset to factory defaults" in Docker Desktop, deletes them. "Only in this container" on [Home](/features/home) and the [doctor](/features/doctor) list what is at stake. [Back up the repos](#back-up-the-repos) before you remove the volume.
+- Repos with changes you have not pushed live only in the `workspace-repos` volume. Removing the volume, or "Reset to factory defaults" in Docker Desktop, deletes them. "Only in this container" on [Home](/features/home) and the [doctor](/features/doctor) list what is at stake. [Back up your work](#back-up-your-work-from-trackwall) before you remove the volume.

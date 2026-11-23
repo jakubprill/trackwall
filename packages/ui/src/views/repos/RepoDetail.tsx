@@ -19,6 +19,7 @@ import { FILE_MANAGER } from "@/lib/platform";
 import { type RepoActivityTarget, repoActivity } from "@/lib/repo-activity";
 import { REPO_TABS, type RepoTab } from "@/lib/repo-tabs";
 import type { SessionSelection } from "@/lib/session-entries";
+import { workInRepoFolder } from "@/lib/upstream-pull";
 import { useHostFolder } from "@/lib/use-host-folder";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
@@ -34,23 +35,29 @@ import { RepoStats } from "./RepoStats.tsx";
 export function RepoDetail({
   conn,
   repo,
+  initialTab = REPO_TABS[0].id,
   projectsDir,
+  newOnServer,
   sessions,
   runningLive,
   onOpenInSessions,
 }: {
   conn: Connection;
   repo: Repo;
+  /** The tab the repo opens on: a row of All repos opens it where its way out is (ADR-293). */
+  initialTab?: RepoTab;
   /** The daemon's projects folder, for showing the repo through that folder on this computer (ADR-131); unknown until the list loads. */
   projectsDir: string | null | undefined;
+  /** The server check found commits the repo has not fetched (ADR-295): its Upstream tile offers the pull. */
+  newOnServer: boolean;
   /** `undefined` until the first session list arrives: the bar then shows only mise tasks. */
   sessions: SessionList | undefined;
   /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   onOpenInSessions: (selection: SessionSelection) => void;
 }) {
-  const [tab, setTab] = useState<RepoTab>(REPO_TABS[0].id);
-  const running = useRunningMiseTasks(conn, runningLive);
+  const [tab, setTab] = useState(initialTab);
+  const running = useRunningMiseTasks(conn, runningLive).data ?? [];
   const openActivity = (target: RepoActivityTarget) => {
     if (target.view === "mise") setTab("mise");
     else onOpenInSessions(target.selection);
@@ -79,8 +86,16 @@ export function RepoDetail({
       )}
       {status.kind === "ok" && (
         <>
-          <RepoStats status={status} onShowChanges={() => setTab("changes")} />
-          <RepoActivityBar items={repoActivity(repo.id, sessions, running.data ?? [])} onOpen={openActivity} />
+          <RepoStats
+            conn={conn}
+            repo={repo.id}
+            status={status}
+            newOnServer={newOnServer}
+            workInFolder={workInRepoFolder(repo.id, sessions, running)}
+            onShowChanges={() => setTab("changes")}
+            onOpenShell={() => setTab("shell")}
+          />
+          <RepoActivityBar items={repoActivity(repo.id, sessions, running)} onOpen={openActivity} />
           <TabBar tabs={REPO_TABS} active={tab} onSelect={setTab} />
           {tab === "card" && (
             <RepoCardView

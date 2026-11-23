@@ -13,10 +13,14 @@ import {
   type ErrorCode,
   HEALTH_PATH,
   type Health,
+  MAX_WORK_BACKUP_BYTES,
   PAGE_CODE_EXCHANGE_PATH,
   PAGE_CODE_PATH,
   type PageCode,
   type PageCodeExchange,
+  WORK_BACKUP_DOWNLOAD_PATH,
+  WORK_BACKUP_UPLOAD_PATH,
+  type WorkBackupRestore,
 } from "@trackwall/protocol";
 import type { Facade } from "../facade.ts";
 import { DomainError } from "../infra/errors.ts";
@@ -246,7 +250,14 @@ function authenticate(
  */
 function journalArea(url: string | undefined): string {
   const path = (url ?? "").split("?")[0] ?? "";
-  if (postRoutes.has(path) || path === DOWNLOAD_PATH || path === DROP_PATH) return `api:${path}`;
+  if (
+    postRoutes.has(path) ||
+    path === DOWNLOAD_PATH ||
+    path === WORK_BACKUP_DOWNLOAD_PATH ||
+    path === WORK_BACKUP_UPLOAD_PATH ||
+    path === DROP_PATH
+  )
+    return `api:${path}`;
   return path.startsWith(HOOKS_PATH) ? "api:hooks" : "api:other";
 }
 
@@ -266,13 +277,24 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, path: string
     res.once("finish", () => setImmediate(o.onShutdown));
     return;
   }
-  if (path === DOWNLOAD_PATH && req.method === "POST")
-    return sendDownload(res, await o.facade.folderFiles.download(downloadRequest(await readJson(req, API_BODY_MAX_BYTES))));
-  if (path === DROP_PATH && req.method === "POST") return receiveDrop(req, res, o);
+  if (req.method === "POST" && (await handleFileApi(req, res, path, o))) return;
   const post = req.method === "POST" ? postRoutes.get(path) : undefined;
   // The token was checked before any of the body is read, so only the daemon's own clients send a large one.
   if (post) return ok(res, await post.run(o.facade, await readJson(req, post.maxBodyBytes)));
   return fail(res, "not_found", `no route ${req.method} ${path}`);
+}
+
+/** The actions whose body or answer is a file's bytes rather than JSON; `false` for any other path. */
+async function handleFileApi(req: IncomingMessage, res: ServerResponse, path: string, o: ApiOptions): Promise<boolean> {
+  if (path === DOWNLOAD_PATH)
+    await sendDownload(res, await o.facade.folderFiles.download(downloadRequest(await readJson(req, API_BODY_MAX_BYTES))));
+  else if (path === WORK_BACKUP_DOWNLOAD_PATH) {
+    await drain(req);
+    await sendDownload(res, await o.facade.workBackup.download());
+  } else if (path === DROP_PATH) await receiveDrop(req, res, o);
+  else if (path === WORK_BACKUP_UPLOAD_PATH) await receiveWorkBackup(req, res, o);
+  else return false;
+  return true;
 }
 
 /** A dropped file (ADR-226); after a refusal the rest of the body is read and dropped, so the answer still reaches the client. */
@@ -281,6 +303,18 @@ async function receiveDrop(req: IncomingMessage, res: ServerResponse, o: ApiOpti
     const name = droppedName(req);
     refuseOversized(req, name);
     return ok<DroppedFile>(res, { path: await o.facade.droppedFiles.save(name, droppedBody(req)) });
+  } catch (err) {
+    req.resume();
+    throw err;
+  }
+}
+
+/** A work backup to restore (ADR-275); one that says it is over the limit is refused before any of it is read. */
+async function receiveWorkBackup(req: IncomingMessage, res: ServerResponse, o: ApiOptions): Promise<void> {
+  try {
+    if (Number(req.headers["content-length"]) > MAX_WORK_BACKUP_BYTES)
+      throw new DomainError("bad_request", `the file is larger than ${MAX_WORK_BACKUP_BYTES} bytes, more than a work backup can be`);
+    return ok<WorkBackupRestore>(res, await o.facade.workRestore.upload(droppedBody(req)));
   } catch (err) {
     req.resume();
     throw err;

@@ -481,8 +481,9 @@ describe("a task that plans first with the real Copilot CLI (ADR-229)", () => {
     expect(approved).not.toBe(resumed);
     const approvedView = conversationOf(approved);
     await approvedView.infoUntil((i) => i.mode?.current === AGENT_MODE, "the agent mode");
-    await approvedView.until((entries) => entries.some((e) => e.kind === "agent" && e.text === "Implemented the plan."), "the answer");
+    // The session started again: its turn takes a new Copilot CLI, so the answer is waited for only after the turn's end.
     await endOfTurn(approved);
+    await approvedView.until((entries) => entries.some((e) => e.kind === "agent" && e.text === "Implemented the plan."), "the answer");
 
     const implementing = model.requests().at(-2)?.lastUserText;
     expect(implementing).toEndWith(PLAN_APPROVED_MESSAGE);
@@ -514,8 +515,9 @@ describe("a task without approvals that plans first with the real Copilot CLI (A
     const implementing = taskSessionOf(task.id);
     expect(implementing).not.toBe(planning);
     const view = conversationOf(implementing);
-    await view.until((entries) => entries.some((e) => e.kind === "agent" && e.text === "Implemented the plan."), "the answer");
+    // A new Copilot CLI and the script take longer than `until` waits, on Windows above all: the turn's end comes first.
     await endOfTurn(implementing);
+    await view.until((entries) => entries.some((e) => e.kind === "agent" && e.text === "Implemented the plan."), "the answer");
     expect(agents.sessions().sessions.find((s) => s.id === implementing)?.dialog).toBeNull();
     view.detach();
     expect(existsSync(join(task.worktree, written))).toBe(true);

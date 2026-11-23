@@ -1,31 +1,40 @@
 import { realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type CopilotCliRelation,
+  type CopilotCliSource,
+  type CopilotCliVersion,
+  copilotCliInstallAdvice,
   countLabel,
   type DoctorCheck,
   DoctorCheckId,
   type DoctorReport,
   HOST_CLI,
   type JavaNavigationState,
+  type ProjectsFolderTrust,
   type RepoHost,
   type RepoHostKind,
   type SandboxState,
   TESTED_COPILOT_CLI_VERSION,
+  type TrustedProjectsFolder,
   type UnpushedWork,
   unpushedSummary,
   unpushedTotal,
   type WorkspaceKeysRead,
   workspaceKeysSummary,
 } from "@trackwall/protocol";
+import { DomainError } from "../../infra/errors.ts";
 import { isInside } from "../../infra/path-inside.ts";
-import { trustedFolderOf, trustedFolders } from "./copilot-trust.ts";
-import { type DiskSpace, gigabytes, LOW_DISK_BYTES, VERY_LOW_DISK_BYTES } from "./disk-space.ts";
+import { type DiskSpace, gigabytes, LOW_DISK_BYTES, VERY_LOW_DISK_BYTES } from "../../platform/disk-space.ts";
+import { trustedFolders, trustingFolder } from "./copilot-trust.ts";
+import { trustFolder } from "./copilot-trust-write.ts";
 import { fileScanningOutcome, folderCosts, type ScanFolder } from "./file-scanning.ts";
 import { firstLine } from "./first-line.ts";
 import { folderStorage } from "./folder-storage.ts";
 import { modelProviderOutcome, type ProfileEnvironment } from "./model-provider-check.ts";
 import { networkOutcome, sessionCertificates } from "./network-check.ts";
 import { type RemoteReachRead, remoteOutcome } from "./remote-check.ts";
+import { ALL_APPLICATION_PACKAGES, gitInstallFolder, sandboxGitBlocked } from "./sandbox-git.ts";
 import type { TlsProbe } from "./tls-probe.ts";
 import { compareVersions, versionIn } from "./version.ts";
 
@@ -91,6 +100,8 @@ export interface DoctorDeps {
   measureFileWrites: (folder: string, files: number) => Promise<number>;
   /** Trackwall runs in a container, whose disk is Docker's: the same `FacadeOptions.inContainer` that `unpushedWork` reads (ADR-162). */
   inContainer: boolean;
+  /** The daemon's system: on Windows the sandbox check also asks whether git can start in the sandbox (`sandbox-git.ts`). */
+  platform: NodeJS.Platform;
   /** `/proc/self/mountinfo` on Linux, `null` elsewhere: where the projects folder's files live. */
   mountTable: () => Promise<string | null>;
   /** The full path of `workspace.yaml`. */
@@ -117,9 +128,17 @@ export interface DoctorDeps {
 
 type Settled<T> = { ok: true; value: T } | { ok: false; message: string };
 
+/** What the Copilot CLI of sessions said about its version: not found, failed to answer, or answered. */
+type CopilotVersionRead =
+  | { kind: "missing"; message: string }
+  | { kind: "failed"; message: string; source: CopilotCliSource }
+  | { kind: "answered"; version: string | null; program: string; source: CopilotCliSource };
+
 interface CheckContext {
   env: NodeJS.ProcessEnv;
   projectsDir: Settled<string | null>;
+  /** One `git --version` per run, for the git check and, on Windows, the sandbox check's git. */
+  gitVersion: Promise<Settled<Awaited<ReturnType<DoctorDeps["gitVersion"]>>>>;
 }
 
 /** A check's result without its id; `null` when the check does not apply here. */
@@ -139,12 +158,12 @@ export class Doctor {
       "file-scanning": (ctx) => this.fileScanning(ctx),
       "unpushed-work": (ctx) => this.unpushedWork(ctx),
       "workspace-file": () => this.workspaceFile(),
-      git: () => this.git(),
+      git: (ctx) => this.git(ctx),
       "git-remotes": async ({ projectsDir }) =>
         projectsDir.ok && projectsDir.value !== null ? remoteOutcome(await this.deps.remoteReach(), this.deps.inContainer) : null,
       "copilot-cli": (ctx) => this.copilotCli(ctx),
       "copilot-trusted-folder": (ctx) => this.copilotTrustedFolder(ctx),
-      "copilot-sandbox": () => this.copilotSandbox(),
+      "copilot-sandbox": (ctx) => this.copilotSandbox(ctx),
       network: ({ env }) => networkOutcome(env, { probe: this.deps.probeTls, systemCaFiles: this.deps.systemCaFiles }),
       "model-provider": () => this.modelProvider(),
       mise: (ctx) => this.mise(ctx),
@@ -162,7 +181,11 @@ export class Doctor {
   }
 
   async run(): Promise<DoctorReport> {
-    const ctx: CheckContext = { env: await this.deps.env(), projectsDir: await settle(this.deps.projectsDir()) };
+    const ctx: CheckContext = {
+      env: await this.deps.env(),
+      projectsDir: await settle(this.deps.projectsDir()),
+      gitVersion: settle(this.deps.gitVersion(CHECK_TIMEOUT_MS)),
+    };
     const outcomes = await Promise.all(
       DoctorCheckId.options.map(async (id) => {
         const outcome = await settle(this.checks[id](ctx));
@@ -171,6 +194,30 @@ export class Doctor {
       }),
     );
     return { checks: outcomes.filter((c) => c !== null), checkedAt: this.deps.now().toISOString() };
+  }
+
+  /**
+   * Makes Copilot CLI trust the projects folder without asking, the fix of `copilot-trusted-folder` (ADR-270): the one
+   * thing the doctor changes, and only when the user asks. The folder is the one of the workspace settings.
+   */
+  async trustProjectsFolder(): Promise<TrustedProjectsFolder> {
+    const folder = await this.projectsFolderToTrust();
+    return trustFolder(await this.deps.env(), folder);
+  }
+
+  /**
+   * The `copilot-trusted-folder` check alone, for the New session form (ADR-290): the projects folder and whether a trusted
+   * folder covers it. It reads Copilot CLI's `config.json` and nothing else.
+   */
+  async projectsFolderTrust(): Promise<ProjectsFolderTrust> {
+    const folder = await this.projectsFolderToTrust();
+    return { folder, trusted: trustingFolder(await trustedFolders(await this.deps.env()), folder) !== null };
+  }
+
+  private async projectsFolderToTrust(): Promise<string> {
+    const dir = await this.deps.projectsDir();
+    if (dir === null) throw new DomainError("bad_request", "No projects folder is set, so there is no folder to trust yet.");
+    return dir;
   }
 
   private async projectsFolder({ projectsDir }: CheckContext): Promise<Outcome> {
@@ -304,8 +351,8 @@ export class Doctor {
     return ok(`workspace.yaml: ${summary.text}.`);
   }
 
-  private async git(): Promise<Outcome> {
-    const version = await settle(this.deps.gitVersion(CHECK_TIMEOUT_MS));
+  private async git(ctx: CheckContext): Promise<Outcome> {
+    const version = await ctx.gitVersion;
     if (!version.ok) return fail(`git: ${version.message}`, "Install Git (git-scm.com) and restart Trackwall.");
     const { output, program, source, chosen } = version.value;
     const git = `git ${versionIn(output) ?? firstLine(output)}`;
@@ -316,12 +363,39 @@ export class Doctor {
   }
 
   private async copilotCli({ env }: CheckContext): Promise<Outcome> {
+    const read = await this.copilotVersionRead(env);
+    if (read.kind === "missing")
+      return fail(`${read.message}.`, "Install GitHub Copilot CLI, sign in by running `copilot` once, and restart Trackwall.");
+    if (read.kind === "failed") return fail(`Copilot CLI: ${read.message}`, "Run `copilot --version` in a terminal to see what is wrong.");
+    const outcome = copilotVersionOutcome(read.version, read.source);
+    // The program is named only when it is not the tested one: a fix in a container has to reach the copy that runs.
+    return outcome.status === "ok" ? outcome : { ...outcome, summary: `${outcome.summary} It runs from ${read.program}.` };
+  }
+
+  /**
+   * Only the Copilot CLI check's version, for the window's strip about an untested version (ADR-274): the same program
+   * and comparison as the check, so the strip and "Diagnostics" never disagree.
+   */
+  async copilotCliVersion(): Promise<CopilotCliVersion> {
+    const read = await this.copilotVersionRead(await this.deps.env());
+    const tested = TESTED_COPILOT_CLI_VERSION;
+    const version = read.kind === "answered" ? read.version : null;
+    const relation = copilotVersionRelation(version);
+    // Without a program there is no version and no strip; a container then has only its image to install it in.
+    const source = read.kind !== "missing" ? read.source : this.deps.inContainer ? "container-image" : "computer";
+    return version === null || relation === "unknown"
+      ? { relation: "unknown", version: null, tested, source }
+      : { relation, version, tested, source };
+  }
+
+  /** Copilot CLI found as sessions find it and its `--version`, as `x.y.z` (`null` when it names none). */
+  private async copilotVersionRead(env: NodeJS.ProcessEnv): Promise<CopilotVersionRead> {
     const copilot = this.deps.resolveCopilot(env);
-    if ("missing" in copilot)
-      return fail(`${copilot.message}.`, "Install GitHub Copilot CLI, sign in by running `copilot` once, and restart Trackwall.");
-    const version = await settle(this.version([copilot.program, ...copilot.args], env));
-    if (!version.ok) return fail(`Copilot CLI: ${version.message}`, "Run `copilot --version` in a terminal to see what is wrong.");
-    return copilotVersionOutcome(versionIn(version.value));
+    if ("missing" in copilot) return { kind: "missing", message: copilot.message };
+    const output = await settle(this.version([copilot.program, ...copilot.args], env));
+    const source = copilotCliSource(copilot.program, this.deps.inContainer, env, this.deps.homeDir);
+    if (!output.ok) return { kind: "failed", message: output.message, source };
+    return { kind: "answered", version: versionIn(output.value), program: copilot.program, source };
   }
 
   private async copilotTrustedFolder({ env, projectsDir }: CheckContext): Promise<Outcome> {
@@ -330,7 +404,7 @@ export class Doctor {
     const trust = await trustedFolders(env);
     const fix = `Add ${dir} to "trustedFolders" in ${trust.file}, so Copilot CLI stops asking for every repo and task.`;
     if (trust.kind === "unreadable") return warn(`Copilot CLI's ${trust.file} could not be read: ${trust.message}.`, fix);
-    const folder = trust.kind === "read" ? trustedFolderOf(dir, trust.folders) : null;
+    const folder = trustingFolder(trust, dir);
     if (folder === null) return warn("Copilot CLI does not trust the projects folder; it asks before working in each repo.", fix);
     return ok(`Copilot CLI trusts ${folder}.`);
   }
@@ -346,7 +420,7 @@ export class Doctor {
   }
 
   /** Where some task runs in the sandbox, or in a container where it is off by default because it cannot run there safely (ADR-219). */
-  private async copilotSandbox(): Promise<Outcome> {
+  private async copilotSandbox(ctx: CheckContext): Promise<Outcome> {
     const { tasks, problem, chosen } = await this.deps.sandbox();
     if (tasks === "off") {
       // Off by default in a container where the sandbox cannot run (ADR-219): the user may not know the container is
@@ -357,18 +431,33 @@ export class Doctor {
         `${CONTAINER_SANDBOX_FIX}, or choose "No task" in Settings › Agents › Sandbox to keep it so.`,
       );
     }
-    if (problem === null)
-      return ok(
-        tasks === "all"
-          ? "Every task runs its commands in Copilot CLI's sandbox."
-          : "Tasks without approvals run their commands in Copilot CLI's sandbox.",
+    if (problem === null) {
+      const runs = `${tasks === "all" ? "Every task runs its" : "Tasks without approvals run their"} commands in Copilot CLI's sandbox`;
+      const git = await this.sandboxBlockedGit(ctx);
+      if (git === null) return ok(`${runs}.`);
+      return warn(
+        `${runs}, but git cannot start there: ${git} does not let Windows apps (ALL APPLICATION PACKAGES) run it, so such a task cannot commit.`,
+        `Reinstall Git for Windows with its default permissions, or grant them as an administrator: icacls "${gitInstallFolder(git)}" /grant "*${ALL_APPLICATION_PACKAGES}:(OI)(CI)RX" /T`,
       );
+    }
     return fail(
       `Copilot CLI's sandbox cannot run here: ${problem}, so Trackwall refuses to start ${tasks === "all" ? "any task" : "tasks without approvals"}.`,
       this.deps.inContainer
         ? `${CONTAINER_SANDBOX_FIX}, or choose "No task" in Settings › Agents › Sandbox.`
         : `Install it (on Linux the bubblewrap package, with slirp4netns, iproute2 and iptables, and the tun kernel module), or choose "No task" in Settings › Agents › Sandbox.`,
     );
+  }
+
+  /**
+   * On Windows, the daemon's git when Copilot CLI's sandbox cannot start it, `null` otherwise. A session's shell runs the
+   * `git` on its `PATH`, usually `cmd\git.exe` of the same install, so this is a strong sign, not proof.
+   */
+  private async sandboxBlockedGit(ctx: CheckContext): Promise<string | null> {
+    if (this.deps.platform !== "win32") return null;
+    const version = await ctx.gitVersion;
+    if (!version.ok) return null;
+    const { program } = version.value;
+    return (await sandboxGitBlocked(program, this.deps.run, ctx.env, CHECK_TIMEOUT_MS)) === true ? program : null;
   }
 
   /** Only for someone who set Java navigation up: a path that went missing greys it out on the New session form. */
@@ -405,17 +494,44 @@ export class Doctor {
   }
 }
 
-/** Older than the tested version may lack what the daemon relies on; newer is what users get first, so only noted. */
-export function copilotVersionOutcome(version: string | null): NonNullable<Outcome> {
+/**
+ * Where the Copilot CLI at `program` comes from: in a container, a program under mise's data folder (its shims or
+ * installs; `MISE_DATA_DIR`, else `$XDG_DATA_HOME/mise`, else `~/.local/share/mise`, as mise and the Feature's wrapper
+ * find it) is mise's copy, anything else the image's (#549: `npm i -g` in an image puts it in `/usr/local/bin`).
+ */
+export function copilotCliSource(program: string, inContainer: boolean, env: NodeJS.ProcessEnv, homeDir: string): CopilotCliSource {
+  if (!inContainer) return "computer";
+  const miseData = env.MISE_DATA_DIR || join(env.XDG_DATA_HOME || join(homeDir, ".local", "share"), "mise");
+  return isInside(miseData, program) ? "container-mise" : "container-image";
+}
+
+/** Where a Copilot CLI version stands against the tested one (ADR-274); `unknown` without a version. */
+function copilotVersionRelation(version: string | null): CopilotCliRelation {
+  if (version === null) return "unknown";
+  const diff = compareVersions(version, TESTED_COPILOT_CLI_VERSION);
+  return diff < 0 ? "older" : diff > 0 ? "newer" : "tested";
+}
+
+/**
+ * Older than the tested version may lack what the daemon relies on; newer may have changed it, which the nightly contract
+ * tests find only after users have it (ADR-274). Both work as a rule, so both are warnings, not failures.
+ */
+export function copilotVersionOutcome(version: string | null, source: CopilotCliSource): NonNullable<Outcome> {
   const tested = TESTED_COPILOT_CLI_VERSION;
-  if (version === null) return warn("Copilot CLI did not say its version.", `Trackwall is tested with Copilot CLI ${tested}.`);
-  const diff = compareVersions(version, tested);
-  if (diff < 0)
-    return warn(
-      `Copilot CLI ${version} is older than ${tested}, the version Trackwall is tested with.`,
-      "Update Copilot CLI the way you installed it (npm, Homebrew or WinGet).",
-    );
-  return ok(diff === 0 ? `Copilot CLI ${version}` : `Copilot CLI ${version} (Trackwall is tested with ${tested})`);
+  const advice = copilotCliInstallAdvice(tested, source);
+  switch (copilotVersionRelation(version)) {
+    case "unknown":
+      return warn("Copilot CLI did not say its version.", `Trackwall is tested with Copilot CLI ${tested}.`);
+    case "older":
+      return warn(`Copilot CLI ${version} is older than ${tested}, the version Trackwall is tested with.`, advice);
+    case "newer":
+      return warn(
+        `Copilot CLI ${version} is newer than ${tested}, the version Trackwall is tested with.`,
+        `Sessions usually work, but a change in Copilot CLI can make Trackwall show a session's state wrong. If one does, go back to the tested version, or update Trackwall when a version tested with ${version} comes out. ${advice}`,
+      );
+    case "tested":
+      return ok(`Copilot CLI ${version}`);
+  }
 }
 
 /** A call's value or its error's first line, so that one failed program never fails the report. */

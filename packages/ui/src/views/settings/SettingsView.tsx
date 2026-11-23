@@ -6,25 +6,20 @@ import {
   type WorkspaceSettings,
   workspaceApi,
 } from "@trackwall/protocol";
-import { Fragment, type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import { Surface } from "@/components/Surface";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { LiveFeed } from "@/lib/daemon-events";
-import { getStartedPlan } from "@/lib/get-started";
+import { useOpenSteps } from "@/lib/get-started-memory";
 import { SETTING_ROWS, type SettingRowId, type SettingSources, settingRowOpen, settingsParts, settingValue } from "@/lib/setting-rows";
-import {
-  SETTINGS_CATEGORIES,
-  SETTINGS_GROUP_LABELS,
-  type SettingsCategory,
-  type SettingsGroup,
-  type SettingsSection,
-  settingsCategory,
-} from "@/lib/settings-categories";
+import { type SettingsCategory, type SettingsSection, settingsCategory } from "@/lib/settings-categories";
 import { useTheme } from "@/lib/theme-controller";
+import { useTips } from "@/lib/tips-controller";
 import type { AppUpdateHandle } from "@/lib/use-app-update";
 import { useDoctorReport } from "@/lib/use-doctor-report";
+import type { HomeOnBarChoice } from "@/lib/use-home-on-bar";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { cn } from "@/lib/utils";
 import { AlwaysAllowSurface } from "./AlwaysAllowSurface.tsx";
@@ -32,17 +27,17 @@ import { AutoReviewSurface } from "./AutoReviewSurface.tsx";
 import { BrowserNotificationsSurface } from "./BrowserNotificationsSurface.tsx";
 import { ConfigFilesSurface } from "./ConfigFilesSurface.tsx";
 import { ConnectCopilotSurface } from "./ConnectCopilotSurface.tsx";
+import { ContainerHealthSurface } from "./ContainerHealthSurface.tsx";
 import { CopilotUsageSurface } from "./CopilotUsageSurface.tsx";
 import { DaemonSurface } from "./DaemonSurface.tsx";
 import { DoctorSurface } from "./DoctorSurface.tsx";
 import { ErrorJournalSurface } from "./ErrorJournalSurface.tsx";
 import { GetStartedSurface } from "./GetStartedSurface.tsx";
 import { GitProgramSurface } from "./GitProgramSurface.tsx";
-import { HomeSceneSurface } from "./HomeSceneSurface.tsx";
+import { HomeSurface } from "./HomeSurface.tsx";
 import { JavaNavigationSurface } from "./JavaNavigationSurface.tsx";
 import { KeepScreenOnSurface } from "./KeepScreenOnSurface.tsx";
 import { LocalConfigReposSurface } from "./LocalConfigReposSurface.tsx";
-import { LocalConfigStoreSurface } from "./LocalConfigStoreSurface.tsx";
 import { McpCallsSurface } from "./McpCallsSurface.tsx";
 import { ModelStatsSurface } from "./ModelStatsSurface.tsx";
 import { ProjectsFolderSurface } from "./ProjectsFolderSurface.tsx";
@@ -50,15 +45,20 @@ import { RepoHostsSurface } from "./RepoHostsSurface.tsx";
 import { RetryModelSurface } from "./RetryModelSurface.tsx";
 import { RunningTasksWarningSurface } from "./RunningTasksWarningSurface.tsx";
 import { SandboxSurface } from "./SandboxSurface.tsx";
+import { ServerCheckSurface } from "./ServerCheckSurface.tsx";
 import { SessionProfileSurface } from "./SessionProfileSurface.tsx";
 import { SettingRow } from "./SettingRow.tsx";
+import { SettingsNav } from "./SettingsNav.tsx";
 import { StartAtSignInSurface } from "./StartAtSignInSurface.tsx";
 import { SupervisorChangesCodeSurface } from "./SupervisorChangesCodeSurface.tsx";
 import { SupervisorModelSurface } from "./SupervisorModelSurface.tsx";
 import { TaskTokenBudgetSurface } from "./TaskTokenBudgetSurface.tsx";
 import { ThemeSurface } from "./ThemeSurface.tsx";
+import { TipsSurface } from "./TipsSurface.tsx";
 import { UpdatesSurface } from "./UpdatesSurface.tsx";
 import { VsCodeExtensionSurface } from "./VsCodeExtensionSurface.tsx";
+import { WorkBackupSurface } from "./WorkBackupSurface.tsx";
+import { WorkspaceStoreSurface } from "./WorkspaceStoreSurface.tsx";
 import { WorktreesDirSurface } from "./WorktreesDirSurface.tsx";
 
 type SettingsProps = {
@@ -68,6 +68,8 @@ type SettingsProps = {
   mcpCallsLive: LiveFeed<McpAuditRevision> | undefined;
   /** The session list, to tell how many running sessions keep another session profile (ADR-178). */
   sessions: SessionList | undefined;
+  /** Whether the view bar shows Home (ADR-294), which `App` keeps, as the bar is its. */
+  homeOnBar: HomeOnBarChoice;
   /** Reconnects to the daemon, for a read that failed because the daemon is gone. */
   onRetry: () => void;
   /** After the projects folder is saved, so that the app can show its repos. */
@@ -82,7 +84,7 @@ type SettingsProps = {
  * key in `workspace.yaml`, which can be edited by hand (ADR-13, ADR-18, ADR-84). The view is as wide as a wide category
  * needs (ADR-212), so the list stays in one place when the user moves between categories, and starts at the left edge
  * of the window (ADR-262). "Get started" and "Diagnostics" show one run of the doctor (`useDoctorReport`), whose open steps
- * stay as a number next to "Get started". A setting is a folded row (ADR-263): the rows of a category read their values from
+ * stay as a line under "Get started" in the list (`SettingsNav`, ADR-268). A setting is a folded row (ADR-263): the rows of a category read their values from
  * one read of the workspace settings, which their forms share, so a saved value shows in its row at once.
  */
 export function SettingsView({ initialCategory, ...props }: SettingsProps & { initialCategory: SettingsCategory }) {
@@ -92,41 +94,21 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
     props.conn,
     category.sections.some((s) => s === "get-started" || s === "doctor"),
   );
-  const open = doctor.data ? getStartedPlan(doctor.data).open : 0;
+  const open = useOpenSteps(doctor.data);
   const loadSettings = useCallback(() => post(props.conn, workspaceApi.settings, {}), [props.conn]);
   const settings = useRemote(loadSettings);
   const sectionProps = { ...props, doctor, settings, onOpenCategory: setCurrent };
-  const sources: SettingSources = { settings: settings.data, settingsFailed: settings.error !== undefined, theme: useTheme().choice };
+  const sources: SettingSources = {
+    settings: settings.data,
+    settingsFailed: settings.error !== undefined,
+    theme: useTheme().choice,
+    homeOnBar: props.homeOnBar.value,
+    tipsOn: useTips().state.on,
+  };
   return (
     <div className="@container w-full max-w-6xl">
       <div className="flex flex-col gap-4 @3xl:flex-row @3xl:items-start @3xl:gap-6">
-        <nav aria-label="Settings categories" className="flex shrink-0 gap-1 overflow-x-auto @3xl:w-44 @3xl:flex-col">
-          {SETTINGS_CATEGORIES.map((c, i) => (
-            <Fragment key={c.id}>
-              <GroupCaption group={c.group} previous={SETTINGS_CATEGORIES[i - 1]?.group} />
-              <button
-                type="button"
-                aria-current={c.id === current ? "page" : undefined}
-                onClick={() => setCurrent(c.id)}
-                className={cn(
-                  "flex shrink-0 items-center justify-between gap-2 rounded-md px-3 py-1.5 text-left text-sm whitespace-nowrap transition-colors",
-                  c.id === current ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                )}
-              >
-                {c.label}
-                {c.id === "get-started" && open > 0 && (
-                  <span
-                    role="img"
-                    aria-label={`${open} to do`}
-                    className="bg-warning/20 text-warning rounded-full px-1.5 font-mono text-xs"
-                  >
-                    {open}
-                  </span>
-                )}
-              </button>
-            </Fragment>
-          ))}
-        </nav>
+        <SettingsNav current={current} openSteps={open} onSelect={setCurrent} />
         <div className={cn("flex w-full min-w-0 flex-col gap-4", !category.wide && "max-w-xl")}>
           <header className="flex flex-col gap-1">
             <h1 className="text-lg font-semibold">{category.label}</h1>
@@ -149,13 +131,6 @@ export function SettingsView({ initialCategory, ...props }: SettingsProps & { in
       </div>
     </div>
   );
-}
-
-/** The caption of a group of categories, above its first one; only in the list on the left, a row of categories has none. */
-function GroupCaption({ group, previous }: { group: SettingsGroup; previous: SettingsGroup | undefined }) {
-  const label = SETTINGS_GROUP_LABELS[group];
-  if (label === null || group === previous) return null;
-  return <span className="hud-label hidden px-3 pt-3 pb-1 @3xl:block">{label}</span>;
 }
 
 /** One setting's folded row, which remembers whether the user opened or folded it while the category is shown. */
@@ -181,6 +156,7 @@ function Section({
   warmupLive,
   mcpCallsLive,
   sessions,
+  homeOnBar,
   onRetry,
   onSaved,
 }: SettingsProps & {
@@ -207,10 +183,14 @@ function Section({
       return <WorktreesDirSurface conn={conn} settings={settings} />;
     case "git-program":
       return <GitProgramSurface conn={conn} settings={settings} />;
-    case "local-config-store":
-      return <LocalConfigStoreSurface conn={conn} />;
+    case "workspace-store":
+      return <WorkspaceStoreSurface conn={conn} />;
+    case "work-backup":
+      return <WorkBackupSurface conn={conn} />;
     case "repo-hosts":
       return <RepoHostsSurface conn={conn} />;
+    case "server-check":
+      return <ServerCheckSurface conn={conn} settings={settings} />;
     case "copilot-cli":
       return <ConnectCopilotSurface conn={conn} onRetry={onRetry} />;
     case "session-profile":
@@ -253,8 +233,10 @@ function Section({
       return <UpdatesSurface handle={update} />;
     case "theme":
       return <ThemeSurface />;
-    case "home-scene":
-      return <HomeSceneSurface />;
+    case "home":
+      return <HomeSurface onBar={homeOnBar} />;
+    case "tips":
+      return <TipsSurface />;
     case "daemon":
       return <DaemonSurface conn={conn} warmupLive={warmupLive} onRetry={onRetry} />;
     case "config-files":
@@ -263,6 +245,8 @@ function Section({
       return <LocalConfigReposSurface conn={conn} />;
     case "doctor":
       return <DoctorSurface report={doctor} />;
+    case "container-health":
+      return <ContainerHealthSurface conn={conn} />;
     case "trackwall-errors":
       return <ErrorJournalSurface conn={conn} />;
   }

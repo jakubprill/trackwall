@@ -209,7 +209,7 @@ export const NO_MISE_TAG = "no-mise";
 
 /**
  * The tag of a repo with mise tasks in files git does not keep (`mise.local.toml`, a `mise.toml` kept out of git, ADR-110):
- * only this clone has them, and the local config store keeps their backup.
+ * only this clone has them, and the workspace store keeps their backup.
  */
 export const LOCAL_MISE_TAG = "local-mise";
 

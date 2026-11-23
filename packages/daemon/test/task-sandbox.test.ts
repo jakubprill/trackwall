@@ -52,7 +52,7 @@ describe("sandbox in workspace.yaml and its default (ADR-181)", () => {
     return new Workspace({
       inContainer,
       file: new WorkspaceFile(path),
-      vcs: new Vcs(systemTempFolder),
+      vcs: new Vcs(systemTempFolder, tmpdir()),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},

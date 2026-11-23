@@ -1,24 +1,58 @@
-import { BATCH_STEPS, type BatchRepo, type BatchRun, type BatchStep, countLabel, type Repo } from "@trackwall/protocol";
+import { BATCH_STEPS, type BatchStep, countLabel, type Repo, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
 import { ListChecks, Play, Square } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Loading } from "@/components/Loading";
-import { StatusLabel } from "@/components/StatusLabel";
 import { Surface } from "@/components/Surface";
 import { Button } from "@/components/ui/button";
-import { batchProgress, batchRunLabel, STEP_HINT, STEP_LABEL, stepLabel, stepMessage } from "@/lib/batch-state";
+import { batchProgress, STEP_HINT, STEP_LABEL } from "@/lib/batch-state";
+import type { Connection } from "@/lib/connection";
+import type { LiveFeed } from "@/lib/daemon-events";
 import { toggle } from "@/lib/set-toggle";
+import { workInRepoFolder } from "@/lib/upstream-pull";
 import type { BatchRunHandle } from "@/lib/use-batch-run";
+import { useRunningMiseTasks } from "@/lib/use-running-mise-tasks";
+import { BatchResults } from "./BatchResults.tsx";
+
+/** The batch command with what works in each repo's folder, read from the sessions and running mise tasks (ADR-271). */
+export function BatchPanel({
+  conn,
+  batch,
+  repos,
+  sessions,
+  runningLive,
+}: {
+  conn: Connection;
+  batch: BatchRunHandle;
+  repos: readonly Repo[];
+  sessions: SessionList | undefined;
+  runningLive: LiveFeed<RunningMiseTask[]> | undefined;
+}) {
+  const running = useRunningMiseTasks(conn, runningLive).data ?? [];
+  return <BatchView conn={conn} batch={batch} repos={repos} workInFolder={(repo) => workInRepoFolder(repo, sessions, running)} />;
+}
 
 /**
  * The batch command (ADR-27): choosing steps and repos, start, cancel and the result of every step in every repo. `repos`
  * is the repo list after the tag filter (ADR-25), so the filter picks a group of repos, and it can be narrowed by hand here.
  */
-export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: readonly Repo[] }) {
-  const [steps, setSteps] = useState<ReadonlySet<BatchStep>>(() => new Set(BATCH_STEPS));
-  // All repos by default; a repo that appears in the list later is not ticked by itself.
-  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set(repos.map((r) => r.id)));
+export function BatchView({
+  conn,
+  batch,
+  repos,
+  workInFolder,
+}: {
+  conn: Connection;
+  batch: BatchRunHandle;
+  repos: readonly Repo[];
+  /** What works in a repo's folder itself (`workInRepoFolder`), which putting changes aside leaves out (ADR-271). */
+  workInFolder: (repo: string) => readonly string[];
+}) {
+  // Nothing is ticked at the start: the user picks what runs, so a build of every repo never starts on a click by habit.
+  const [steps, setSteps] = useState<ReadonlySet<BatchStep>>(() => new Set());
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const chosen = repos.filter((r) => selected.has(r.id));
   const { run } = batch;
+  const ready = chosen.length > 0 && steps.size > 0;
 
   return (
     <div className="flex flex-col gap-4 p-6">
@@ -27,11 +61,11 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
         <h1 className="text-xl font-semibold tracking-tight">The same steps on many repos at once</h1>
         <p className="text-muted-foreground max-w-prose text-sm">
           Steps run one after another in each repo, three repos at a time. A failed step ends that repo; the others carry on. A mise task
-          with
-          <code>sources</code> and <code>outputs</code> is skipped when nothing changed, so a rerun is fast.
+          with <code>sources</code> and <code>outputs</code> is skipped when nothing changed, so a rerun is fast.
         </p>
       </header>
       <Surface label="Steps" meta={`${steps.size}/${BATCH_STEPS.length}`}>
+        <AllOrNone onAll={() => setSteps(new Set(BATCH_STEPS))} onNone={() => setSteps(new Set())} />
         <ul className="grid sm:grid-cols-2">
           {BATCH_STEPS.map((step) => (
             <Choice key={step} checked={steps.has(step)} onChange={() => setSteps(toggle(steps, step))}>
@@ -42,14 +76,7 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
         </ul>
       </Surface>
       <Surface label="Repos" meta={`${chosen.length}/${repos.length}`}>
-        <div className="flex gap-2 border-b px-3 py-2">
-          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set(repos.map((r) => r.id)))}>
-            All
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-            None
-          </Button>
-        </div>
+        <AllOrNone onAll={() => setSelected(new Set(repos.map((r) => r.id)))} onNone={() => setSelected(new Set())} />
         {/* Columns instead of one list: with a few dozen repos the results stay close to the start button. */}
         <ul className="grid grid-cols-2 lg:grid-cols-3">
           {repos.map((repo) => (
@@ -63,11 +90,12 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
         <Button
           variant="outline"
           size="sm"
-          disabled={batch.running || chosen.length === 0 || steps.size === 0}
+          disabled={batch.running || !ready}
           onClick={() => batch.start({ repos: chosen.map((r) => r.id), steps: BATCH_STEPS.filter((s) => steps.has(s)) })}
         >
           <Play /> Run on {countLabel(chosen.length, { one: "repo", other: "repos" })}
         </Button>
+        {!ready && <span className="text-muted-foreground text-xs">Choose at least one step and one repo.</span>}
         {run?.finishedAt === null && (
           <Button variant="outline" size="sm" disabled={run.cancelled} onClick={batch.cancel}>
             <Square /> {run.cancelled ? "Cancelling…" : "Cancel"}
@@ -76,72 +104,34 @@ export function BatchView({ batch, repos }: { batch: BatchRunHandle; repos: read
       </div>
       {batch.error && <p className="text-destructive text-sm whitespace-pre-wrap break-words">{batch.error}</p>}
       {run === undefined && !batch.error && <Loading />}
-      {run && <Results run={run} />}
+      {run && <BatchResults conn={conn} run={run} workInFolder={workInFolder} />}
     </div>
   );
 }
 
-/** Under the repo list: the way to the batch command, with progress while it runs. */
+/** Under the list's header while a batch command runs (ADR-273): its progress and the way to its results. */
 export function BatchBar({ batch, onShow }: { batch: BatchRunHandle; onShow: () => void }) {
-  const progress = batch.run?.finishedAt === null ? batchProgress(batch.run) : undefined;
+  if (batch.run?.finishedAt !== null) return null;
+  const progress = batchProgress(batch.run);
   return (
     <div className="flex px-4 pb-3">
       <Button variant="outline" size="sm" onClick={onShow}>
-        <ListChecks /> {progress ? `Batch command ${progress.done}/${progress.total}` : "Batch command"}
+        <ListChecks /> {`Batch command ${progress.done}/${progress.total}`}
       </Button>
     </div>
   );
 }
 
-function Results({ run }: { run: BatchRun }) {
-  const progress = batchProgress(run);
+function AllOrNone({ onAll, onNone }: { onAll: () => void; onNone: () => void }) {
   return (
-    <Surface
-      label={batchRunLabel(run, new Date())}
-      meta={`${progress.done}/${progress.total}`}
-      note={progress.failed > 0 ? `Repos with errors: ${progress.failed}` : undefined}
-    >
-      <ul className="divide-y">
-        {run.repos.map((repo) => (
-          <ResultRow key={repo.path} repo={repo} />
-        ))}
-      </ul>
-    </Surface>
-  );
-}
-
-function ResultRow({ repo }: { repo: BatchRepo }) {
-  return (
-    <li className="flex flex-col gap-2 px-3 py-2">
-      <span className="truncate font-mono text-sm" title={repo.path}>
-        {repo.repo}
-      </span>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-        {repo.steps.map((step) => {
-          const { tone, label } = stepLabel(step);
-          return (
-            <span key={step.step} className="flex items-center gap-2" title={stepMessage(step)}>
-              <span className="text-muted-foreground">{STEP_LABEL[step.step]}</span>
-              {tone ? <StatusLabel tone={tone} label={label} /> : <span>{label}</span>}
-            </span>
-          );
-        })}
-      </div>
-      {repo.steps.map((step) =>
-        step.state === "failed" ? (
-          <div key={step.step} className="flex flex-col gap-1">
-            <span className="text-destructive text-xs whitespace-pre-wrap break-words">
-              {STEP_LABEL[step.step]}: {step.message}
-            </span>
-            {step.lastLines.length > 0 && (
-              <pre className="text-muted-foreground overflow-x-auto font-mono text-xs whitespace-pre-wrap break-all">
-                {step.lastLines.join("\n")}
-              </pre>
-            )}
-          </div>
-        ) : null,
-      )}
-    </li>
+    <div className="flex gap-2 border-b px-3 py-2">
+      <Button variant="ghost" size="sm" onClick={onAll}>
+        All
+      </Button>
+      <Button variant="ghost" size="sm" onClick={onNone}>
+        None
+      </Button>
+    </div>
   );
 }
 

@@ -14,7 +14,7 @@ Trackwall runs on Windows (x64) and macOS (Apple Silicon). Each version on the [
 A browser marks a downloaded file as coming from the internet, and SmartScreen then blocks `trackwall.exe`, often without a "Run anyway" button. Command-line tools do not add that mark. In PowerShell, with the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`), this downloads the version in `$v`, checks its sum and unpacks it to `%LOCALAPPDATA%\Programs\Trackwall`:
 
 ```powershell
-$v = "0.5.28"
+$v = "0.5.30"
 $zip = "trackwall-$v-windows-x64.zip"
 gh release download "v$v" -R jakubprill/trackwall -p $zip -p SHA256SUMS.txt -D $env:TEMP --clobber
 if ($LASTEXITCODE) { throw "gh release download failed" }
@@ -48,7 +48,7 @@ Gatekeeper reports an unsigned app downloaded with a browser as "damaged". Downl
 
 ```sh
 shasum -a 256 -c SHA256SUMS.txt --ignore-missing
-ditto -x -k trackwall-0.5.28-macos-arm64.zip /Applications
+ditto -x -k trackwall-0.5.30-macos-arm64.zip /Applications
 xattr -dr com.apple.quarantine /Applications/Trackwall.app
 ```
 
@@ -58,6 +58,18 @@ Trackwall offers new versions itself: see [App updates](/features/updates).
 
 To update by hand, for example when a proxy stops the download or on 0.4.0, which cannot update itself: your data lives in `~/.trackwall` (on Windows `%USERPROFILE%\.trackwall`), outside the app folder. Quit Trackwall from the tray ("Quit", which also stops what runs in the background, so its files can be replaced) and install the new version the same way.
 
+## Copilot CLI
+
+Sessions run [GitHub Copilot CLI](https://github.com/github/copilot-cli), which needs a Copilot subscription and, on Windows, PowerShell 6 or later. Install it the way you install other tools, then sign in once:
+
+```sh
+winget install GitHub.Copilot      # Windows
+brew install copilot-cli           # macOS
+npm install -g @github/copilot     # either, with Node.js 22 or later
+```
+
+Run `copilot` in a terminal, type `/login` and follow the steps. Sessions you start in Trackwall use the same sign-in. Install it before you start Trackwall, or restart Trackwall afterwards, so that Trackwall finds it.
+
 ## First start
 
-Home offers [Get started](/features/get-started): a short list in "Settings" that sets your projects folder and checks Git, Copilot CLI and the network, and says when Trackwall is ready. Sessions you start in Trackwall get its tools by themselves; to give them to a Copilot CLI you start in your own terminal, [connect Copilot CLI](/guide/connect-copilot-cli). The [list of all features](/features/) shows what to try next.
+Trackwall opens on "Sessions", which shows the steps of [Get started](/features/get-started) above the form for your first task: a short list that sets your projects folder, checks Git, Copilot CLI and the network, recommends mise for your repos' builds and tests, and says when Trackwall is ready. Sessions you start in Trackwall get its tools by themselves; to give them to a Copilot CLI you start in your own terminal, [connect Copilot CLI](/guide/connect-copilot-cli). The [list of all features](/features/) shows what to try next, and [Troubleshooting](/guide/troubleshooting) what to do when something in the list does not turn green.

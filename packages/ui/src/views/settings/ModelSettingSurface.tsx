@@ -1,8 +1,8 @@
 import type { WorkspaceSettings } from "@trackwall/protocol";
+import { PathForm } from "@/components/PathForm";
 import type { Connection } from "@/lib/connection";
 import { useProviderModels } from "@/lib/use-provider-models";
 import type { RemoteHandle } from "@/lib/use-remote";
-import { PathForm } from "./PathForm.tsx";
 import { SettingsRead } from "./SettingsRead.tsx";
 
 /** A Copilot CLI model kept in `workspace.yaml`: its value and why the file's value cannot be read. */

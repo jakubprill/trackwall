@@ -1,8 +1,8 @@
 import { type WorkspaceSettings, workspaceApi } from "@trackwall/protocol";
+import { PathForm } from "@/components/PathForm";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import type { RemoteHandle } from "@/lib/use-remote";
-import { PathForm } from "./PathForm.tsx";
 import { SettingsRead } from "./SettingsRead.tsx";
 
 /** Where new task worktrees go (ADR-84); empty means `.trackwall/worktrees` in the projects folder. */

@@ -22,7 +22,7 @@ const report: ConfigFilesReport = {
     },
     { id: "tasks-file", name: "tasks.json", path: "C:\\Users\\me\\.trackwall\\tasks.json", state: "present", detail: "2 KB" },
     {
-      id: "local-config-store",
+      id: "workspace-store",
       name: ".trackwall/local",
       path: "C:\\Users\\me\\Dev\\.trackwall\\local",
       state: "present",
@@ -45,7 +45,7 @@ describe("the Files category", () => {
     const groups = configGroups(report);
     expect(groups.map((g) => [g.title, g.dir, g.entries.map((e) => e.id), g.internal.map((e) => e.id)])).toEqual([
       ["Trackwall", "C:\\Users\\me\\.trackwall", ["workspace-file"], ["tasks-file"]],
-      ["Projects folder", "C:\\Users\\me\\Dev", ["local-config-store"], []],
+      ["Projects folder", "C:\\Users\\me\\Dev", ["workspace-store"], []],
       ["Copilot CLI", "C:\\Users\\me\\.copilot", ["copilot-config"], []],
     ]);
     expect(groups[0]?.description).toEndWith("This is the default; TRACKWALL_HOME chooses another folder.");

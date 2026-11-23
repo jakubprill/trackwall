@@ -649,6 +649,12 @@ export const Task = z.object({
    * or "Fix" of a failed pipeline, which give the agent work again, clear it. The task's board item follows it.
    */
   inReview: z.boolean(),
+  /**
+   * Whether the agent says its work is over (ADR-282): its `report_result` with `readyToClose`, which only a task in
+   * review has. It ends nothing: the user closes the task (`close-task`) or keeps it open (`keep-task-open`), and work
+   * the agent gets again, which takes it out of review, takes this back too.
+   */
+  readyToClose: z.boolean(),
   /** The task port (ADR-61): `TASK_PORT_ENV` in every mise task run in the worktree, and the port of the task's service. */
   port: TaskPort,
   included: IncludedFiles,
@@ -1286,6 +1292,19 @@ export const agentsApi = {
    * MCP: an agent does not approve its own plan.
    */
   approvePlan: endpoint("approve-plan", TaskRequest, Task),
+  /**
+   * The user confirms that a task whose agent said its work is over (`Task.readyToClose`, ADR-282) is finished: its
+   * session, automatic reviews, service and other mise tasks stop, and the task ends with its branch kept, as "End task"
+   * does; its board item goes to done once no task is left on it. `bad_request` for a task the agent has not called
+   * ready to close, or whose agent is in a turn again; `unsaved_changes`, with nothing ended, when its worktree has work
+   * outside the branch, which "End task" then asks about. Only from the UI, never from MCP: an agent never closes a task.
+   */
+  closeTask: endpoint("close-task", TaskRequest, Done),
+  /**
+   * The user keeps open a task whose agent said its work is over (ADR-282): the task stays in review without being
+   * ready to close. `bad_request` for a task that is not ready to close. Only from the UI.
+   */
+  keepTaskOpen: endpoint("keep-task-open", TaskRequest, Task),
   /** The worktree's mise config against the trusted one (ADR-59). */
   taskMiseConfig: endpoint("task-mise-config", TaskRequest, TaskMiseConfig),
   /**

@@ -116,7 +116,7 @@ describe("the card warm-up", () => {
   test("a warmed-up card is in the cache, so a request after it does not read files from git", async () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
     const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-    const vcs = new Vcs(systemTempFolder);
+    const vcs = new Vcs(systemTempFolder, tmpdir());
     const workspace = new Workspace({
       inContainer: false,
       file: new WorkspaceFile(join(home, "workspace.yaml")),

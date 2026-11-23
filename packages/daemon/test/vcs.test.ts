@@ -7,7 +7,7 @@ import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { withTempFolderGone } from "./support/temp-folder.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
-const vcs = new Vcs(systemTempFolder);
+const vcs = new Vcs(systemTempFolder, tmpdir());
 
 describe("vcs on real git", () => {
   test(
@@ -162,6 +162,28 @@ describe("vcs on real git", () => {
       gitIn(clone, "fetch", "-q");
 
       expect((await vcs.status(clone, "fresh")).upstream).toEqual({ name: "origin/main", ahead: 1, behind: 1 });
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    "the status says when the repo last fetched: never for a fresh clone, and then the time of a fetch, also one that brought nothing",
+    async () => {
+      const remote = makeRepo({ "a.txt": "1" }, "remote");
+      const parent = join(remote, "..");
+      gitIn(parent, "clone", "-q", remote, "clone");
+      const clone = join(parent, "clone");
+      expect((await vcs.status(clone, "recent")).fetchedAt).toBeNull();
+
+      const before = Date.now();
+      gitIn(clone, "fetch", "-q");
+      // Read within a second of the last one, which the memo reuses unless the fetch changed its key (ADR-141).
+      const fetchedAt = (await vcs.status(clone, "recent")).fetchedAt;
+
+      expect(fetchedAt).not.toBeNull();
+      // File times are as coarse as two seconds on some file systems.
+      expect(Date.parse(fetchedAt ?? "")).toBeGreaterThanOrEqual(before - 2000);
+      expect(Date.parse(fetchedAt ?? "")).toBeLessThanOrEqual(Date.now() + 1000);
     },
     SLOW_TEST_TIMEOUT_MS,
   );
@@ -329,7 +351,7 @@ describe("vcs on real git", () => {
       writeFileSync(join(dir, "a.txt"), "b\n");
       writeFileSync(join(dir, "new.txt"), "new\n");
       const scratch = join(mkdtempSync(join(tmpdir(), "trackwall-projects-")), "scratch");
-      const inProjects = new Vcs(async () => scratch);
+      const inProjects = new Vcs(async () => scratch, tmpdir());
       const gitDirBefore = readdirSync(join(dir, ".git"));
 
       const changes = await withTempFolderGone(() => inProjects.worktreeChanges(dir, base, 0, []));
@@ -345,7 +367,7 @@ describe("vcs on real git", () => {
     const dir = makeRepo({ "a.txt": "a\n" }, "projects-gone");
     const base = gitIn(dir, "rev-parse", "HEAD").trim();
     const projects = join(mkdtempSync(join(tmpdir(), "trackwall-gone-")), "Dev");
-    const inGoneProjects = new Vcs(async () => join(projects, "scratch"));
+    const inGoneProjects = new Vcs(async () => join(projects, "scratch"), tmpdir());
 
     await expect(inGoneProjects.worktreeChanges(dir, base, 0, [])).rejects.toThrow();
     expect(existsSync(projects)).toBe(false);

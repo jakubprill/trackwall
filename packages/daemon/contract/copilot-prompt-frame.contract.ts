@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { promptBoxLayout } from "@trackwall/protocol";
 import { viewer, waitFor } from "../test/support/agents.ts";
-import { PROMPT_FRAME_LAYOUT, REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
+import { COPILOT_DEFAULT_COLOURS, PROMPT_FRAME_LAYOUT, REFERENCE_COLS, REFERENCE_ROWS } from "../test/support/copilot-reference.ts";
 import { screenLines, untilInputBox } from "../test/support/screen-lines.ts";
 import { hookRecords, startRealCopilotDaemon } from "./support/real-copilot.ts";
 import { type ScriptedModel, startScriptedModel } from "./support/scripted-model.ts";
@@ -75,6 +75,16 @@ describe("Copilot CLI's framed input box with the real Copilot CLI (ADR-220)", (
     const ready = await waitFor(agents, supervisor.id, (s) => s.state !== null, "the framed input box of a new supervisor", SESSION_MS);
     expect(promptBoxLayout(await screenLines(window))).toBe(PROMPT_FRAME_LAYOUT);
     expect(ready.state).toMatchObject({ state: "Input", source: "screen", reason: "screen input box before the first prompt" });
+  });
+
+  test("a new supervisor sets GitHub's dark background and text as the terminal's defaults (OSC 11, OSC 10), which the session terminal ignores (ADR-16)", async () => {
+    const { agents } = daemon.facade;
+    const supervisor = await agents.startSupervisor("new", "terminal");
+    const window = openTerminal(supervisor.id);
+
+    await waitFor(agents, supervisor.id, (s) => s.state !== null, "the input box of a new supervisor", SESSION_MS);
+    // On Windows ConPTY swallows the colour queries Copilot CLI asks first, so what it sends after them is not held there.
+    if (process.platform !== "win32") expect(window.text()).toContain(COPILOT_DEFAULT_COLOURS);
   });
 
   test("a review sent once a task's turn has ended is typed into the input box (framed; ruled on Windows) and reaches the agent", async () => {

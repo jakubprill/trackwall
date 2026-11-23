@@ -15,9 +15,8 @@ import {
   workspaceApi,
 } from "@trackwall/protocol";
 import { GitBranch, Play } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
-import { FoldButton } from "@/components/FoldButton";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { post } from "@/lib/api";
@@ -30,6 +29,7 @@ import {
   type FromItem,
   firstListedRepo,
   formChangeStart,
+  formTaskRepos,
   type NewSessionStart,
   newSessionForm,
   offersStackTrace,
@@ -48,8 +48,10 @@ import { type PlanFirstOffer, planFirstOffer, planFirstToSend } from "@/lib/task
 import { useAction } from "@/lib/use-action";
 import { useProviderModels } from "@/lib/use-provider-models";
 import { useRemote } from "@/lib/use-remote";
+import { useServerCheck } from "@/lib/use-server-check";
 import { ChangeParts } from "./ChangeParts.tsx";
 import { FoldedStartOptions } from "./FoldedStartOptions.tsx";
+import { NewTaskBaseNote } from "./NewTaskBaseNote.tsx";
 import { RunningTasksNote } from "./RunningTasksNote.tsx";
 import { StackTraceField } from "./StackTraceField.tsx";
 import { TaskTemplatePicker, TemplatePlaceholders, useTemplatePrompt } from "./TaskTemplatePicker.tsx";
@@ -74,6 +76,7 @@ export function NewSession({
   fromItem,
   onStarted,
   onCancel,
+  note,
 }: {
   conn: Connection;
   /** The listed sessions, for the warning about another agent in the same working copy. */
@@ -82,6 +85,8 @@ export function NewSession({
   fromItem?: FromItem;
   onStarted: (selection: SessionSelection) => void;
   onCancel?: () => void;
+  /** Under the start button: how to stop Copilot CLI's trust prompt, where the caller offers it (`TrustedFolderNote`, ADR-290). */
+  note?: ReactNode;
 }) {
   const form = newSessionForm(fromItem);
   const load = useCallback(() => post(conn, workspaceApi.list, {}), [conn]);
@@ -103,6 +108,8 @@ export function NewSession({
   const change = useChangeForm(conn, onStarted, () => setPrompt(""));
   const { start, firstPart } = formChangeStart(form, repo, choice.worktree, prompt, change.parts, change.title);
   const offers = useStartOffers(conn, repo);
+  const serverCheck = useServerCheck(conn, {});
+  const taskRepos = formTaskRepos(firstPart, change.parts);
   const providerModels = useProviderModels(conn).models;
   const java = javaNavigationInChange(javaNavigationInView(offers.java, choice.view), startsChange(start));
   const javaNavigation = java.kind === "ready" && choice.javaNavigation;
@@ -179,6 +186,7 @@ export function NewSession({
             onOpen={setStackTraceOpen}
           />
           <FoldedStartOptions
+            conn={conn}
             worktree={
               repo === null || !form.sessions ? undefined : { value: choice.worktree, onChange: (worktree) => choose({ worktree }) }
             }
@@ -204,6 +212,15 @@ export function NewSession({
               partly={change.partly}
             />
           )}
+          {taskRepos.map((taskRepo) => (
+            <NewTaskBaseNote
+              key={taskRepo}
+              conn={conn}
+              repo={taskRepo}
+              serverCheck={serverCheck.data}
+              label={taskRepos.length > 1 ? taskRepo : null}
+            />
+          ))}
           <RunningTasksNote sessions={sessions} warning={offers.runningTasksWarning} starting={tasksStarting(start)} />
           <StartNote start={start} repo={repo} sessions={sessions} />
           <div className="flex flex-wrap items-center gap-2">
@@ -214,7 +231,7 @@ export function NewSession({
               </Button>
             )}
           </div>
-          <TrustedFolderNote projectsDir={repos.data.projectsDir} />
+          {note}
         </>
       )}
       {error && <p className="text-destructive text-sm whitespace-pre-wrap">{error}</p>}
@@ -260,26 +277,6 @@ function secondAttemptPill(start: NewSessionStart, second: ReturnType<typeof use
 /** The Plan first pill where the form offers it (ADR-229). */
 function planFirstPill(offer: PlanFirstOffer | null, value: boolean, onChange: (value: boolean) => void) {
   return offer === null ? undefined : { value, onChange, unavailable: offer.unavailable };
-}
-
-/** How to stop Copilot CLI's trust prompt, folded: it matters once, before the first start (ADR-266). */
-function TrustedFolderNote({ projectsDir }: { projectsDir: string | null }) {
-  const [open, setOpen] = useState(false);
-  if (projectsDir === null) return null;
-  return (
-    <div className="flex flex-col gap-1">
-      <FoldButton open={open} onOpen={setOpen} className="text-muted-foreground">
-        Copilot CLI asks to trust the folder?
-      </FoldButton>
-      {open && (
-        <p className="text-muted-foreground max-w-prose text-xs">
-          Copilot CLI asks you to trust a folder before it works there. To skip that prompt for every repo and task, add{" "}
-          <span className="text-foreground font-mono">{projectsDir}</span> to <span className="font-mono">trustedFolders</span> in{" "}
-          <span className="font-mono">~/.copilot/config.json</span>; trust covers its repos and their task worktrees.
-        </p>
-      )}
-    </div>
-  );
 }
 
 /** Where the agent works: a repo, or the projects folder for a session. */

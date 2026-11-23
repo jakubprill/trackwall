@@ -1,11 +1,9 @@
 import { z } from "zod";
 import { PromptDelivery, TaskId } from "./agents.ts";
 import { apiEndpoints, Done } from "./api.ts";
-import { FreshAutoReview } from "./auto-review.ts";
-import { CopilotUsage, ModelCalls } from "./copilot-usage.ts";
 import { RepoHostKind } from "./repo-hosts.ts";
-import { ReproductionCheck } from "./reproduction.ts";
 import { ReviewSide } from "./review.ts";
+import { TaskEvidence } from "./task-evidence.ts";
 import { WebAddress } from "./workspace.ts";
 
 /**
@@ -144,6 +142,13 @@ export const MergeRequestThreads = z.object({
   more: z.boolean(),
 });
 export type MergeRequestThreads = z.infer<typeof MergeRequestThreads>;
+
+/**
+ * A thread the user picked, with the notes the user saw (ADR-256): the agent gets those words or nothing, so a reviewer's
+ * edit or reply after the user read the thread never reaches the agent unseen.
+ */
+export const SeenMergeRequestThread = MergeRequestThread.pick({ id: true, notes: true });
+export type SeenMergeRequestThread = z.infer<typeof SeenMergeRequestThread>;
 
 /** The most threads read from the repo host: GitHub's largest page, and as many as fit a long review. */
 export const MERGE_REQUEST_THREADS_READ_MAX = 100;
@@ -286,19 +291,10 @@ export const MergeRequestTemplate = z.object({ path: z.string(), text: z.string(
 export type MergeRequestTemplate = z.infer<typeof MergeRequestTemplate>;
 
 /**
- * What Trackwall knows of a task beyond the task itself and its verification, for the draft of its merge request
- * (ADR-238): the repo's template for the repo host at the task's base commit, the last reproduction check (ADR-227), the
- * last rules check (ADR-234) and whether the changes moved on after it, and what the task's conversation used on which
- * models (ADR-228). Each is `null` when there is none.
+ * What the draft of a task's merge request is made of besides the task itself (ADR-238): the task's evidence (ADR-276)
+ * and the repo's template for the repo host at the task's base commit, `null` when there is none.
  */
-export const MergeRequestEvidence = z.object({
-  template: MergeRequestTemplate.nullable(),
-  reproduction: ReproductionCheck.nullable(),
-  rules: FreshAutoReview.nullable(),
-  usage: CopilotUsage.nullable(),
-  /** The conversation's own model calls per model, the most first; empty when it made none or its log is unknown. */
-  models: z.array(ModelCalls),
-});
+export const MergeRequestEvidence = TaskEvidence.extend({ template: MergeRequestTemplate.nullable() });
 export type MergeRequestEvidence = z.infer<typeof MergeRequestEvidence>;
 
 const endpoint = apiEndpoints("merge-requests");
@@ -336,12 +332,13 @@ export const mergeRequestsApi = {
    */
   threads: endpoint("threads", TaskRequest, MergeRequestThreads),
   /**
-   * Hands the threads the user picked to the task's agent (ADR-256): the daemon reads them from the repo host again and
-   * queues those still unresolved as merge request comments for `get_review_comments`. `bad_request` when none of them is.
+   * Hands the threads the user picked, with the notes the user saw, to the task's agent (ADR-256): the daemon reads them
+   * from the repo host again and queues those still unresolved as merge request comments for `get_review_comments`.
+   * `bad_request`, with nothing sent, when a picked thread's notes differ from what the user saw, or none is unresolved.
    */
   sendThreads: endpoint(
     "send-threads",
-    TaskRequest.extend({ threads: z.array(MergeRequestThreadId).min(1).max(MERGE_REQUEST_THREADS_MAX) }),
+    TaskRequest.extend({ threads: z.array(SeenMergeRequestThread).min(1).max(MERGE_REQUEST_THREADS_MAX) }),
     z.object({ delivery: PromptDelivery, sent: z.number().int().positive() }),
   ),
 };

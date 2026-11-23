@@ -1,9 +1,9 @@
 import { type WorkspaceSettings, workspaceApi } from "@trackwall/protocol";
+import { PathForm } from "@/components/PathForm";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { parseTokenBudget } from "@/lib/token-budget";
 import type { RemoteHandle } from "@/lib/use-remote";
-import { PathForm } from "./PathForm.tsx";
 import { SettingsRead } from "./SettingsRead.tsx";
 
 const LABEL = "Token budget per task";

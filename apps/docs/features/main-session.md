@@ -1,6 +1,7 @@
 ---
 title: Main session and task proposals
 description: Let one agent plan work and hand it to other agents, while you approve every task before it starts.
+status: stable
 ---
 
 # Main session and task proposals

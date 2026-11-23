@@ -7,6 +7,7 @@ import {
   boardApi,
   cardsApi,
   configFilesApi,
+  containerHealthApi,
   dayStartApi,
   doctorApi,
   type Endpoint,
@@ -24,6 +25,7 @@ import {
   reproductionApi,
   routinesApi,
   servicesApi,
+  taskEvidenceApi,
   taskJournalApi,
   taskOutcomesApi,
   taskRefreshApi,
@@ -34,6 +36,7 @@ import {
   verificationApi,
   viewerApi,
   viewerSessionList,
+  workBackupApi,
   workspaceApi,
 } from "@trackwall/protocol";
 import { z } from "zod";
@@ -85,6 +88,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.setRetryModel, (f, b) => f.workspace.setRetryModel(b.model)),
   route(workspaceApi.setTaskTokenBudget, (f, b) => f.workspace.setTaskTokenBudget(b.budget)),
   route(workspaceApi.setRunningTasksWarning, (f, b) => f.workspace.setRunningTasksWarning(b.above)),
+  route(workspaceApi.setServerCheck, (f, b) => f.workspace.setServerCheck(b.on)),
   route(workspaceApi.removeAlwaysAllowed, (f, b) => f.workspace.removeAlwaysAllowed(b)),
   route(workspaceApi.setAutoReview, (f, b) => f.workspace.setAutoReview(b)),
   route(workspaceApi.setSupervisor, (f, b) => f.workspace.setSupervisor(b)),
@@ -96,6 +100,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.file, (f, b) => f.workspace.file(b.repo, b.path)),
   route(workspaceApi.changes, (f, b) => f.workspace.changes(b.repo)),
   route(workspaceApi.unpushedWork, (f) => f.workspace.unpushedWork()),
+  route(workspaceApi.serverCheck, (f) => f.serverCheck.state()),
+  route(workspaceApi.newTaskBase, (f, b) => f.workspace.newTaskBase(b.repo)),
   route(workspaceApi.openLink, (f, b) => {
     f.openLink(b.url);
     return null;
@@ -116,6 +122,12 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(workspaceApi.clones, (f) => f.workspace.cloneJobs()),
   route(workspaceApi.sync, (f) => f.workspace.sync()),
   route(workspaceApi.syncRun, (f) => f.workspace.syncRun()),
+  route(workspaceApi.syncRepo, (f, b) => f.workspace.syncRepo(b.repo)),
+  route(workspaceApi.pull, (f, b) => f.workspace.pullRepo(b.repo, { putAside: b.putAside })),
+  route(workspaceApi.putAsideFiles, (f, b) => f.workspace.putAsideFiles(b.repo)),
+  route(workspaceApi.putAsides, (f, b) => f.workspace.putAsides(b.repo)),
+  route(workspaceApi.restorePutAside, (f, b) => f.workspace.restorePutAside(b.repo, b.id)),
+  route(workspaceApi.deletePutAside, (f, b) => f.workspace.deletePutAside(b.repo, b.id)),
   route(cardsApi.card, (f, b) => f.cards.card(b.repo)),
   route(cardsApi.tags, (f) => f.cards.tags()),
   route(cardsApi.warmup, (f) => f.cards.warmupProgress()),
@@ -124,7 +136,11 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(readinessApi.all, (f, b) => f.readiness.all(b.fresh)),
   route(readinessApi.repo, (f, b) => f.readiness.repo(b.repo)),
   route(taskOutcomesApi.list, (f) => f.taskOutcomes()),
+  route(taskEvidenceApi.get, (f, b) => f.taskEvidence(b.task)),
   route(doctorApi.run, (f) => f.doctor.run()),
+  route(doctorApi.trustProjectsFolder, (f) => f.doctor.trustProjectsFolder()),
+  route(doctorApi.projectsFolderTrust, (f) => f.doctor.projectsFolderTrust()),
+  route(doctorApi.copilotCliVersion, (f) => f.doctor.copilotCliVersion()),
   route(providerModelsApi.list, (f) => f.providerModels.list()),
   route(javaNavigationApi.state, (f) => f.javaNavigation.state()),
   route(javaNavigationApi.startInstall, (f) => f.javaNavigation.startInstall()),
@@ -138,6 +154,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     return null;
   }),
   route(errorJournalApi.errors, (f) => f.errorJournal.list()),
+  route(errorJournalApi.diagnostics, (f) => f.diagnostics()),
   route(errorJournalApi.recordUiError, (f, b) => {
     f.errorJournal.recordUiError(b);
     return null;
@@ -150,6 +167,12 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(usageReportApi.week, (f, b) => f.usageReport.week(b.weeksAgo)),
   route(usageReportApi.trend, (f) => f.usageReport.trend()),
   route(taskJournalApi.modelStats, (f, b) => f.taskJournal.modelStats(b.period)),
+  route(containerHealthApi.state, (f) => f.containerHealth.state()),
+  route(workBackupApi.state, (f) => f.workBackup.state()),
+  route(workBackupApi.create, (f) => f.workBackup.create()),
+  route(workBackupApi.restorePlan, (f) => f.workRestore.plan()),
+  route(workBackupApi.restore, (f) => f.workRestore.restore()),
+  route(workBackupApi.discardRestore, (f) => f.workRestore.discard()),
   route(localConfigApi.store, (f) => f.localConfig.store()),
   route(localConfigApi.repo, (f, b) => f.localConfig.repo(b.repo)),
   route(localConfigApi.repos, (f) => f.localConfig.repos()),
@@ -261,6 +284,11 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.copyIncludedFilesAgain, (f, b) => f.agents.copyIncludedFilesAgain(b.task)),
   route(agentsApi.handToSupervisor, (f, b) => f.agents.handToSupervisor(b.task)),
   route(agentsApi.approvePlan, (f, b) => f.agents.approvePlan(b.task)),
+  route(agentsApi.closeTask, async (f, b) => {
+    await f.agents.closeTask(b.task);
+    return null;
+  }),
+  route(agentsApi.keepTaskOpen, (f, b) => f.agents.keepTaskOpen(b.task)),
   route(agentsApi.taskMiseConfig, (f, b) => f.agents.taskMiseConfig(b.task)),
   route(agentsApi.trustTaskMiseConfig, (f, b) => f.agents.trustTaskMiseConfig(b.task, b.digest)),
   route(agentsApi.taskRunSettings, (f, b) => f.agents.taskRunSettings(b.task)),

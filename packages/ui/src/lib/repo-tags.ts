@@ -31,3 +31,11 @@ export function hasAllTags(tags: readonly RepoTag[] | undefined, selected: reado
 export function toggleTag(selected: readonly string[], name: string): string[] {
   return selected.includes(name) ? selected.filter((n) => n !== name) : [...selected, name];
 }
+
+/**
+ * The tags the filter shows (ADR-273): all of them while it is open, and folded only the chosen ones, so that a filter
+ * that narrows the list is never out of sight and can be unchecked without opening anything.
+ */
+export function shownTags<T extends { name: string }>(counts: readonly T[], selected: readonly string[], open: boolean): T[] {
+  return open ? [...counts] : counts.filter((tag) => selected.includes(tag.name));
+}

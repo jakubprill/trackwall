@@ -1,4 +1,5 @@
 import type { SessionList, TaskOutcome } from "@trackwall/protocol";
+import { tasksReadyToClose } from "@/lib/ready-to-close";
 import { findEntry, type SessionSelection, sessionRows } from "@/lib/session-entries";
 import { listGroups } from "@/lib/session-groups";
 import { supervisorSummary } from "@/lib/supervisor";
@@ -23,16 +24,22 @@ import {
   usage,
   waiting,
 } from "./sample-data.ts";
+import { NewComputerTips } from "./tips-states.tsx";
 
-/** The Sessions list for `list` as the view shows it, with `selected` picked and the tasks' outcomes. */
+/**
+ * The Sessions list for `list` as the view shows it, with `selected` picked, the tasks' outcomes, and what the last
+ * "Close all" did.
+ */
 function SessionListOf({
   list,
   selected,
   outcomes = [],
+  closeOutcome,
 }: {
   list: SessionList | { error: string };
   selected?: SessionSelection;
   outcomes?: readonly TaskOutcome[];
+  closeOutcome?: string;
 }) {
   const data = "error" in list ? undefined : list;
   const rows = data ? sessionRows(data) : [];
@@ -54,6 +61,7 @@ function SessionListOf({
       onShowGroup={() => {}}
       onSessionClosed={() => {}}
       onTaskRemoved={() => {}}
+      closeAll={{ ready: data ? tasksReadyToClose(data.tasks, data.sessions) : [], pending: false, outcome: closeOutcome, run: () => {} }}
     />
   );
 }
@@ -105,7 +113,7 @@ const taskStates: GalleryState = {
           task(101, { inReview: true, title: "Add a discount to the cart" }),
           task(102, { inReview: true }),
           task(103, { paused: { at: minutesAgo(30), service: null } }),
-          task(104, {}),
+          task(104, { inReview: true, readyToClose: true, title: "Fix the footer links" }),
           task(105, { title: "Verify the order export" }),
           task(106, { title: LONG_TITLE }),
           task(107, { inReview: true, plan: "planning" }),
@@ -220,6 +228,34 @@ const manyWait: GalleryState = {
   ),
 };
 
+/** The jump to the next waiting entry with its tip, as a new computer shows it the first time (ADR-296). */
+const nextWaitingTip: GalleryState = {
+  name: "Next waiting with its tip",
+  render: () => (
+    <NewComputerTips>
+      <SessionListOf list={sessionList({ sessions: [waiting(700, 3, { repo: "orders-api" }), session(701)] })} />
+    </NewComputerTips>
+  ),
+};
+
+/** Tasks whose agent said its work is over (ADR-282), counted above the list, and the one the last "Close all" left open. */
+const readyToClose: GalleryState = {
+  name: "Tasks ready to close, one of them left open by the last Close all",
+  render: () => (
+    <SessionListOf
+      list={sessionList({
+        sessions: [waiting(600, 3, { repo: "orders-api" })],
+        tasks: [
+          task(601, { inReview: true, readyToClose: true, repo: LONG_REPO, title: LONG_TITLE }),
+          task(602, { inReview: true, readyToClose: true, title: "Fix the footer links" }),
+          task(603, { inReview: true, title: "Add a discount to the cart" }),
+        ],
+      })}
+      closeOutcome={`Closed 3 tasks. Still open, 1 task: ${LONG_REPO} · ${LONG_TITLE}: ending the task would delete: uncommitted changes in the worktree (3).`}
+    />
+  ),
+};
+
 const empty: GalleryState = { name: "No sessions yet", render: () => <SessionListOf list={sessionList({})} /> };
 
 const failed: GalleryState = {
@@ -234,6 +270,8 @@ export const SESSION_LIST_STATES: readonly GalleryState[] = [
   groupsAndLevels,
   supervisorWaits,
   manyWait,
+  nextWaitingTip,
+  readyToClose,
   empty,
   failed,
 ];

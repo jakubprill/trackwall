@@ -45,7 +45,7 @@ A newer version of Trackwall from GitHub Releases, installed by the shell after 
 _Avoid_: upgrade, sync (that is the repo synchronization)
 
 **View** (`View`):
-A screen of the app in the UI (Home, Repos, Sessions, Overview, Plan, Settings), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut.
+A screen of the app in the UI (Sessions, Repos, Overview, Plan, Flow, Home, Settings, in the view bar's order; a window opens on Sessions, ADR-288), switched with the view bar (`ActivityBar`) at the left edge of the window or with a shortcut. Home has an icon only once the user shows it in Settings › App › Home ("View bar": "Shown" or "Hidden", `HomeOnBar`, ADR-294); its shortcut and the command palette open it either way. A number at a view's icon counts what needs the user there: at Sessions the waiting sessions and task proposals (`attentionCount`), at Settings the container's health warnings (`containerAttentionCount`, ADR-287, ADR-294).
 _Avoid_: tab (for a whole screen)
 
 **Settings category** (`SettingsCategory`, `SETTINGS_CATEGORIES`; its sections `SettingsSection`):
@@ -59,6 +59,14 @@ _Avoid_: accordion, advanced settings, panel
 **Command palette** (`CommandPalette`, `lib/command-palette.ts`; a **command** is `PaletteCommand`):
 The field Ctrl+K (⌘K) opens over any view, Ctrl+Shift+K from a terminal: a few letters find a session, task, repo, view or Settings category, or an action such as "New session", and Enter goes there (ADR-246).
 _Avoid_: quick open, search (that is the Repos view's repo search), launcher
+
+**Tip** (`TipId`, `TIPS`, `Tip`, `TipCard`, `TipsController`, `lib/tips.ts`; in the UI *Tip*):
+A short explanation under a control, shown the first time the control is on screen and one at a time in a window, until the user presses "Got it" (ADR-296). Tips and **What's new** are on or off together on this computer, in Settings › App › "Tips and What's new".
+_Avoid_: tooltip (that is the text on hover), hint, coach mark, bubble, onboarding (that is **Get started**)
+
+**What's new** (`WHATS_NEW`, `WhatsNewEntry`, `lib/whats-new.ts`, `components/WhatsNew.tsx`; in the UI *What's new*, an entry a *change*):
+The strip above the views after an update that lists the changes worth a look this computer has not seen, newest first, each with "Show", which opens the place the change lives in and shows its tip (ADR-296).
+_Avoid_: changelog, release notes (those are `docs/release-notes/` and the release on GitHub), announcement
 
 **Tab** (`TabBar`):
 A switch for part of the content inside a view, for example README, Files, Commits and mise tasks in the Repos view.
@@ -142,7 +150,7 @@ One directory on the user's disk, set in `workspace.yaml` or in the settings. Ea
 _Avoid_: workspace directory, root, folder (without qualification)
 
 **Trackwall folder** (`TRACKWALL_DIR` = `.trackwall`, `TrackwallFolder`, `trackwallDir`):
-The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the local config store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125), and `drops`, the dropped files (ADR-226). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
+The one hidden folder in the projects folder where Trackwall keeps everything beside the repos, one folder per purpose: `local` (the workspace store), `worktrees` (the default task worktrees folder), `lsp`, `scratch` and `removed` (ADR-125), and `drops`, the dropped files (ADR-226). It is not the state folder `~/.trackwall`, which holds Trackwall's own memory and lies outside the projects folder.
 _Avoid_: data folder, `.trackwall-*` folders (their names before ADR-125)
 
 **Dropped folder** (`DroppedFolder`, action `dropped-folder`, UI `FolderDrop`; in Polish *upuszczony folder*):
@@ -185,17 +193,33 @@ _Avoid_: repo URL (a URL has a protocol and may carry a token), remote without q
 A fetch of every repo from the projects folder and a fast-forward of its default branch, in the background, with a result per repo: moved, up to date, skipped with a reason (`SyncSkipReason`) or an error; without an error also with the state of the working directory after the sync (`SyncWorkingTree`, ADR-34). It never merges or overwrites local changes (ADR-21). Kept only in daemon memory.
 _Avoid_: pull, update (without qualification)
 
+**Pull** (`PullResult`, `workspaceApi.pull`, `usePull`, "Pull <n>" in the repo header's Upstream tile and in a row of All repos):
+The user's fetch of one repo from its header or its row in All repos (ADR-293): the sync of its default branch, then a fast-forward of the checked-out branch to the branch it tracks, under the same rules (ADR-269). It never merges, rebases, pushes or overwrites local changes; a skip has a reason (`PullSkipReason`). Only from the UI.
+_Avoid_: sync (that moves the default branch of every repo), update, `git pull` (which can merge or rebase)
+
+**Put aside** (`PutAside`, `PUT_ASIDE_MESSAGE`, `pull` with `putAside`, "Put aside and pull…", "Put aside by Trackwall" in the Changes tab):
+Changes in tracked files that Trackwall moved into a git stash so that a pull could go on, on the user's confirmation with the list of files (ADR-271). Brought back with Restore, or deleted for good with Delete; brought back at once when the pull did not move anything.
+_Avoid_: force, discard, reset (nothing is deleted), stash (for the user's own stashes, which Trackwall does not touch)
+
 **Batch command** (`BatchRun`, step `BatchStep`, repo result `BatchRepo`):
 Selected steps on selected repos with one button: sync (`sync`), tools from the repo's mise configuration (`tools`, `mise install`), dependencies (`setup`, the mise task `setup`) and build (`build`, the mise task `build`), in a repo always in this order, several repos at once, with the result of every step in every repo (ADR-27). A step error ends the repo, the others go on. Kept only in daemon memory.
 _Avoid_: bulk operation, workflow
 
 **Repo status** (`RepoStatus`):
-The branch, the last commit, the number of changes in the working directory (of which, separately, new untracked files, `untracked`) and ahead/behind against the tracking branch, read from git on every request (`ok`), or `unavailable` with a message when git does not read it (a repo whose directory disappeared drops off the list). It is never stored.
+The branch, the last commit, the number of changes in the working directory (of which, separately, new untracked files, `untracked`), ahead/behind against the tracking branch, and when the repo last fetched (`fetchedAt`, the time of `FETCH_HEAD`, ADR-293), as of which "behind" counts the commits to pull, read from git on every request (`ok`), or `unavailable` with a message when git does not read it (a repo whose directory disappeared drops off the list). It is never stored.
 _Avoid_: state (that is a task state or a service state), sync (that is a separate action)
+
+**All repos** (`AllReposView`, row `AllReposRow`, `allReposRows`; in the UI *All repos*):
+The first entry of the repo list and the panel the "Repos" view opens on: the state of every repo against the server in one table, with a row for each repo that needs a look (uncommitted files, commits to pull or new on the server, a diverged branch, work only in this container, or a repo git cannot read) and its next step, the clean ones folded into one line, and "Sync all" above it (ADR-293).
+_Avoid_: dashboard (that is Home), overview (that is the "Overview" view), status page
 
 **Repo watch** (`RepoWatch`, snapshot `RepoWatchState`, topic `repos.changed`):
 The daemon's comparison, every second, of the set of repos in the projects folder and of the HEAD and refs of each, read from the files of its git directory (ADR-63). A commit, checkout, pull, fetch or a new or removed repo bumps the revision; uncommitted changes do not. The UI fetches the list, tags and the graph again after every new revision.
 _Avoid_: file watcher (the daemon does not use file system notifications), working directory watch (the working directory is not watched)
+
+**Server check** (`ServerCheck`, snapshot `ServerCheckState`, `workspaceApi.serverCheck`, key `serverCheck`; in the UI "new on the server", and *Check for new commits* in Settings > Repo hosts):
+The daemon's question, every 15 minutes, to the server of each repo: has the branch the checked-out branch tracks, or the default branch, moved since the repo's last fetch? It asks with one `git ls-remote` from outside the repo, with only the user's own sign-in, as the doctor does (ADR-195, ADR-295, ADR-297), fetches nothing, and names the remote-tracking branches the server moved past (`remoteBranches`). A repo whose checked-out branch's server has such commits reads "new on the server" in All repos and the repo list, and one whose default branch has gets a line in the New task form (the new task base), until a fetch counts them. On without the key; `serverCheck: false` turns it off.
+_Avoid_: background fetch, auto-fetch (nothing is fetched), remote watch (the repo watch reads only the repo's own files)
 
 **Changes** (working directory changes, `WorkingTreeChanges`, the `changes` action; the "Changes" tab in the UI):
 The files and diff of the working directory (with new files, without ignored ones) against a commit: a repo against HEAD in the repo details (ADR-34), a task's worktree against the base commit in the task changes (`TaskChanges`, ADR-31). Read-only. An agent gets a task's changes without the diff in `get_session` (`TaskChangesSummary`) and with it, narrowed to paths, in `get_task_changes` (`AgentTaskChanges`).
@@ -249,6 +273,10 @@ A separate git working directory for a task, on the task's branch, in `<task wor
 **Base commit** (`Task.base`):
 The commit of the default branch from which the task's branch started. The task changes (`TaskChanges`) are the worktree's working directory against it: the task's commits and uncommitted files together.
 
+**New task base** (`NewTaskBase`, `workspaceApi.newTaskBase`, `new-task-base`; in the UI the line above "Create task" and its "Sync main", `NewTaskBaseNote`):
+Where a new task of a repo starts against the server: the repo's local default branch, which a task branches from, against the remote-tracking branch a sync moves it to, as of the repo's last fetch (ADR-297). The New task form says when it is behind, also when the server check found newer commits since, and "Sync main" syncs that one repo (`sync-repo`).
+_Avoid_: base branch (the branch a task already started from), outdated main
+
 **Task port** (`Task.port`, `TASK_PORT_FIRST`…`TASK_PORT_LAST`, `TASK_PORT_ENV`):
 A port of 41000–41999 that a task holds while it exists, the lowest one no other task holds (ADR-61). Every mise task in the task's worktree gets it in `SERVER_PORT` and `PORT`, so the task's service runs next to the one from the repo root. Reserved only among tasks, not checked against other programs.
 
@@ -266,9 +294,17 @@ The sentence in the daemon's prompt that tells a session the user trusted the mi
 The files a repo keeps outside git on purpose, only for this clone: `mise.local.toml` (`MISE_LOCAL_CONFIG_FILE`, mise tasks, tools and variables mise reads on top of `mise.toml`), `mise.toml` (`MISE_CONFIG_FILE`) when the repo's commits do not have it (ADR-110), and `.worktreeinclude` (ADR-86). A file the repo's commits have is not local config. Each file's state against the store is `absent`, `tracked`, `backed_up`, `pending` or `missing` (`LocalConfigFileState`); "Restore from the store" copies a missing file back, and "Ignore locally" adds the files to the clone's `.git/info/exclude`.
 _Avoid_: overlay, local files (that is `.worktreeinclude`'s included files)
 
-**Local config store** (`TrackwallFolder` `local`: `.trackwall/local`, `LocalConfigStore`; UI "Local config store"):
-The git repo in the projects folder that holds the local config of every repo as `<repo folder>/<file>`, committed by Trackwall a few seconds after a file changes and pushed to the store's remote when the user added one (ADR-86). The repo list skips it.
-_Avoid_: backup repo, overlay folder
+**Workspace store** (`TrackwallFolder` `local`: `.trackwall/local`, `WorkspaceStore`, `workspaceStoreDir`; UI "Workspace store"):
+The git repo in the projects folder where Trackwall keeps what the user set up for the workspace, with its history: today the local config of every repo as `repos/<repo folder>/<file>` (ADR-298), committed by Trackwall a few seconds after a file changes and pushed only to the address the user allowed (ADR-86, ADR-127). The repo list skips it. Its folder and the `workspace.yaml` key of its remote (`localConfigRemote`) keep the names they had before ADR-298.
+_Avoid_: local config store (its name before ADR-298), backup repo, overlay folder
+
+**Work backup** (`WorkBackup`, module `work-backup`, `WorkBackupInfo`; UI "Container work backup"):
+One file, `trackwall-backup-<date>-<time>.tar.gz`, with everything that lives only in the container's volume: for each repo with unpushed work a `git bundle` of its branches, stashes and the uncommitted changes of each of its worktrees, and Trackwall's own files a new container lacks (ADR-275). Only where the daemon runs in a container; only the last one stays there, and the user downloads it to their computer. Files git ignores and sign-ins never go in. Restoring one (`WorkRestore`, `WorkBackupRestore`; UI "Restore from a backup…") brings it back into clones the user made and only adds: new branches, forward moves, stashes, `restored/` branches and missing `.trackwall` files.
+_Avoid_: snapshot (that is a copy of the whole volume), workspace store (that is the git repo of what the user set up)
+
+**Container health** (`ContainerHealth`, module `container-health`, `HealthWarning`; UI "Container health"):
+How the container Trackwall runs in is doing, read from its own control group: memory, processors and processes against the container's limits, the disk of Docker's virtual machine, the processes the kernel killed for memory (`OomKill`) and the daemon's restarts (`DaemonRestart`) in the last day, and the warnings they add up to (ADR-279). Only in a container.
+_Avoid_: container stats (that is Docker's command, read from outside), monitoring
 
 **Card** (repo card, `RepoCard`):
 Facts about a repo extracted deterministically from build files, configuration and code in the HEAD commit: build files, what the repo provides (`provides`), what it uses (`consumes`), required tools, mechanisms and problems, every fact with evidence. It depends only on the commit, so it is computed once per commit (ADR-25). An LLM will add only a description and connection proposals marked `origin: 'llm'` (ADR-6). In the UI, the "Card" tab in the repo details.
@@ -647,7 +683,7 @@ _Avoid_: orchestrator, planner (ADR-9: a human splits goals); and a session in a
 A top-level entry of the Sessions list with every task and proposal under it, at any depth. A group of two or more has its own colour on its rows and tiles, and the grid can show it alone (ADR-48).
 _Avoid_: workspace, cluster, family
 
-**Flow** (`views/flow/`, `flowGroups`, `FlowGroup`, `FlowCard`, `FlowColumn`; the "Flow" view, Ctrl+6):
+**Flow** (`views/flow/`, `flowGroups`, `FlowGroup`, `FlowCard`, `FlowColumn`; the "Flow" view, Ctrl+5):
 The view for a second monitor that shows every task, session and task proposal in a row per group of work (a project of Plan, a change, the supervisor, a session with the tasks it proposed, "No group") and a column per state: "Working", "Waits for you", "In review", "Stuck", "Idle" (ADR-224). It changes nothing; a card opens its task or session. Its rows are made from groups that already exist, not a kind of group of its own.
 _Avoid_: dashboard (that is Home), board (that is a project of Plan as columns), batch, epic
 
@@ -697,7 +733,7 @@ The Copilot CLI model the supervisor runs on, an id of the same shape as a task 
 _Avoid_: default model (that is Copilot CLI's own), coordinator model
 
 **Supervisor panel** (`SupervisorPanel`):
-The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or, while none runs, its start card (`SupervisorStart`): "Start my day", "Continue" (the last supervisor's conversation, while Copilot CLI keeps one, `SessionList.lastSupervisor`) and "New conversation", one of them first as the main choice, and "Show as" for a terminal or the conversation view (ADR-58, ADR-70, ADR-96, ADR-126). Pinned open, wide ("Widen": most of the window, for reading the supervisor), or folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you (`SupervisorLayout` in `supervisor-layout.ts`); Alt+0 unfolds it, a wide panel staying wide, and puts the keyboard in its terminal.
+The column on the right of the main window, in every view, with the supervisor's terminal, its state and the work it delegated, or, while none runs, its start card (`SupervisorStart`): "Start my day", "Continue" (the last supervisor's conversation, while Copilot CLI keeps one, `SessionList.lastSupervisor`) and "New conversation", one of them first as the main choice, and "Show as" for a terminal or the conversation view (ADR-58, ADR-70, ADR-96, ADR-126). Folded to a strip that keeps a bell while the supervisor or a task proposal under it waits for you, as a window starts until the user chooses (ADR-286), pinned open, or wide ("Widen": most of the window, for reading the supervisor) (`SupervisorLayout` in `supervisor-layout.ts`); Alt+0 unfolds it, a wide panel staying wide, and puts the keyboard in its terminal.
 _Avoid_: sidebar (that is the list on the left of a view), drawer
 
 **Day start** (`DayStart`, `dayStartApi`, `DayStartRun`, `startSupervisorWith`; "Start my day" in the UI; `dayStart` in `workspace.yaml`):
@@ -905,13 +941,21 @@ _Avoid_: regression test, proof, repro (in prose)
 Trackwall's own run of a task's reproduction test (ADR-227) in a **copy** of the repo beside the task's worktree (`<worktree>.repro`): first on the task's base with only its test files, where it must fail, then with all of the task's changes, where it must pass. `reproduced`, `not_reproduced`, `inconclusive` (it could not tell, such as a test that did not run) or `cancelled`.
 _Avoid_: verification (the whole `test` task in the worktree, ADR-64), red-green check (in the UI), proof
 
-**Evidence of a change** (ADR-222; `MergeRequestEvidence`, `evidenceLines`, "Evidence from Trackwall:" in a merge request's draft, ADR-238):
-What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test, Trackwall's reproduction check, the verification, the rules check and the plan the user approved. The merge request's draft lists what Trackwall itself saw of it under "Evidence from Trackwall:", each fact worded as whose word it is.
-_Avoid_: evidence (alone: that is the file and line of a fact on a repo card)
+**Evidence of a change** (ADR-222; `TaskEvidence`, `taskEvidenceApi`, ADR-276; `MergeRequestEvidence`, `evidenceLines`, "Evidence from Trackwall:" in a merge request's draft, ADR-238):
+What a task's result brings to show the change is right beyond the agent's summary, such as its reproduction test, Trackwall's reproduction check, the verification, the rules check and the plan the user approved. The daemon gives it as one **task evidence** (`TaskEvidence`), which the evidence card and the merge request's draft word; each fact says whose word it is (the user's approval, the agent's claim, Trackwall's check, what Trackwall saw), and a check says when the changes moved on after it.
+_Avoid_: evidence (alone: that is the file and line of a fact on a repo card), proof
+
+**Evidence card** (`TaskEvidenceCard`, `evidenceRows`, `EvidenceRow`, `EvidenceSource`; UI "Evidence" at the top of a task's "Changes" tab):
+The task evidence above the task's diff (ADR-276): one row per fact (plan, reproduction test, verification, rules check, models), its tone (green backs the change, red speaks against it, yellow is open or outdated, none is a gap) and whose word it is.
+_Avoid_: evidence panel, proof card, summary (that is the agent's report)
 
 **In review** (`Task.inReview`, the state "Ready for review" of a task, `READY_FOR_REVIEW`, column `review` of a board item):
-A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again, or until its next turn ends without changing the worktree (ADR-258). The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done".
+A task whose agent has handed its work over with `report_result` and got nothing new since: the user's review, "Fix" of a failed pipeline or its proposer's message takes it out of review until the agent reports again, or until its next turn ends without changing the worktree (ADR-258). The task's board item goes to "In review" once every open task on it is in review (ADR-213). One step before the user accepts the work; only the user ends a task or marks its item "Done" (also by closing a task ready to close).
 _Avoid_: ready, finished, done (those are the user's), awaiting approval (that is a tool approval)
+
+**Ready to close** (`Task.readyToClose`, `report_result` argument `readyToClose`, `readyToClose`, `READY_TO_CLOSE`; actions `close-task` and `keep-task-open`; "Ready to close", "Close task", "Close all" and "Keep open" in the UI):
+A task in review whose agent said with `report_result` that its work is over: complete and committed, no question left, nothing more to do without new instructions (ADR-282). Only the user answers it: **Close** stops the task's session and ends it with its branch kept, as "End task" would, and makes its board item done once no task is left on it; "Keep open" leaves it in review. "Close all" closes every task ready to close, from the top of the Sessions list or Home's "Needs you" (`useCloseAll`, ADR-294). Work the agent gets again takes it back, as it takes the task out of review.
+_Avoid_: done, finished, completed (those say the task ended; a task ready to close has not), auto-close (nothing closes by itself)
 
 ## Plan
 
@@ -943,7 +987,7 @@ An item not filed under a project yet, written down so it is not lost: with Alt+
 _Avoid_: draft, note
 
 **Board column** (`BoardColumn`: `ideas`, `ready`, `in_progress`, `review`, `done`, `dropped`; "Column" in the UI, `COLUMN_LABELS`):
-How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review", and back to "Ready" when the last task on an item still in progress is removed (`TaskWorkColumn`, ADR-213), and only the user sets "Done" and "Dropped".
+How far an item is: "Idea", "Ready", "In progress", "In review", "Done", "Dropped". An agent moves an item only between `ideas` and `ready`; the item's tasks move it to "In progress" and "In review", and back to "Ready" when the last task on an item still in progress is removed (`TaskWorkColumn`, ADR-213), and only the user sets "Done" and "Dropped", by hand or by closing the last task on an item ready to close (ADR-282).
 _Avoid_: status (a repo's is `RepoStatus`), state (a session's)
 
 **Task item** (`Task.item`, `TaskProposal.item`):
@@ -980,7 +1024,7 @@ The checks of what Trackwall needs on this computer: the projects folder, every 
 _Avoid_: health check (that is `GET /api/health`), diagnostics, setup wizard
 
 **Get started** (`getStartedPlan`, `GetStartedStep`, the `get-started` Settings category; in the UI *Get started*):
-The doctor checks that stand between a new user and a first session, shown as **steps** in the order to do them (ADR-262): the projects folder, Git, Copilot CLI and the network are *needed*, Copilot CLI's trusted folder and git access to the repo hosts *recommended*. With no needed step open it says *Ready*. It adds no checks of its own.
+The doctor checks that stand between a new user and a first session, shown as **steps** in the order to do them (ADR-262): the projects folder, Git, Copilot CLI and the network are *needed*, Copilot CLI's trusted folder, git access to the repo hosts and mise *recommended*. With no needed step open it says *Ready*. It adds no checks of its own. Settings lists every step; while setup is under way the Sessions view shows the steps left above its form (`GetStartedCard`, ADR-289).
 _Avoid_: onboarding, setup wizard, profile
 
 **Config files** (`ConfigFiles`, the `config-files` module, `configFilesApi`; in the UI *Files* in Settings):
@@ -1009,10 +1053,10 @@ Replacing secret values with `***` before a record is written to the buffer, the
 The dashboard's 3D scene on Pawn. It does not know the daemon API: it gets successive `HomeModel` snapshots and keeps one entity per object.
 
 **Dashboard**:
-The first screen, the "Home" view (`HomeView`): the daemon state, sessions (especially those waiting for you), repos and the connections between them, in the "Orbit" layout (`orbitLayout`).
+The "Home" view (`HomeView`), on the view bar once the user shows it there (ADR-294): the daemon state, sessions (especially those waiting for you), repos and the connections between them, in the "Orbit" layout (`orbitLayout`).
 
 **"Needs you" queue** (`NeedsYouPanel`):
-The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), in a container the repos with unpushed work (ADR-162), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.
+The left panel of the dashboard: sessions that are waiting for you or have an error, then task proposals waiting for a decision (ADR-39), tasks ready to close with "Close all" (ADR-282), in a container the repos with unpushed work (ADR-162), then repos that are not clean. Those sessions and repos always have a label on the scene, and with the scene labels `all` every other repo has one too; proposals are not on the scene, and a click opens them in the Sessions view.
 
 **Unpushed work** (`UnpushedWork`, `unpushedWork`, `Vcs.unpushed`; in the UI *only in this container*):
 What of a repo is on no remote: commits no remote-tracking branch reaches (on local branches and on the detached HEAD of a worktree), stashes, and changed files in the repo's worktrees, task worktrees included. Read only when the daemon runs in a container, where removing the Docker volume deletes it (ADR-162).

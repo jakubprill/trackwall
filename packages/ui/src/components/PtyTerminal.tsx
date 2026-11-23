@@ -30,7 +30,8 @@ import {
 import { hyperlinkHandler, trackwallLinkProvider, webLinkHandler } from "@/lib/terminal-links";
 import { sessionTerminalOptions } from "@/lib/terminal-options";
 import { opensSearch } from "@/lib/terminal-search";
-import { cssTokens, terminalTheme, watchWindowEffect } from "@/lib/terminal-theme";
+import { cssTokens, ignoreProgramColours, terminalTheme, watchWindowEffect } from "@/lib/terminal-theme";
+import { DELETE_WORD_BEFORE, deletesWordBefore } from "@/lib/terminal-word-delete";
 import { DARK_ISLAND } from "@/lib/theme";
 import { browserTimers } from "@/lib/timers";
 import { useOpenTrackwallLink } from "@/lib/trackwall-link";
@@ -63,7 +64,8 @@ const RESET = "\x1bc";
  *
  * For Copilot CLI only (`PtyKind.copilotCli`): the window tells the daemon whether it is in front of the user, which
  * marks the session seen (ADR-47), and in the grid (ADR-48) only the `selected` tile counts as in front; and Enter on
- * Copilot CLI's `/copy` (`entersCopyCommand`) also lets its copy through.
+ * Copilot CLI's `/copy` (`entersCopyCommand`) also lets its copy through; and Ctrl+Backspace deletes a word
+ * (`deletesWordBefore`).
  */
 /** The screen the program draws, top to bottom, as text: from `baseY`, not from where the user has scrolled back to. */
 function screenLines(terminal: Terminal): string[] {
@@ -172,6 +174,7 @@ export function PtyTerminal({
       else setNotice(COPY_REFUSED);
       return true;
     });
+    const stopIgnoringColours = ignoreProgramColours(terminal);
     fit.fit();
     const kept = lastScreens.shown(screenKey, terminal.cols);
     if (kept !== undefined) terminal.write(kept);
@@ -250,20 +253,21 @@ export function PtyTerminal({
       if (taken === "send") send({ type: "input", data });
       else if (taken === "dropped") setNotice(keysDropped);
     });
-    terminal.attachCustomKeyEventHandler((event) => {
-      if (opensSearch(event, { mac: IS_MAC })) {
-        event.preventDefault();
-        setSearch((open) => ({ addon: searcher, opened: (open?.opened ?? 0) + 1 }));
-        return false;
-      }
-      if (
-        asksProgramToCopy({ kind: "key", key: event }, selection()) ||
-        (copilotCli && entersCopyCommand(event, () => screenLines(terminal)))
-      )
-        programCopy.asked(performance.now());
-      // `false` without `preventDefault`: xterm.js leaves the key alone and the browser pastes into its text area.
-      if (pastesClipboard(event, { mac: IS_MAC })) return false;
-      if (!copiesSelection(event, { mac: IS_MAC, hasSelection: terminal.hasSelection() })) return true;
+    const openSearch = (event: KeyboardEvent) => {
+      event.preventDefault();
+      setSearch((open) => ({ addon: searcher, opened: (open?.opened ?? 0) + 1 }));
+      return false;
+    };
+    const asksToCopy = (event: KeyboardEvent) =>
+      asksProgramToCopy({ kind: "key", key: event }, selection()) || (copilotCli && entersCopyCommand(event, () => screenLines(terminal)));
+    const deletesWord = (event: KeyboardEvent) => copilotCli && deletesWordBefore(event);
+    const deleteWordBefore = (event: KeyboardEvent) => {
+      event.preventDefault();
+      // As if typed: through `onData`, so it waits for the connection like any other key.
+      terminal.input(DELETE_WORD_BEFORE);
+      return false;
+    };
+    const copySelection = (event: KeyboardEvent) => {
       // Without this the browser also runs its own shortcut: Ctrl+Shift+C opens the inspector in Chrome and in WebView2 in dev mode.
       event.preventDefault();
       copyText(terminal.getSelection()).then(
@@ -271,6 +275,15 @@ export function PtyTerminal({
         () => setNotice(COPY_FAILED),
       );
       return false;
+    };
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (opensSearch(event, { mac: IS_MAC })) return openSearch(event);
+      if (asksToCopy(event)) programCopy.asked(performance.now());
+      if (deletesWord(event)) return deleteWordBefore(event);
+      // `false` without `preventDefault`: xterm.js leaves the key alone and the browser pastes into its text area.
+      if (pastesClipboard(event, { mac: IS_MAC })) return false;
+      if (!copiesSelection(event, { mac: IS_MAC, hasSelection: terminal.hasSelection() })) return true;
+      return copySelection(event);
     });
     const resizer = oncePerFrame(() => {
       const { cols, rows } = terminal;
@@ -300,6 +313,7 @@ export function PtyTerminal({
       element.removeEventListener("mousemove", holdMove, { capture: true });
       element.removeEventListener("pointerdown", noteClick, { capture: true });
       copyHandler.dispose();
+      stopIgnoringColours();
       window.removeEventListener("focus", onWindowFocus);
       window.removeEventListener("blur", sendFocus);
       document.removeEventListener("visibilitychange", sendFocus);

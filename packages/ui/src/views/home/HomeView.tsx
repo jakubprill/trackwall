@@ -1,4 +1,4 @@
-import { graphApi, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
+import { graphApi, type HealthWarning, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
 import { type HomeKey, parseHomeKey } from "@trackwall/scene/model";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -14,6 +14,7 @@ import type { SessionSelection } from "@/lib/session-entries";
 import type { SettingsCategory } from "@/lib/settings-categories";
 import { DARK_ISLAND } from "@/lib/theme";
 import { unpushedRows } from "@/lib/unpushed-work";
+import { useCloseAll } from "@/lib/use-close-all";
 import { type RemoteHandle, useRemote } from "@/lib/use-remote";
 import { useRepoList } from "@/lib/use-repo-list";
 import type { RepoWatchHandle } from "@/lib/use-repo-watch";
@@ -23,15 +24,18 @@ import { useUnpushedWork } from "@/lib/use-unpushed-work";
 import { HomeDetails } from "./HomeDetails.tsx";
 import { HomeHoverCard } from "./HomeHoverCard.tsx";
 import { NeedsYouPanel } from "./NeedsYouPanel.tsx";
+import { ProjectsFolderNeeded } from "./ProjectsFolderNeeded.tsx";
 
 /**
- * The "Home" view (ADR-33, §5.5): the first screen. On the left the "Needs you" queue (sessions that are waiting or have
- * an error, task proposals waiting for a decision, and repos that are not clean), in the middle the 3D dashboard in the
- * "Orbit" layout, on the right the details of the selected object. A click selects; a double click or the button in the
- * details goes to the session or repo. The data is the same daemon responses as in other views (services polled as in the
- * repo's Service panel); sessions and running mise tasks come live from the events WebSocket (ADR-36), and `App` fetches the sessions, because their count is also on the
- * view bar. Outside the canvas the view takes only `@trackwall/scene/model` from the scene (keys and snapshot types), so
- * that three.js and Pawn stay in the lazily loaded chunk.
+ * The "Home" view (ADR-33, §5.5): the dashboard, on the view bar once the user shows it there (ADR-294). On the left the
+ * "Needs you" queue (sessions that are waiting or have an error, task proposals waiting for a decision, tasks ready to
+ * close (ADR-282), and repos that are not clean), in the middle the 3D dashboard in the "Orbit" layout, on the right the
+ * details of the selected object. A click selects; a double click or the button in the details goes to the session or
+ * repo. The data is the same daemon responses as in other views (services polled as in the repo's Service panel);
+ * sessions and running mise tasks come live from the events WebSocket (ADR-36), and `App` fetches the sessions and the
+ * container's health, because their counts are also on the view bar (ADR-287, ADR-294). Outside the canvas the view
+ * takes only `@trackwall/scene/model` from the scene (keys and snapshot types), so that three.js and Pawn stay in the
+ * lazily loaded chunk.
  */
 
 /** The scene's own messages are for people developing Trackwall, so a failure shows a general text, as in `HomeCanvas`. */
@@ -45,6 +49,7 @@ export function HomeView({
   eventsLost,
   repoWatch,
   sessions,
+  containerWarnings,
   onOpenInSessions,
   onOpenRepo,
   onOpenDaemon,
@@ -58,6 +63,8 @@ export function HomeView({
   /** Commits and repos added to the folder (ADR-63): the list and the graph are fetched again at once. */
   repoWatch: RepoWatchHandle;
   sessions: RemoteHandle<SessionList>;
+  /** The container health's warnings (ADR-280), from `App`, which counts them on the view bar (ADR-287); `undefined` until the daemon answers. */
+  containerWarnings: readonly HealthWarning[] | undefined;
   /** Go to the Sessions view with a session or a task proposal. */
   onOpenInSessions: (selection: SessionSelection) => void;
   onOpenRepo: (id: string) => void;
@@ -76,6 +83,7 @@ export function HomeView({
   const [selected, setSelected] = useState<HomeKey | null>(null);
   const [hovered, setHovered] = useState<HomeKey | null>(null);
   const [unavailable, setUnavailable] = useState<string>();
+  const closeAll = useCloseAll(conn, sessions);
 
   const daemonRunning = homeDaemonRunning(repos.error, repos.errorCode, eventsLost);
   const repoList = repos.data?.repos;
@@ -139,11 +147,15 @@ export function HomeView({
         model={model}
         sessions={lookup.sessions}
         proposals={sessions.data?.proposals ?? []}
+        closeAll={closeAll}
         unpushed={unpushedList}
+        containerWarnings={containerWarnings ?? []}
         selected={current}
         onSelect={setSelected}
         onOpen={open}
         onOpenProposal={(id) => onOpenInSessions({ kind: "proposal", id })}
+        onOpenTask={(id) => onOpenInSessions({ kind: "task", id })}
+        onOpenContainerHealth={() => onOpenSettings("diagnostics")}
       />
       {/* A dark island in the light theme (ADR-235): the scene's glow adds light, which vanishes on a light background. */}
       <div {...DARK_ISLAND} className="relative min-h-0 min-w-0">
@@ -199,12 +211,13 @@ export function HomeView({
  * settings file that cannot be read (`error`) is fixed where the folders are.
  */
 function HomeNeedsFolder({ error, onOpenSettings }: { error: string | undefined; onOpenSettings: (category: SettingsCategory) => void }) {
-  const broken = error !== undefined;
+  if (error === undefined)
+    return <ProjectsFolderNeeded needs="show your repos and sessions here" onOpenGetStarted={() => onOpenSettings("get-started")} />;
   return (
     <div className="flex flex-col items-start gap-3 p-6">
-      <p className="text-sm">{broken ? error : "Trackwall needs your projects folder before it can show your repos and sessions here."}</p>
-      <Button variant={broken ? "outline" : "default"} size="sm" onClick={() => onOpenSettings(broken ? "workspace" : "get-started")}>
-        {broken ? "Open Settings" : "Get started"}
+      <p className="text-sm">{error}</p>
+      <Button variant="outline" size="sm" onClick={() => onOpenSettings("workspace")}>
+        Open Settings
       </Button>
     </div>
   );

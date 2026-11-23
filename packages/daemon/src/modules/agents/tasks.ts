@@ -452,6 +452,7 @@ export class AgentTasks {
       conversation: null,
       summary: null,
       inReview: false,
+      readyToClose: false,
       stoppedAtTokenBudget: false,
       paused: null,
       handoff,
@@ -880,10 +881,10 @@ export class AgentTasks {
    * A summary from the task session (`report_result`, ADR-39) with its check steps (ADR-169) and its reproduction test
    * (ADR-222); a later one replaces the earlier one, steps and test included, and survives a daemon restart.
    */
-  setSummary(id: string, report: ReportedSummary): Task {
+  setSummary(id: string, report: ReportedSummary, readyToClose: boolean): Task {
     const reportedAt = new Date().toISOString();
-    // A summary hands the work over for review (ADR-213).
-    const summarized = { ...this.#get(id), summary: { ...report, reportedAt }, inReview: true };
+    // A summary hands the work over for review (ADR-213), and says whether the agent's work is over (ADR-282).
+    const summarized = { ...this.#get(id), summary: { ...report, reportedAt }, inReview: true, readyToClose };
     this.#save(this.#tasks.map((t) => (t.id === id ? summarized : t)));
     return view(summarized);
   }
@@ -892,8 +893,8 @@ export class AgentTasks {
    * The summary of the one session of a change (ADR-265): it did every part, so its report is every part's summary and
    * hands every part over for review. Returns the parts in their order; for a task with a session of its own, only it.
    */
-  setSummaries(id: string, report: ReportedSummary): Task[] {
-    return this.worksOn(id).map((part) => this.setSummary(part, report));
+  setSummaries(id: string, report: ReportedSummary, readyToClose: boolean): Task[] {
+    return this.worksOn(id).map((part) => this.setSummary(part, report, readyToClose));
   }
 
   /**
@@ -937,13 +938,29 @@ export class AgentTasks {
 
   /**
    * The task's agent got work again (the user's review or "Fix" of its pipeline, its proposer's message, ADR-213), so its work is no longer
-   * waiting for review; `false` when it was not.
+   * waiting for review, nor is its work over (ADR-282); `false` when it was not in review.
    */
   takeOutOfReview(id: string): boolean {
     const task = this.#get(id);
     if (!task.inReview) return false;
-    this.#save(this.#tasks.map((t) => (t.id === id ? { ...task, inReview: false } : t)));
+    this.#save(this.#tasks.map((t) => (t.id === id ? { ...task, inReview: false, readyToClose: false } : t)));
     return true;
+  }
+
+  /** The user keeps open a task whose agent said its work is over (ADR-282); it stays in review. */
+  keepOpen(id: string): Task {
+    this.assertReadyToClose(id);
+    const task = this.#get(id);
+    const kept = { ...task, readyToClose: false };
+    this.#save(this.#tasks.map((t) => (t.id === id ? kept : t)));
+    return view(kept);
+  }
+
+  /** The task, whose agent said its work is over (ADR-282); `bad_request` otherwise. */
+  assertReadyToClose(id: string): void {
+    const task = this.#get(id);
+    if (!task.readyToClose)
+      throw new DomainError("bad_request", `the agent of task ${task.branch} has not said its work is over; end it with End task`);
   }
 
   /**
@@ -1360,6 +1377,11 @@ export class AgentTasks {
     } finally {
       this.#removing.delete(id);
     }
+  }
+
+  /** `unsaved_changes` when ending task `id` with its branch kept would delete work, as `remove` refuses it. */
+  refuseLossOnEnd(id: string): Promise<void> {
+    return this.#refuseLoss(this.#get(id), true);
   }
 
   async #refuseLoss(task: KnownTask, keepBranch: boolean): Promise<void> {

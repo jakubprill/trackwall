@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { type FolderTerminal, PROJECTS_FOLDER_PLACE } from "@trackwall/protocol";
-import { reopensOnOpen, terminalAt } from "../src/lib/folder-terminals.ts";
+import { reopensOnOpen, shownTerminal, terminalAt } from "../src/lib/folder-terminals.ts";
 
 const RUNNING: FolderTerminal["run"] = { kind: "running", runId: "r1", startedAt: "2026-11-03T10:00:00.000Z", pid: 7 };
 const ROOT: FolderTerminal = { id: "11111111-1111-4111-8111-111111111111", repo: "shop", task: null, run: RUNNING };
@@ -34,5 +34,35 @@ describe("opening a Shell tab", () => {
     expect(reopensOnOpen({ loaded: true, hasLiveShell: true, alreadyAsked: false })).toBe(true);
     expect(reopensOnOpen({ loaded: true, hasLiveShell: true, alreadyAsked: true })).toBe(false);
     expect(reopensOnOpen({ loaded: false, hasLiveShell: false, alreadyAsked: false })).toBe(false);
+  });
+});
+
+describe("closing a Shell tab's shell", () => {
+  const OLD = ROOT;
+  const FRESH: FolderTerminal = { ...ROOT, id: "44444444-4444-4444-8444-444444444444" };
+
+  test("hides the shell at once, before the daemon confirms its end", () => {
+    expect(shownTerminal({ listed: OLD, started: undefined, closing: new Set([OLD.id]) })).toBeUndefined();
+  });
+
+  test("shows a new shell started while the list still names the old one being closed", () => {
+    expect(shownTerminal({ listed: OLD, started: FRESH, closing: new Set([OLD.id]) })).toBe(FRESH);
+  });
+
+  test("prefers the list's terminal to the start's answer, as the list says what happened to it since", () => {
+    const ended: FolderTerminal = {
+      ...FRESH,
+      run: {
+        kind: "exited",
+        runId: "r1",
+        startedAt: "2026-11-03T10:00:00.000Z",
+        endedAt: "2026-11-03T10:05:00.000Z",
+        exitCode: 0,
+        signal: null,
+        stoppedByUser: false,
+        lastLines: [],
+      },
+    };
+    expect(shownTerminal({ listed: ended, started: FRESH, closing: new Set() })).toBe(ended);
   });
 });

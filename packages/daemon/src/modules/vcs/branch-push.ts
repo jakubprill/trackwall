@@ -7,7 +7,7 @@ import { networkAddress } from "./remote.ts";
 
 /**
  * A task branch against the main remote and its push (ADR-77). The read compares only refs, as the last push or fetch
- * left them, without the network. The push is one of the daemon's two writes to a server (the other is the local config store's, ADR-86): one branch, by its full
+ * left them, without the network. The push is one of the daemon's two writes to a server (the other is the workspace store's, ADR-86): one branch, by its full
  * name on both sides, never forced, so a remote that moved on refuses it and nothing is lost there. The task's agent
  * shares the repo's configuration and writes in the worktree, so the push takes from neither what it could plant: no
  * hooks, no tags or submodules, no other receiving program, and no push address other than the one the panel shows (§8).

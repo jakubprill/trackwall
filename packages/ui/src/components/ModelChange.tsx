@@ -121,12 +121,15 @@ export function ModelChangeButton({
   open,
   onToggle,
   title,
+  label = "Model",
   iconOnly = false,
   disabled = false,
 }: {
   open: boolean;
   onToggle: () => void;
   title: string;
+  /** What the button says beside its icon; a menu names the action in full. */
+  label?: string;
   iconOnly?: boolean;
   disabled?: boolean;
 }) {
@@ -141,7 +144,7 @@ export function ModelChangeButton({
       title={title}
     >
       <Bot />
-      {!iconOnly && "Model"}
+      {!iconOnly && label}
     </Button>
   );
 }

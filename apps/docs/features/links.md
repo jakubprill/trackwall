@@ -1,6 +1,7 @@
 ---
 title: trackwall:// links
 description: Links that open a repo, session or task in Trackwall, from an agent's answer or anywhere else.
+status: stable
 ---
 
 # trackwall:// links

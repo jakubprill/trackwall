@@ -676,6 +676,31 @@ describe("a session of the real Copilot CLI", () => {
     }
   });
 
+  test("a projects folder the daemon adds to trustedFolders, in a config.json Copilot CLI wrote with its comment lines, starts a session without the folder trust dialog", async () => {
+    const { agents, doctor } = daemon.facade;
+    // The first session's start makes Copilot CLI rewrite config.json in its own format.
+    const first = await startSession();
+    await agents.stop(first.id);
+    const configFile = join(daemon.home, "copilot-home", "config.json");
+    const config = readFileSync(configFile, "utf8");
+    try {
+      // Copilot CLI's own file, with only the state folder trusted: the repo in the projects folder is not.
+      writeFileSync(configFile, config.replace(JSON.stringify(daemon.projects), JSON.stringify(daemon.home)));
+      expect((await doctor.run()).checks.find((c) => c.id === "copilot-trusted-folder")?.status).toBe("warn");
+
+      const written = await doctor.trustProjectsFolder();
+
+      expect(written).toMatchObject({ file: configFile, folder: daemon.projects, added: true });
+      expect(readFileSync(configFile, "utf8")).toStartWith("//");
+      // With the dialog on the screen the session would never load: no hook runs before the answer.
+      const { id } = await startSession();
+      expect(agents.session(id).dialog).toBeNull();
+      await agents.stop(id);
+    } finally {
+      writeFileSync(configFile, config);
+    }
+  });
+
   test("/exit ends the session with sessionEnd, and the session is Done", async () => {
     const { agents } = daemon.facade;
     const { id, window } = await startSession();
@@ -895,11 +920,15 @@ describe("subagents and background agents with the real Copilot CLI (ADR-254)", 
     await waitFor(
       agents,
       id,
-      () => hooksOf(id).filter((h) => h === "agentStop main").length === 2,
+      () => hooksOf(id).filter((h) => h === "agentStop main").length === 2 && hooksOf(id).includes("notification main"),
       "the main agent's next turn",
       SESSION_MS,
     );
-    expect(hooksOf(id).slice(5)).toEqual(["agentStop subagent", "userPromptSubmitted main", "notification main", "agentStop main"]);
+    // Copilot CLI sends the turn's `agent_idle` notification and its agentStop side by side, in either order (on macOS
+    // the notification came last); a notification of that kind changes no state, so the order does not matter.
+    const next = hooksOf(id).slice(5);
+    expect(next.slice(0, 2)).toEqual(["agentStop subagent", "userPromptSubmitted main"]);
+    expect(next.slice(2).sort()).toEqual(["agentStop main", "notification main"]);
     expect(hookRecords(daemon.home, id).find((r) => r.event === "notification")?.payload.notification_type).toBe("agent_idle");
     const done = await waitFor(agents, id, (s) => s.state?.state === "Input", "the end of the main agent's work", SESSION_MS);
     expect(done.state).toMatchObject({ source: "hook", reason: "hook agentStop" });

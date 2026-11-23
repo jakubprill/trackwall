@@ -26,6 +26,7 @@ const stored = {
   conversation: "c0ffee-1",
   summary: { text: "Fixed, test added.", checkSteps: [], reproTest: null, reportedAt: "2026-10-24T10:00:00.000Z" },
   inReview: true,
+  readyToClose: false,
   stoppedAtTokenBudget: false,
   paused: { at: "2026-11-13T18:00:00.000Z", service: { lease: false } },
   handoff: null,
@@ -160,6 +161,14 @@ describe("tasks.json", () => {
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
     expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, item: null }]);
+  });
+
+  test("a task saved before Ready to close comes back not ready to close, so Home offers no Close the agent never asked for (ADR-282)", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { readyToClose: _, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, readyToClose: false }]);
   });
 
   test("a task saved before In review comes back not in review, so the Sessions list does not claim a hand-over (ADR-213)", () => {

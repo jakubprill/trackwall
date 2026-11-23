@@ -12,6 +12,10 @@
  *   lies in a box placed over the other with its own background on purpose (a badge on an icon, a tooltip).
  * - Painted over: at the middle of a mark (a text, an icon, a group's stripe), something with a background or an image
  *   is drawn on top of it.
+ * - Empty columns: a row of a table spans more columns than the table's head names, so the table adds columns with
+ *   nothing in them, which squeeze the named ones (a `colSpan` that counts a column a container query hides, say).
+ * - Squeezed shut: a box made to scroll up and down holds text but is lower than one line of it, so its list looks
+ *   empty (a list in a column that takes only the height the sections above it leave over, say).
  *
  * Left out: text inside a terminal, an SVG, a canvas or Home's 3D scene (`data-scene`, whose labels follow the camera),
  * and anything hidden on purpose (opacity 0, `visibility: hidden`, a closed `<details>`, a clip such as `sr-only`).
@@ -32,6 +36,8 @@ export function layoutFaults(scope: string | null): string[] {
   );
   textOverText(texts, icons);
   paintedOver(texts, icons, [...root.querySelectorAll("[data-group-stripe]")]);
+  emptyColumns(root);
+  squeezedShut(root);
   return found;
 
   function shownTexts(within: Element): Shown[] {
@@ -144,6 +150,48 @@ export function layoutFaults(scope: string | null): string[] {
     } finally {
       allHits.remove();
     }
+  }
+
+  /** The rows that span more columns than their table's head names, in the tables shown that have a head. */
+  function emptyColumns(within: Element): void {
+    for (const table of within.querySelectorAll("table")) {
+      const head = table.querySelector(":scope > thead > tr");
+      if (head === null || hiddenOnPurpose(table)) continue;
+      const named = columnsOf(head);
+      for (const row of table.querySelectorAll(":scope > tbody > tr")) {
+        const spans = columnsOf(row);
+        if (spans > named) found.push(`${describe(row)} spans ${spans} columns of a table whose head names ${named}`);
+      }
+    }
+  }
+
+  /** The columns a row takes: each cell it shows, by its `colSpan`; none when the row is not shown. */
+  function columnsOf(row: Element): number {
+    if (getComputedStyle(row).display === "none") return 0;
+    return [...row.children]
+      .filter((cell) => getComputedStyle(cell).display !== "none")
+      .reduce((sum, cell) => sum + (cell instanceof HTMLTableCellElement ? cell.colSpan : 1), 0);
+  }
+
+  /** The boxes made to scroll up and down that hold more text than they show and are lower than one line of it. */
+  function squeezedShut(within: Element): void {
+    for (const box of within.querySelectorAll("*")) {
+      const style = getComputedStyle(box);
+      if (scrollsTextUpAndDown(box, style) && box.clientHeight < lineHeight(style))
+        found.push(`${describe(box)} is ${box.clientHeight}px high, less than a line of its text`);
+    }
+  }
+
+  /** A box made to scroll up and down, shown, that holds text it does not show whole; a text field is not one. */
+  function scrollsTextUpAndDown(box: Element, style: CSSStyleDeclaration): boolean {
+    const scrolls = style.overflowY === "auto" || style.overflowY === "scroll";
+    if (!scrolls || box.closest(`${SKIPPED}, textarea, input, select`) !== null || hiddenOnPurpose(box)) return false;
+    return (box.textContent ?? "").trim() !== "" && box.scrollHeight > box.clientHeight;
+  }
+
+  /** The height of a line of the box's text; `normal` is about one and a half times the font's size. */
+  function lineHeight(style: CSSStyleDeclaration): number {
+    return Number.parseFloat(style.lineHeight) || 1.5 * Number.parseFloat(style.fontSize);
   }
 
   /** The element painted over `mark` at `at`: the first one above it with a background or an image, if any. */

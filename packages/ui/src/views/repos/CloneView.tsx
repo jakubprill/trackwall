@@ -8,7 +8,7 @@ import {
   type RepoHost,
   workspaceApi,
 } from "@trackwall/protocol";
-import { Download, Search } from "lucide-react";
+import { Download, LoaderCircle, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -22,17 +22,19 @@ import { type CloneState, cloneState } from "@/lib/clone-state";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
 import {
-  loadingMore as isLoadingMore,
   onePageMore,
   pagesOf,
   type RemoteRepoFilters,
+  requestKey,
   type ShownPages,
   searchKey,
+  searchProgress,
 } from "@/lib/remote-repo-search";
 import { HOST_KIND_LABEL, loginCommand } from "@/lib/repo-hosts";
 import type { SettingsCategory } from "@/lib/settings-categories";
 import { useDebounced } from "@/lib/use-debounced";
 import { useRemote } from "@/lib/use-remote";
+import { cn } from "@/lib/utils";
 
 /** The search asks GitLab after every pause in typing; shorter would be a request on every keystroke. */
 const SEARCH_DEBOUNCE_MS = 350;
@@ -67,18 +69,19 @@ export function CloneView({
   const key = searchKey(filters);
   const [shown, setShown] = useState<ShownPages>({ searchKey: key, pages: 1 });
   const pages = pagesOf(shown, key);
-  // Read when a request is sent, so that "Show more" fetches again keeping the list on screen (`refreshKey`), while a
-  // new search (a new `loadRepos`) clears it. A new search also changes `pages` back to 1, but `useRemote` sends its
-  // request with that key first, so the key change does not fetch a second time. "Show more" applies to every host:
-  // each GitLab host gets one page more.
-  const pagesRef = useRef(pages);
-  pagesRef.current = pages;
-  const loadRepos = useCallback(async (): Promise<RemoteRepoList & { pages: number }> => {
-    const asked = pagesRef.current;
-    return { ...(await post(conn, workspaceApi.remoteRepos, { ...filters, pages: asked })), pages: asked };
-  }, [conn, filters]);
-  const remote = useRemote(loadRepos, { refreshKey: String(pages) });
-  const loadingMore = isLoadingMore(remote.data?.pages, pages, remote.error !== undefined);
+  // One loader read when a request is sent, and the search with its pages as `refreshKey`: a new query keeps the list on
+  // screen until the hosts answer, and while one search is on its way, typing on asks once more after its answer with
+  // what is typed then, instead of a request for every pause. Each answer carries the search it answers.
+  const asked = useRef({ filters, key, pages });
+  asked.current = { filters, key, pages };
+  const loadRepos = useCallback(async (): Promise<RemoteRepoList & ShownPages> => {
+    const search = asked.current;
+    const list = await post(conn, workspaceApi.remoteRepos, { ...search.filters, pages: search.pages });
+    return { ...list, searchKey: search.key, pages: search.pages };
+  }, [conn]);
+  const remote = useRemote(loadRepos, { refreshKey: requestKey(key, pages) });
+  const typing = query.trim() !== debouncedQuery || topic.trim() !== debouncedTopic || language.trim() !== debouncedLanguage;
+  const progress = searchProgress({ listed: remote.data, key, pages, failed: remote.error !== undefined, typing });
   const showMore = () => setShown(onePageMore(shown, key));
   const loadClones = useCallback(() => post(conn, workspaceApi.clones, {}), [conn]);
   const clones = useRemote(loadClones, { pollMs: CLONES_POLL_MS });
@@ -101,8 +104,11 @@ export function CloneView({
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by repo or group name"
           aria-label="Search repos on hosts"
-          className="pl-9"
+          className="pr-9 pl-9"
         />
+        {progress === "searching" && remote.data && (
+          <LoaderCircle role="status" aria-label="Searching" className="text-muted-foreground absolute right-3 size-4 animate-spin" />
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-3 text-xs">
         {hosts?.some((h) => h.host.kind === "gitlab") && <ScopeSwitch scope={scope} onChange={setScope} />}
@@ -141,18 +147,23 @@ export function CloneView({
           onOpenSettings={() => onOpenSettings("repo-hosts")}
         />
       )}
-      {hosts?.map((h) => (
-        <HostSection
-          key={hostKey(h.host)}
-          conn={conn}
-          hostRepos={h}
-          jobs={jobs}
-          canClone={remote.data?.projectsDir !== null}
-          onStarted={clones.reload}
-          loadingMore={loadingMore}
-          onShowMore={showMore}
-        />
-      ))}
+      <div
+        aria-busy={progress === "searching"}
+        className={cn("flex flex-col gap-4 transition-opacity", progress === "searching" && "opacity-60")}
+      >
+        {hosts?.map((h) => (
+          <HostSection
+            key={hostKey(h.host)}
+            conn={conn}
+            hostRepos={h}
+            jobs={jobs}
+            canClone={remote.data?.projectsDir !== null}
+            onStarted={clones.reload}
+            loadingMore={progress === "loading-more"}
+            onShowMore={showMore}
+          />
+        ))}
+      </div>
     </div>
   );
 }

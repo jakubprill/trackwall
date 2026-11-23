@@ -25,7 +25,7 @@ async function workspaceWithGitLab(config: FakeHostingConfig = {}, afterClone = 
   const workspace = new Workspace({
     inContainer: false,
     file: new WorkspaceFile(file),
-    vcs: new Vcs(systemTempFolder),
+    vcs: new Vcs(systemTempFolder, tmpdir()),
     hosting: fakeHosting(config).hosting,
     openEditor: () => {},
     openFolder: () => {},
@@ -177,7 +177,7 @@ describe("cloning from a repo host into the projects folder", () => {
     const bare = new Workspace({
       inContainer: false,
       file: new WorkspaceFile(file),
-      vcs: new Vcs(systemTempFolder),
+      vcs: new Vcs(systemTempFolder, tmpdir()),
       hosting: fakeHosting().hosting,
       openEditor: () => {},
       openFolder: () => {},

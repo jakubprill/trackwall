@@ -1,6 +1,7 @@
 ---
 title: Config files
 description: See every file and folder Trackwall reads or writes on your computer, what each is for, where it is and whether it is in order.
+status: stable
 ---
 
 # Config files
@@ -29,6 +30,7 @@ Under `workspace.yaml` a table lists its keys:
 | `gitProgram` | which git Trackwall runs to read your repos, when starting the one on your `PATH` is slow | "Settings > Workspace" |
 | `repoHosts` | where the Repos view searches and clones from | "Settings > Repo hosts" |
 | `starredRepos` | the repos you starred, listed first in the Repos view | the star in "Repos" |
+| `serverCheck` | whether Trackwall asks your repos' servers every 15 minutes for commits you have not fetched | "Settings > Repo hosts" |
 | `toolPermissions` | which tools sessions may use without asking you | by hand |
 | `alwaysAllow` | the tools you always allow in a repo's tasks, from "Always allow" in an approval | "Settings > Agents" |
 | `sandbox` | which tasks run their commands in Copilot CLI's sandbox | "Settings > Agents" |
@@ -41,7 +43,7 @@ Under `workspace.yaml` a table lists its keys:
 | `runningTasksWarning` | how many tasks may run at once before starting another one warns you | "Settings > Agents" |
 | `taskBranchPrefix` | what the branch of a new task starts with, such as `feature/` | by hand |
 | `javaNavigation` | the Java language server and Java that tasks get for code navigation | "Settings > Agents" |
-| `localConfigRemote` | the only remote the local config store is pushed to | "Settings > Workspace" |
+| `localConfigRemote` | the only remote the workspace store is pushed to | "Settings > Workspace" |
 | `supervisor` | whether the supervisor may change code itself | "Settings > Agents" |
 | `repoTags` | your own tags on repo cards | by hand |
 | `dayStart` | your addition to the first message of Start my day | by hand |

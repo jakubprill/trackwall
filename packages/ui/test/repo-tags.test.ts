@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { RepoTags } from "@trackwall/protocol";
-import { hasAllTags, tagCounts, tagsByRepo, toggleTag } from "../src/lib/repo-tags.ts";
+import { hasAllTags, shownTags, tagCounts, tagsByRepo, toggleTag } from "../src/lib/repo-tags.ts";
 
 const tag = (name: string) => ({ name, reason: "reason" });
 const list: RepoTags[] = [
@@ -35,5 +35,12 @@ describe("repo filter by tags", () => {
   test("clicking a tag adds or removes it", () => {
     expect(toggleTag(["java"], "bff")).toEqual(["java", "bff"]);
     expect(toggleTag(["java", "bff"], "java")).toEqual(["bff"]);
+  });
+
+  test("the folded filter shows only the chosen tags, the open one all of them", () => {
+    const counts = tagCounts(tagsByRepo(list), ["bff"]);
+    expect(shownTags(counts, ["bff"], false)).toEqual([{ name: "bff", count: 1 }]);
+    expect(shownTags(counts, [], false)).toEqual([]);
+    expect(shownTags(counts, ["bff"], true)).toEqual(counts);
   });
 });

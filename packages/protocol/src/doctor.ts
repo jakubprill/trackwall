@@ -6,7 +6,8 @@ import { apiEndpoints } from "./api.ts";
  * Linux, whether it is mounted from the host, in a container the work there on no remote (ADR-162), the keys of
  * `workspace.yaml` (ADR-108), git, Copilot CLI and its trusted folders and sandbox (ADR-181), the network sessions reach GitHub and Copilot
  * through (ADR-166), folders an antivirus scans (ADR-255), mise, the Java language server of tasks (ADR-123), `gh` and `glab` for the repo hosts), each with what to do
- * when it fails. It only reads, apart from small files it writes and removes to time them; it changes nothing. Every action is `POST /api/doctor/<action>`.
+ * when it fails. The checks only read, apart from small files they write and remove to time them, and change nothing; the one
+ * change is `trust-projects-folder`, which the user asks for (ADR-270). Every action is `POST /api/doctor/<action>`.
  */
 
 /** What a check is about; one check per item, in this order. */
@@ -52,9 +53,88 @@ export const DoctorReport = z.object({
 });
 export type DoctorReport = z.infer<typeof DoctorReport>;
 
+/** What `trust-projects-folder` did to Copilot CLI's `config.json` (ADR-270). */
+export const TrustedProjectsFolder = z.object({
+  /** Copilot CLI's `config.json`, as a full path. */
+  file: z.string(),
+  /** The trusted folder that covers the projects folder: itself, or a folder above it that was trusted already. */
+  folder: z.string(),
+  /** `false`: a trusted folder covered the projects folder already, and nothing was written. */
+  added: z.boolean(),
+  /** The copy of the file as it was before the change; `null` when nothing was written or there was no file. */
+  backup: z.string().nullable(),
+});
+export type TrustedProjectsFolder = z.infer<typeof TrustedProjectsFolder>;
+
+/** The projects folder, and whether Copilot CLI trusts it without asking, itself or through a folder above it (ADR-290). */
+export const ProjectsFolderTrust = z.object({
+  /** The projects folder of the workspace settings. */
+  folder: z.string(),
+  trusted: z.boolean(),
+});
+export type ProjectsFolderTrust = z.infer<typeof ProjectsFolderTrust>;
+
+/**
+ * How the Copilot CLI sessions start compares with `TESTED_COPILOT_CLI_VERSION` (ADR-274): `older` may lack what the daemon
+ * relies on, `newer` may have changed it, `unknown` when Copilot CLI is missing, did not answer or said no version.
+ */
+export const CopilotCliRelation = z.enum(["older", "tested", "newer", "unknown"]);
+export type CopilotCliRelation = z.infer<typeof CopilotCliRelation>;
+
+/**
+ * Where the Copilot CLI that sessions run comes from: the user's `computer`, or in a container its mise config
+ * (`container-mise`, as the dev container guide installs it) or its image (`container-image`, such as `npm i -g` in a
+ * Dockerfile), where a `mise use` installs a second copy that never runs.
+ */
+export const CopilotCliSource = z.enum(["computer", "container-mise", "container-image"]);
+export type CopilotCliSource = z.infer<typeof CopilotCliSource>;
+
+export const CopilotCliVersion = z.discriminatedUnion("relation", [
+  /**
+   * What `copilot --version` says, as `x.y.z`, against the tested version, `TESTED_COPILOT_CLI_VERSION` of this daemon;
+   * and where that Copilot CLI comes from (`CopilotCliSource`).
+   */
+  z.object({ relation: z.enum(["older", "tested", "newer"]), version: z.string(), tested: z.string(), source: CopilotCliSource }),
+  z.object({ relation: z.literal("unknown"), version: z.null(), tested: z.string(), source: CopilotCliSource }),
+]);
+export type CopilotCliVersion = z.infer<typeof CopilotCliVersion>;
+
+/**
+ * How to get the tested Copilot CLI, for the doctor and the window's strip alike (ADR-274), by where the running one
+ * comes from: in a container an update made any other way than its source is gone at the next rebuild or never runs.
+ */
+export function copilotCliInstallAdvice(tested: string, source: CopilotCliSource): string {
+  switch (source) {
+    case "computer":
+      return `Install Copilot CLI ${tested} the way you installed it (npm, Homebrew or WinGet).`;
+    case "container-mise":
+      return `Install Copilot CLI ${tested} with mise, which the container runs it from: \`mise use -g npm:@github/copilot@${tested}\` in the container.`;
+    case "container-image":
+      return `Copilot CLI comes with the container's image: install ${tested} where the image installs it, for example \`npm i -g @github/copilot@${tested}\` in its Dockerfile, and rebuild the container. An update made inside the container is lost at the next rebuild.`;
+  }
+}
+
 const endpoint = apiEndpoints("doctor");
 
 export const doctorApi = {
   /** Runs every check now; each has a time limit, so the report comes within seconds also without a network. */
   run: endpoint("run", z.object({}).strict(), DoctorReport),
+  /**
+   * Adds the projects folder of the workspace settings to the folders Copilot CLI trusts without asking (`trustedFolders`
+   * in its `config.json`), so the fix of the `copilot-trusted-folder` check is one click (ADR-270). The body names no
+   * folder: the daemon takes it from its settings. `bad_request` when no projects folder is set or the file cannot be
+   * changed safely; the message says why.
+   */
+  trustProjectsFolder: endpoint("trust-projects-folder", z.object({}).strict(), TrustedProjectsFolder),
+  /**
+   * Only whether Copilot CLI trusts the projects folder, without the other checks (ADR-290): the New session form asks it
+   * so that it offers "Trust folder" only while Copilot CLI would ask. Reads Copilot CLI's `config.json` and nothing else;
+   * a missing or unreadable `config.json` trusts nothing. `bad_request` when no projects folder is set.
+   */
+  projectsFolderTrust: endpoint("projects-folder-trust", z.object({}).strict(), ProjectsFolderTrust),
+  /**
+   * Only the version of the Copilot CLI sessions start, without the other checks (ADR-274): the window asks for it when it
+   * connects and every hour, and warns about a version Trackwall is not tested with. Runs `copilot --version` and nothing else.
+   */
+  copilotCliVersion: endpoint("copilot-cli-version", z.object({}).strict(), CopilotCliVersion),
 };

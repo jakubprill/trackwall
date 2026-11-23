@@ -57,6 +57,7 @@ import {
   SearchCodeResult,
 } from "./code-search.ts";
 import { COMMIT_SEARCH_MAX_COMMITS, COMMIT_SEARCH_MAX_FILES, CommitQuery, SearchCommitsResult } from "./commit-search.ts";
+import { ContainerHealthBrief } from "./container-health.ts";
 import { DAY_REPORT_COMMITS, DayReport } from "./day-start.ts";
 import {
   FindEndpointResult,
@@ -311,8 +312,13 @@ export const WaitStatus = z.enum([
   "working",
   /** The session does not respond (`Stale`) or may be stuck (`Session.stuck`, ADR-151). */
   "stale",
-  /** The session is waiting for the user (`needsAttention`): it finished or failed a turn, asks for permission or for a plan approval. */
+  /**
+   * The session needs someone: it finished a turn the user has not seen yet, failed a turn, or asks for permission or
+   * for a plan approval (`session.state.state`: `Input`, `Error`, `Approval`, `Plan`).
+   */
   "needs_attention",
+  /** The session finished its turn, and the user has already seen it: the agent is idle in its input box. */
+  "idle",
   /** The session's process has ended. */
   "exited",
   /** The task has no session (for example after a Trackwall restart); the user can resume it in the UI. */
@@ -432,6 +438,16 @@ export const TASK_MESSAGE_RULE =
 /** What a proposer sends its task with `send_message` (ADR-68, ADR-81): one list for the tool, the MCP instruction and the supervisor's role. */
 export const TASK_MESSAGE_USES =
   "a correction, an answer to the task's question, a follow-up on its topic, or what changed elsewhere that it must take into account";
+/**
+ * Which proposal one piece of work in several repos becomes (ADR-265): a change, made by one session in one conversation,
+ * and a task per repo only on the user's word. One text for the MCP instruction and the roles of the sessions that
+ * propose work, so they cannot drift apart; `propose_change`'s description says the same in its own words.
+ */
+export const SEVERAL_REPOS_RULE =
+  `One piece of work in several repos (an endpoint and its callers, the same fix in a few services) is one ${PROPOSE_CHANGE}, ` +
+  "one part per repo in the order their merge requests are to be merged: one agent makes every part in one conversation, " +
+  "which costs a fraction of a session per repo, and the user still reviews, verifies and merges each repo's part on its own. " +
+  `Propose a separate ${PROPOSE_TASK} per repo instead only when the user asks for separate tasks.`;
 const RepoTagsArg = z.array(TagName).max(20);
 const MiseTaskArg = MiseTaskName.describe(`mise task name from ${GET_REPO} (the miseTasks field)`);
 /** A mise task in a task's worktree instead of the repo root (ADR-59). */
@@ -456,6 +472,14 @@ const GET_ERRORS = "get_errors";
 const GET_TEST_RESULTS = "get_test_results";
 const VERIFY_TASK = "verify_task";
 
+/**
+ * The MCP tools on their way out (§5.3, ADR-278): an agent's prompts, skills and instructions name tools and their
+ * arguments, so a tool is removed only in a release after one that marked it deprecated, and an argument is never removed. A
+ * deprecated tool stays here with `removedIn: null` and its description starts with `Deprecated since <since>`; once
+ * removed, its entry stays with the version that removed it, so the contract test knows the removal was announced.
+ */
+export const MCP_TOOL_DEPRECATIONS: Readonly<Record<string, { since: string; removedIn: string | null; instead: string | null }>> = {};
+
 export const mcpTools = {
   listRepos: {
     name: LIST_REPOS,
@@ -463,7 +487,7 @@ export const mcpTools = {
     auditArgs: ["tags"] as const,
     description:
       "Repos in the user's projects folder: id, path, remote address (host/path), branch, latest commit, number of " +
-      "local changes (untracked: how many of them are new), ahead/behind, the result of the latest sync since Trackwall started (lastSync: null when there " +
+      "local changes (untracked: how many of them are new), ahead/behind as of the last fetch (fetchedAt), the result of the latest sync since Trackwall started (lastSync: null when there " +
       "was none) and repo tags (e.g. java, frontend, bff, monorepo, no-mise for a repo without mise tasks, local-mise for one with mise tasks only this clone has, and tags from the user's rules). The tags argument " +
       "narrows the list to repos with every given tag. Start with this tool; pass the id field to the other tools.",
     args: z
@@ -855,6 +879,21 @@ export const mcpTools = {
     args: z.object({}).strict(),
     result: GetDayReportResult,
   },
+  getContainerHealth: {
+    name: "get_container_health",
+    readOnly: true,
+    auditArgs: [] as const,
+    description:
+      "How the dev container Trackwall runs in is doing now, as its own control group counts it: memory, processors and " +
+      "processes against the container's limits (limit null: none of its own, it shares the machine's), free disk, " +
+      "oomKills (processes the kernel killed for lack of memory in the last day, each with when and how many), restarts " +
+      "of Trackwall's daemon after a crash, and warnings (id and text) for what needs the user. Call it when a build, a " +
+      "test or a server ended without a clear reason (exit code 137, a JVM that vanished, a killed process): a kill for " +
+      "memory near that time is the reason, and the fix is more memory for the container or fewer builds at once, not a " +
+      "change to the code. inContainer false: Trackwall runs on the user's computer and there is nothing to read.",
+    args: z.object({}).strict(),
+    result: ContainerHealthBrief,
+  },
   getTaskChanges: {
     name: GET_TASK_CHANGES,
     readOnly: true,
@@ -959,12 +998,14 @@ export const mcpTools = {
       "that call it) as one proposal: one task per repo, all on one branch name from the title, in the order their merge " +
       "requests are to be merged, the repo the others build on first. Trackwall shows the user one card with every repo, " +
       "and nothing runs until the user approves it; the user may untick repos (at least two stay) or reject it. Each part " +
-      "is an ordinary task with its own session, which knows its sibling parts and reads the part before it with " +
-      `get_handoff. The approved proposal's id becomes the task id of the first part Trackwall could make (when that part's session ` +
+      "is an ordinary task with its own worktree, rounds, verification and merge request, and one agent makes every part " +
+      "in one conversation, in a folder that holds each part's worktree under its repo's name. The approved proposal's id " +
+      "becomes the task id of the first part Trackwall could make (when that part's session " +
       `then fails to start, the id names nothing; ${LIST_SESSIONS} shows the parts), and ${GET_UPDATES} says which ` +
-      `parts started (change_started) and then what happens to each, as for ${PROPOSE_TASK}. Use ${PROPOSE_TASK} for work ` +
-      `in one repo, and for work in other repos when you run a task yourself: a task cannot propose a change. ` +
-      "Write the prompt so that it stands alone for every part (each agent sees nothing else), and say in a part's note " +
+      `parts started (change_started) and then what happens to each, as for ${PROPOSE_TASK}. This is the default for work ` +
+      `in several repos; use ${PROPOSE_TASK} for work in one repo, for each repo when the user asks for separate tasks, and ` +
+      "for work in other repos when you run a task yourself: a task cannot propose a change. " +
+      "Write the prompt so that it stands alone (the agent sees nothing else), and say in a part's note " +
       `what that repo has to do. Then, in a Trackwall session, end your turn.`,
     args: z
       .object({
@@ -1027,7 +1068,8 @@ export const mcpTools = {
       "Report the result of your task: what you did, what is left and what the user or the session that proposed the " +
       `task should check. Only for a session that runs a task in Trackwall; the summary is saved to your own task (shown in ${GET_SESSION}, ` +
       `${LIST_SESSIONS} and the Sessions view). Calling it again replaces the summary and its check steps. It hands your work over for review: your task's board ` +
-      "item moves to in review once every open task on it is waiting for review, and only the user moves it to done. Commit your changes on the task branch before reporting.",
+      "item moves to in review once every open task on it is waiting for review, and only the user moves it to done. Commit your changes on the task branch before reporting. " +
+      "With readyToClose you also say your work is over, so the user can close the task with one click; you never close it yourself.",
     args: z
       .object({
         summary: visibleText(TaskSummaryText).describe(
@@ -1062,6 +1104,15 @@ export const mcpTools = {
           .describe(
             "the test you wrote first that reproduces the error your task was given (a stack trace), which failed before your " +
               "fix and passes after it; leave it out when you wrote no such test, and say why in the summary.",
+          ),
+        readyToClose: z
+          .boolean()
+          .default(false)
+          .describe(
+            "true when nothing is left for you to do on this task: the work is complete and committed, you have no question " +
+              "for the user, and you would do nothing more without new instructions (for example the user accepted the work, " +
+              "or the task needs no change). Leave it false when you ask something, left work open or wait for a review. It " +
+              "ends nothing: the user closes the task or keeps it open, and new work for you takes it back.",
           ),
       })
       .strict(),
@@ -1225,8 +1276,11 @@ export const mcpTools = {
     description:
       `Wait until a session or task needs someone: pass session (id from ${LIST_SESSIONS}) or task (id from ${PROPOSE_TASK} ` +
       `or ${LIST_SESSIONS}). Returns as soon as the status is proposal_rejected, stale (no response, or no step for a long time: ` +
-      "session.stuck), needs_attention (the session finished its turn or asks the user for approval), exited or no_session, or after timeoutSeconds with " +
-      "proposal_pending, starting or working; then call it again. On stale do not wait again at once: look at the session " +
+      "session.stuck), needs_attention (the session finished or failed its turn, or asks the user for approval: session.state.state " +
+      "says which), idle (it finished its turn and the user has already seen it), exited or no_session, or after timeoutSeconds with " +
+      "proposal_pending, starting or working; then call it again. A message you just sent with " +
+      `${SEND_MESSAGE} counts as work: the wait goes on until the agent has taken it and ends that turn. On stale do not ` +
+      "wait again at once: look at the session " +
       `(${GET_SESSION}) and tell the user, since a session that may be stuck stays so until its agent takes a step. ` +
       "Waiting on a task follows its latest session. " +
       `The result has the proposal, task (with its summary from ${REPORT_RESULT}) and session; ${GET_SESSION} gives the changed files. ` +
@@ -1256,7 +1310,8 @@ export const mcpTools = {
       "refused for it is told when they trust it. In a task worktree that " +
       "also happens when its mise config (mise.toml, mise.local.toml, file tasks…) changed since the user trusted it: " +
       "the user trusts the changed config in the task's panel. A session in Trackwall can run only mise tasks of its own " +
-      "repo, a task session only in its own task's worktree or the repo root, and the supervisor none. Long-running " +
+      "repo, a task session only in its own task's worktree or the repo root (the one session of a change: in every " +
+      "part's worktree or repo root), and the supervisor none. Long-running " +
       "tasks (dev servers) keep running until stopped; stop them when you no longer need them. A mise task with a usage " +
       "takes arguments, such as the test filter of the test task: run one test class while you work, the whole task before you finish.",
     args: RunMiseTaskArgs,
@@ -1272,8 +1327,8 @@ export const mcpTools = {
       "process group is killed. Returns after Trackwall has confirmed that no process of the group is alive " +
       "(run: exited with stoppedByUser: true); stop_unconfirmed when some process survived. A task that has already " +
       "ended returns its run; not_found when it has not been run since Trackwall started. A session in Trackwall can " +
-      "stop only mise tasks of its own repo, a task session only in its own task's worktree or the repo root, and the " +
-      "supervisor none.",
+      "stop only mise tasks of its own repo, a task session only in its own task's worktree or the repo root (the one " +
+      "session of a change: in every part's), and the supervisor none.",
     args: MiseTaskArgs,
     result: MiseTaskRunResult,
   },
@@ -1316,7 +1371,8 @@ export const mcpTools = {
       `means the run wrote no JUnit reports. not_found when the worktree has no mise task ${VERIFY_MISE_TASK}; ` +
       "mise_unavailable when its mise config is not trusted (the user trusts it in the task's panel, and a session in " +
       "Trackwall refused for it is told when they do). A task session " +
-      "verifies only its own task, a session in a repo root only tasks of its repo, and the supervisor none: it reads " +
+      "verifies only its own task (the one session of a change every part of it), a session in a repo root only tasks " +
+      "of its repo, and the supervisor none: it reads " +
       `the result in ${GET_SESSION}.`,
     args: z
       .object({
@@ -1357,7 +1413,8 @@ export const mcpTools = {
       "and the root's service then starts again if it was running. Refused when another task holds the port, when the " +
       "task's service already runs on the task port (stop it first) or when the repo has no single known port. " +
       "A session in Trackwall can start only its own repo (dependencies " +
-      "come from the graph), a task session only from its own task's worktree or the repo root, and the supervisor none. " +
+      "come from the graph), a task session only from its own task's worktree or the repo root (the one session of a " +
+      "change: from every part's), and the supervisor none. " +
       "mise_unavailable when the repo's mise config is not trusted; a session in Trackwall refused for it is told when the user trusts it. " +
       `Then use ${CALL_ENDPOINT} with the same task; read logs with tail (miseTask ${SERVICE_MISE_TASK}, the same task) and ` +
       `${GET_ERRORS}. Stop what you started with stop_service when you are done.`,
@@ -1388,7 +1445,8 @@ export const mcpTools = {
       "or that another started slice uses). Returns the stopped services: stopped once the process group has ended and the port " +
       `no longer answers, or stopping with the reason when the port still answers after ${SERVICE_RELEASE_MS / 1000} s (a process ` +
       "outside the group, such as an app Gradle's daemon runs, holds it; calling it again checks again). A session in Trackwall can stop only its own " +
-      "repo's service, a task session only its own task's or the repo root's, and the supervisor none.",
+      "repo's service, a task session only its own task's or the repo root's (the one session of a change: every " +
+      "part's), and the supervisor none.",
     args: z
       .object({
         repo: RepoArg,

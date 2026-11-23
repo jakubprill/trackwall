@@ -6,12 +6,12 @@ import {
   ConfigEntryId,
   type ConfigFilesReport,
   countLabel,
-  type LocalConfigStore,
   MISE_CONFIG_NAME,
   type TrackwallFolder,
   trackwallDirLabel,
   type WorkspaceKeyState,
   type WorkspaceKeysRead,
+  type WorkspaceStore,
   workspaceKeysSummary,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
@@ -31,6 +31,7 @@ type StateEntryId =
   | "tasks-file"
   | "task-rounds-file"
   | "resumable-sessions-file"
+  | "folder-terminals-file"
   | "last-supervisor-file"
   | "agent-queues-file"
   | "verifications-file"
@@ -42,9 +43,12 @@ type StateEntryId =
   | "knowledge-approvals-file"
   | "cards-dir"
   | "logs-dir"
-  | "local-config-push-repo"
+  | "workspace-store-push-repo"
   | "legacy-worktrees-dir"
-  | "state-backups-dir";
+  | "state-backups-dir"
+  | "work-backup-dir"
+  | "container-health-dir"
+  | "server-questions-dir";
 
 /** Copilot CLI's `config.json` as the doctor reads it (`trustedFolders`); the facade's wiring checks the two agree. */
 type CopilotTrust =
@@ -72,7 +76,7 @@ export interface ConfigFilesDeps {
   copilotTrust: (env: NodeJS.ProcessEnv) => Promise<CopilotTrust>;
   trustedFolderOf: (dir: string, folders: readonly string[]) => string | null;
   projectsMiseEnv: () => Promise<ProjectsMiseEnv>;
-  localConfigStore: () => Promise<LocalConfigStore>;
+  workspaceStore: () => Promise<WorkspaceStore>;
   openEditor: (path: string) => void;
   openFolder: (dir: string) => void;
 }
@@ -146,6 +150,7 @@ export class ConfigFiles {
       case "tasks-file":
       case "task-rounds-file":
       case "resumable-sessions-file":
+      case "folder-terminals-file":
       case "last-supervisor-file":
       case "agent-queues-file":
       case "verifications-file":
@@ -157,14 +162,17 @@ export class ConfigFiles {
       case "knowledge-approvals-file":
       case "cards-dir":
       case "logs-dir":
-      case "local-config-push-repo":
+      case "workspace-store-push-repo":
       case "legacy-worktrees-dir":
       case "state-backups-dir":
+      case "work-backup-dir":
+      case "container-health-dir":
+      case "server-questions-dir":
         return plainEntry(this.#deps.statePaths[id]);
       case "projects-mise-config":
         return this.#projectsMiseConfig(ctx.projectsDir, depth);
-      case "local-config-store":
-        return this.#localConfigStore(ctx.projectsDir);
+      case "workspace-store":
+        return this.#workspaceStore(ctx.projectsDir);
       case "task-worktrees-dir":
         return taskWorktrees(ctx.projectsDir, ctx.worktreesDir);
       case "removed-repos-dir":
@@ -201,9 +209,9 @@ export class ConfigFiles {
     return { name, path, state: "present", detail: env.problem };
   }
 
-  async #localConfigStore(projectsDir: string | null): Promise<Found> {
+  async #workspaceStore(projectsDir: string | null): Promise<Found> {
     if (projectsDir === null) return notSet(trackwallDirLabel("local"));
-    const store = await this.#deps.localConfigStore();
+    const store = await this.#deps.workspaceStore();
     if (store.dir === null) return notSet(trackwallDirLabel("local"));
     // Until it moves, the store is still in its folder from before ADR-125, and the entry says so by its name.
     const found = { ...(await plainEntry(store.dir)), name: labelOf(projectsDir, store.dir, "local") };
@@ -320,7 +328,7 @@ function miseEnvDetail({ variables, secrets }: ProjectsMiseEnv): string {
   return secrets.length === 0 ? `${vars} for sessions` : `${vars} for sessions, secret: ${secrets.join(", ")}`;
 }
 
-function storeDetail(store: LocalConfigStore): string {
+function storeDetail(store: WorkspaceStore): string {
   const backup =
     store.lastBackup === null ? "nothing backed up yet" : `last backup ${store.lastBackup.date.slice(0, 16).replace("T", " ")}`;
   if (store.pushesTo === null) return `${backup}, on this computer only`;

@@ -1,8 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
 import { agentsApi, BoardItemResult, boardApi, GetItemResult, ListItemsResult, ProposeTaskResult } from "@trackwall/protocol";
 import { loopbackRequest } from "../src/infra/loopback.ts";
-import { waitFor } from "./support/agents.ts";
+import { viewer, waitFor } from "./support/agents.ts";
 import { connectHttpClient, connectSessionClient } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
@@ -39,6 +42,21 @@ async function waitForColumn(item: string, column: string): Promise<void> {
     if (Date.now() > until) throw new Error(`item ${item} did not move to ${column}`);
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
+}
+
+/** The fake ends a turn after a line and an approval, so the agent is no longer in a turn. */
+async function endTurn(session: string): Promise<void> {
+  const window = viewer(daemon.facade.agents, session);
+  await waitFor(daemon.facade.agents, session, () => window.text().includes("--interactive="), "the screen image");
+  window.attachment.input("start\r");
+  await approveTurn(session, window);
+}
+
+/** Approves the command of the turn under way, or of the one about to start, and waits for the turn to end. */
+async function approveTurn(session: string, window = viewer(daemon.facade.agents, session)): Promise<void> {
+  await waitFor(daemon.facade.agents, session, (s) => s.state?.state === "Approval", "the approval request");
+  window.attachment.input("1");
+  await waitFor(daemon.facade.agents, session, (s) => s.state?.reason === "hook agentStop", "the end of the turn");
 }
 
 function sessionOf(task: string): string {
@@ -203,6 +221,65 @@ describe.skipIf(process.versions.bun === undefined)("the board over MCP (ADR-133
     // The board writes one at a time, so a move the removal asked for would land before this read.
     await daemon.post(boardApi.update, { item: item.id, title: "Fix README typo" });
     expect((await daemon.facade.board.item(item.id)).column).toBe("review");
+  }, 60_000);
+
+  test("an agent says its work is over with report_result, and only the user's Close ends the task, keeps its branch and makes its item done (ADR-282)", async () => {
+    const item = await daemon.post(boardApi.create, { kind: "item", title: "Order history page", column: "ready", repos: ["shop"] });
+    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "add the page", approvals: "ask", item: item.id });
+    expect(task.readyToClose).toBe(false);
+    await expect(daemon.post(agentsApi.closeTask, { task: task.id })).rejects.toThrow("has not said its work is over");
+
+    const session = sessionOf(task.id);
+    await waitFor(daemon.facade.agents, session, (s) => s.state !== null, "sessionStart");
+    const agent = await connectSessionClient(daemon.api.port, daemon.home, session);
+    clients.push(agent);
+    const { tools } = await agent.listTools();
+    expect(tools.map((tool) => tool.name).filter((name) => /close|remove_task|end_task/.test(name))).toEqual([]);
+    await call(agent, "report_result", { summary: "Added the order history page; the user accepted it.", readyToClose: true });
+    expect(daemon.facade.agents.task(task.id)).toMatchObject({ inReview: true, readyToClose: true });
+    await waitForColumn(item.id, "review");
+    // The agent reports inside its turn: Close waits for the turn to end, so it never cuts the agent's work.
+    await expect(daemon.post(agentsApi.closeTask, { task: task.id })).rejects.toThrow("is working again");
+    await endTurn(session);
+
+    await daemon.post(agentsApi.closeTask, { task: task.id });
+
+    expect(daemon.facade.agents.findTask(task.id)).toBeUndefined();
+    expect(daemon.facade.agents.sessions().sessions.filter((s) => s.task === task.id && s.run.kind !== "exited")).toEqual([]);
+    const branches = execFileSync("git", ["branch", "--list", task.branch], { cwd: join(daemon.projects, "shop"), encoding: "utf8" });
+    expect(branches.trim()).toBe(task.branch);
+    await waitForColumn(item.id, "done");
+  }, 60_000);
+
+  test("new work for the agent takes back that its work is over, Keep open leaves the task in review, and Close refuses work it would lose (ADR-282)", async () => {
+    const task = await daemon.post(agentsApi.createTask, { repo: "shop", prompt: "fix the footer", approvals: "ask" });
+    const session = sessionOf(task.id);
+    await endTurn(session);
+    const agent = await connectSessionClient(daemon.api.port, daemon.home, session);
+    clients.push(agent);
+
+    await call(agent, "report_result", { summary: "Fixed the footer.", readyToClose: true });
+    const comment = { path: "README.md", side: "new" as const, line: 1, code: "# shop", text: "Also the header" };
+    await daemon.post(agentsApi.sendReview, { task: task.id, comments: [comment] });
+    expect(daemon.facade.agents.task(task.id)).toMatchObject({ inReview: false, readyToClose: false });
+    // The review reaches the agent as a turn of its own; it ends before Close is tried below, since Close refuses a turn
+    // under way, and how soon the review is typed differs between systems.
+    await approveTurn(session);
+
+    await call(agent, "report_result", { summary: "Fixed the header too.", readyToClose: true });
+    const kept = await daemon.post(agentsApi.keepTaskOpen, { task: task.id });
+    expect(kept).toMatchObject({ inReview: true, readyToClose: false });
+    await expect(daemon.post(agentsApi.closeTask, { task: task.id })).rejects.toThrow("has not said its work is over");
+
+    await call(agent, "report_result", { summary: "Nothing more to do.", readyToClose: true });
+    writeFileSync(join(task.worktree, "notes.txt"), "not committed\n");
+    await expect(daemon.post(agentsApi.closeTask, { task: task.id })).rejects.toThrow("uncommitted changes");
+    // Refused before anything stopped: the task and its session are as they were.
+    expect(daemon.facade.agents.task(task.id).readyToClose).toBe(true);
+    expect(daemon.facade.agents.session(session).run.kind).toBe("running");
+
+    await daemon.facade.agents.stop(session);
+    await daemon.post(agentsApi.removeTask, { task: task.id, keepBranch: false, discardChanges: true });
   }, 60_000);
 
   test("a task proposed for an item keeps the item once the user starts it", async () => {

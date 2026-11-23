@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { agentsApi } from "@trackwall/protocol";
 import { countedEntries } from "../src/modules/vcs/run-settings.ts";
@@ -83,7 +84,9 @@ describe.skipIf(process.versions.bun === undefined)(
         writeFilter(repoDir, task.worktree);
 
         await expect(daemon.facade.agents.taskChanges(task.id)).rejects.toThrow("changed since a task in the sandbox started");
-        await expect(new Vcs(systemTempFolder).status(repoDir, "fresh")).rejects.toThrow("changed since a task in the sandbox started");
+        await expect(new Vcs(systemTempFolder, tmpdir()).status(repoDir, "fresh")).rejects.toThrow(
+          "changed since a task in the sandbox started",
+        );
         expect(existsSync(join(task.worktree, TRACE))).toBe(false);
 
         const dirs = { home: daemon.home, projects: daemon.projects };
@@ -171,7 +174,7 @@ describe.skipIf(process.versions.bun === undefined)(
         execFileSync("git", ["-C", repoDir, "-c", "core.hooksPath=", "remote", "add", "origin", upstream]);
 
         expect((await daemon.facade.agents.taskChanges(task.id)).files.map((f) => f.path)).toContain("new-file.txt");
-        await new Vcs(systemTempFolder).sync(repoDir);
+        await new Vcs(systemTempFolder, tmpdir()).sync(repoDir);
 
         expect(existsSync(ran)).toBe(false);
         // The same fetch by the user's own git runs the hook: the folder and the hooks are in place.
@@ -202,7 +205,7 @@ describe.skipIf(process.versions.bun === undefined)(
           "remote.origin.url",
           `ext::sh ${join(task.worktree, "remote.sh").replaceAll("\\", "/")}`,
         ]);
-        await expect(new Vcs(systemTempFolder).sync(repoDir)).rejects.toThrow(refused);
+        await expect(new Vcs(systemTempFolder, tmpdir()).sync(repoDir)).rejects.toThrow(refused);
         expect(existsSync(ran)).toBe(false);
         execFileSync("git", ["-C", repoDir, "config", "--unset", "protocol.ext.allow"]);
         execFileSync("git", ["-C", repoDir, "config", "remote.origin.url", "https://example.com/shop.git"]);
@@ -244,7 +247,7 @@ describe.skipIf(process.versions.bun === undefined)(
         execFileSync("git", ["-C", repoDir, "read-tree", "HEAD"]);
         const refused = "no longer leads to its repo's git directory";
 
-        await expect(new Vcs(systemTempFolder).status(repoDir, "fresh")).rejects.toThrow(refused);
+        await expect(new Vcs(systemTempFolder, tmpdir()).status(repoDir, "fresh")).rejects.toThrow(refused);
 
         expect(existsSync(join(repoDir, TRACE))).toBe(false);
         // The task's worktree names the repo's `.git` itself as its common directory, so git there still reads the old one.
@@ -299,7 +302,7 @@ describe.skipIf(process.versions.bun === undefined)(
           `ext::sh ${join(task.worktree, "remote.sh").replaceAll("\\", "/")}`,
         ]);
 
-        await new Vcs(systemTempFolder).sync(repoDir);
+        await new Vcs(systemTempFolder, tmpdir()).sync(repoDir);
 
         expect(existsSync(ran)).toBe(false);
       },

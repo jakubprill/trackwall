@@ -1,5 +1,6 @@
 import { countLabel, type WorkspaceSettings } from "@trackwall/protocol";
 import { tokenCount } from "./copilot-usage.ts";
+import type { HomeOnBar } from "./home-on-bar.ts";
 import { SANDBOX_CHOICES, sandboxChoice } from "./sandbox.ts";
 import type { SettingsSection } from "./settings-categories.ts";
 import { DEFAULT_THEME_CHOICE, THEME_CHOICE_LABELS, type ThemeChoice } from "./theme.ts";
@@ -22,7 +23,17 @@ export const SETTING_ROWS = {
   "projects-folder": { title: "Projects folder", what: "The folder with your repos.", group: "Folders" },
   "worktrees-dir": { title: "Task worktrees folder", what: "Where each task gets its own copy of a repo.", group: "Folders" },
   "git-program": { title: "Git program", what: "The git that reads your repos.", group: "Folders" },
-  "local-config-store": { title: "Local config store", what: "Backs up the files your repos keep out of git.", group: "Backup" },
+  "workspace-store": { title: "Workspace store", what: "Backs up the files your repos keep out of git.", group: "Backup" },
+  "work-backup": {
+    title: "Container work backup",
+    what: "One file with the commits and changes only this container has.",
+    group: "Backup",
+  },
+  "server-check": {
+    title: "Check for new commits",
+    what: "Ask your repos' servers every 15 minutes whether they have commits you have not fetched.",
+    group: "Servers",
+  },
   sandbox: { title: "Sandbox", what: "Which tasks run their commands closed inside their own worktree.", group: "Tasks" },
   "auto-review": { title: "Automatic review", what: "Review a task's changes when its agent reports its result.", group: "Tasks" },
   "always-allow": { title: "Always allowed in tasks", what: 'The tools you chose "Always allow" for, by repo.', group: "Tasks" },
@@ -57,7 +68,8 @@ export const SETTING_ROWS = {
   },
   "vscode-extension": { title: "VS Code extension", what: "Let the VS Code extension show your sessions.", group: "Browser and VS Code" },
   theme: { title: "Theme", what: "Dark, light or the same as the system.", group: "Look" },
-  "home-scene": { title: "Home scene", what: "How Home draws your repos and sessions.", group: "Look" },
+  home: { title: "Home", what: "The 3D view of your repos and sessions: on the view bar or not, and how it draws them.", group: "Look" },
+  tips: { title: "Tips and What's new", what: "Explain a feature where it shows, and list what changed after an update.", group: "Help" },
 } as const satisfies Partial<Record<SettingsSection, SettingRowText>>;
 
 export type SettingRowId = keyof typeof SETTING_ROWS;
@@ -101,6 +113,10 @@ export interface SettingSources {
   /** The read of the workspace settings failed, for example on a `workspace.yaml` that cannot be parsed. */
   settingsFailed: boolean;
   theme: ThemeChoice;
+  /** Whether the view bar shows Home (ADR-294), a choice of this computer like the theme. */
+  homeOnBar: HomeOnBar;
+  /** Whether tips and What's new show (ADR-296), a choice of this computer too. */
+  tipsOn: boolean;
 }
 
 const UNREADABLE = "cannot be read";
@@ -134,6 +150,11 @@ const WORKSPACE_VALUES: Partial<Record<SettingRowId, (settings: WorkspaceSetting
   "projects-folder": (s) => (s.projectsDir === null ? { text: "not set", state: "problem" } : { text: s.projectsDir, state: "default" }),
   "worktrees-dir": (s) => chosen(s.worktreesDir, s.worktreesDirProblem, "default"),
   "git-program": (s) => chosen(s.gitProgram, s.gitProgramProblem, "git from PATH"),
+  // On by default, so turning it off is the change.
+  "server-check": (s) => {
+    if (s.serverCheckProblem !== null) return { text: UNREADABLE, state: "problem" };
+    return s.serverCheck ? { text: "every 15 minutes", state: "default" } : { text: "off", state: "changed" };
+  },
   sandbox: sandboxValue,
   "auto-review": autoReviewValue,
   "always-allow": (s) =>
@@ -152,13 +173,21 @@ const WORKSPACE_VALUES: Partial<Record<SettingRowId, (settings: WorkspaceSetting
   "session-profile": (s) => chosen(s.sessionProfile, s.sessionProfileProblem, "none"),
 };
 
+/** The values that are choices of this computer, kept in `localStorage` rather than in `workspace.yaml`. */
+const COMPUTER_VALUES: Partial<Record<SettingRowId, (sources: SettingSources) => SettingValue>> = {
+  theme: ({ theme }) => ({ text: THEME_CHOICE_LABELS[theme], state: theme === DEFAULT_THEME_CHOICE ? "default" : "changed" }),
+  home: ({ homeOnBar }) => ({ text: homeOnBar, state: homeOnBar === "hidden" ? "default" : "changed" }),
+  tips: ({ tipsOn }) => (tipsOn ? { text: "on", state: "default" } : { text: "off", state: "changed" }),
+};
+
 /** The value a row shows; `null` for a setting whose value only its form reads (the desktop shell, the browser, an install). */
-export function settingValue(row: SettingRowId, { settings, settingsFailed, theme }: SettingSources): SettingValue | null {
+export function settingValue(row: SettingRowId, sources: SettingSources): SettingValue | null {
   // The form of the projects folder is where a broken `workspace.yaml` is explained and fixed, so its row opens for it.
-  if (row === "projects-folder" && settingsFailed) return { text: UNREADABLE, state: "problem" };
-  if (row === "theme") return { text: THEME_CHOICE_LABELS[theme], state: theme === DEFAULT_THEME_CHOICE ? "default" : "changed" };
+  if (row === "projects-folder" && sources.settingsFailed) return { text: UNREADABLE, state: "problem" };
+  const computer = COMPUTER_VALUES[row];
+  if (computer) return computer(sources);
   const read = WORKSPACE_VALUES[row];
-  return read && settings ? read(settings) : null;
+  return read && sources.settings ? read(sources.settings) : null;
 }
 
 /** Whether a row shows its form: as the user left it, and until they touch it, open only when its value needs them. */

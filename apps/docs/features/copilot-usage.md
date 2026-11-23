@@ -1,11 +1,16 @@
 ---
 title: Copilot usage
 description: See which tasks, sessions and tools used the most of Copilot in a week, and how the use changed over the last thirteen weeks.
+status: preview
 ---
 
 # Copilot usage
 
 See which tasks, sessions and tools used the most of Copilot in a week, and how the use changed over the last thirteen weeks.
+
+::: warning Preview
+Copilot usage reads the event logs Copilot CLI writes for itself, whose format Copilot CLI does not promise to keep, so a figure can change or go missing after an update of Copilot CLI.
+:::
 
 ![The Copilot usage section in Settings: a bar for each of thirteen weeks with the tool definitions set apart, the week's totals, and the tasks and sessions ranked with a bar each.](/screenshots/copilot-usage.png)
 

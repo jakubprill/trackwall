@@ -72,29 +72,32 @@ async function shot(page: Page, name: string): Promise<string> {
 
 /** One view of the demo per picture, each from a fresh page so no selection carries over. */
 const SHOTS: Record<string, (page: Page) => Promise<void>> = {
-  home: (page) => settle(page, 4000),
+  home: async (page) => {
+    await page.keyboard.press("Control+6");
+    await settle(page, 4000);
+  },
   "sessions-grid": async (page) => {
-    await page.keyboard.press("Control+3");
+    await page.keyboard.press("Control+1");
     await page.getByText("Auto", { exact: true }).click();
     await settle(page, 2500);
   },
   "main-session": async (page) => {
-    await page.keyboard.press("Control+3");
+    await page.keyboard.press("Control+1");
     await page.getByText("2 task proposals").click();
     await settle(page);
   },
   "task-messages": async (page) => {
-    await page.keyboard.press("Control+3");
+    await page.keyboard.press("Control+1");
     await page.getByText("Tell the customer about a retried payment").first().click();
     await settle(page);
   },
   tasks: async (page) => {
-    await page.keyboard.press("Control+3");
+    await page.keyboard.press("Control+1");
     await page.getByText("pricing", { exact: true }).first().click();
     await settle(page);
   },
   "task-review": async (page) => {
-    await page.keyboard.press("Control+3");
+    await page.keyboard.press("Control+1");
     await page.getByText("pricing", { exact: true }).first().click();
     await page.getByRole("tab", { name: "Changes" }).click();
     await settle(page);
@@ -110,7 +113,7 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await settle(page, 500);
   },
   "task-impact": async (page) => {
-    await page.keyboard.press("Control+3");
+    await page.keyboard.press("Control+1");
     await page.getByText("pricing", { exact: true }).first().click();
     await page.getByRole("tab", { name: "Impact" }).click();
     await page.getByText("Reached repos").waitFor();
@@ -122,13 +125,13 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
   },
   "overview-impact": async (page) => {
     await page.setViewportSize({ width: 2400, height: 560 });
-    await page.keyboard.press("Control+4");
+    await page.keyboard.press("Control+3");
     await page.getByLabel("Impact of").selectOption({ label: "pricing · Publish a price-changed event when a price changes" });
     await page.getByText("Ring 1 calls an endpoint").waitFor();
     await settle(page, 2000);
   },
   flow: async (page) => {
-    await page.keyboard.press("Control+6");
+    await page.keyboard.press("Control+5");
     await page.getByRole("columnheader", { name: "Waits for you" }).waitFor();
     await settle(page);
   },
@@ -149,23 +152,28 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await settle(page);
   },
   "task-templates": async (page) => {
-    await page.keyboard.press("Control+3");
+    await page.keyboard.press("Control+1");
     await page.getByRole("button", { name: "New task or Copilot CLI session" }).click();
+    await page.getByRole("button", { name: "Templates", exact: true }).click();
     await page.getByRole("button", { name: "Fix a failing test" }).click();
-    // Picking a template selects its first placeholder, so typing fills it in.
+    // Picking a template selects its first placeholder, so typing fills it in once the selection is there.
+    await page.waitForFunction(() => {
+      const field = document.activeElement;
+      return field instanceof HTMLTextAreaElement && field.selectionStart < field.selectionEnd;
+    });
     await page.keyboard.type("RefundServiceTest.refundsOnlyOnce");
     await settle(page);
   },
   overview: async (page) => {
     // The graph of twenty repos is wider than the other views.
     await page.setViewportSize({ width: 2400, height: 420 });
-    await page.keyboard.press("Control+4");
+    await page.keyboard.press("Control+3");
     await settle(page, 3000);
   },
   repos: async (page) => {
+    // "Repos" opens on All repos, whose line under the table stops counting the repos still loading once git read them all.
     await page.keyboard.press("Control+2");
-    await page.getByText("orders-api", { exact: true }).first().click();
-    await page.getByRole("tab", { name: "Changes" }).click();
+    await page.getByText(/^\d+ more repos: clean, nothing to pull$/).waitFor();
     await settle(page);
   },
   "repo-card": async (page) => {
@@ -189,7 +197,28 @@ const SHOTS: Record<string, (page: Page) => Promise<void>> = {
     await page.getByText("workspace.yaml", { exact: true }).waitFor();
     await settle(page);
   },
+  tips: async (page) => {
+    // The demo has a projects folder, so it lists What's new as after an update; "Show" of its first change opens the
+    // New session form with the tip of Own worktree.
+    await page.getByRole("region", { name: "What's new" }).getByRole("button", { name: "Show Tips" }).click();
+    await page.getByRole("region", { name: "Tip: Own worktree" }).waitFor();
+    await settle(page);
+  },
 };
+
+/** The pictures that show tips and What's new; every other page starts with them off, so they do not cover the view. */
+const WITH_TIPS = new Set(["tips"]);
+
+/** Turns tips and What's new off in a page, as "Turn off tips" does, before the page loads. */
+async function withoutTips(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    try {
+      window.localStorage.setItem("trackwall.tips", "off");
+    } catch {
+      // A frame without storage of its own shows no tips either.
+    }
+  });
+}
 
 /**
  * The tray panel at the size of its window (`tauri.conf.json`), with the approvals of the demo's sessions. The page is
@@ -236,9 +265,9 @@ try {
     const only = process.argv.slice(2);
     for (const [name, show] of Object.entries(SHOTS).filter(([name]) => only.length === 0 || only.includes(name))) {
       const page = await browser.newPage({ viewport: VIEWPORT, colorScheme: "dark" });
+      if (!WITH_TIPS.has(name)) await withoutTips(page);
       await page.goto(url);
-      // The supervisor's panel is folded to its strip, so the view gets the width; the supervisor has a page of its own.
-      await page.getByRole("button", { name: "Fold the supervisor panel" }).click();
+      // The page opens on Sessions, with the supervisor's panel folded to its strip, so the view gets the width.
       await settle(page, 2500);
       await show(page);
       await shot(page, name);

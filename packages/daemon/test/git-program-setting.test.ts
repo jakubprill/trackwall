@@ -24,7 +24,7 @@ function gitOnPath(): string {
 async function workspaceWithRepo() {
   const file = join(mkdtempSync(join(tmpdir(), "trackwall-ws-")), "workspace.yaml");
   const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
-  const vcs = new Vcs(systemTempFolder);
+  const vcs = new Vcs(systemTempFolder, tmpdir());
   const workspace = new Workspace({
     inContainer: false,
     file: new WorkspaceFile(file),

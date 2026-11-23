@@ -1,6 +1,7 @@
 ---
 title: Doctor
 description: The doctor in Settings checks what Trackwall needs on your computer and says what to do about anything missing.
+status: stable
 ---
 
 # Doctor
@@ -12,7 +13,7 @@ The doctor in Settings checks what Trackwall needs on your computer and says wha
 - One list of what Trackwall relies on: your projects folder, free disk space, folders an antivirus slows down, your workspace settings file, Git, Copilot CLI, the network your sessions use, the model provider of your session profile, mise, Java navigation once you set it up, and gh or glab for your repo hosts.
 - For each problem, the step that fixes it, such as the folder to add to Copilot CLI's trusted folders or the login command.
 - Behind a company proxy, the exact problem between your sessions and GitHub: a proxy that wants a login, or a company certificate Copilot CLI does not trust, with the value that fixes it.
-- A warning when your Copilot CLI is older than the version Trackwall is tested with.
+- A warning when your Copilot CLI is older or newer than the version Trackwall is tested with, also in a strip at the top of the window.
 - A fresh check whenever you open "Settings > Diagnostics" or click "Check again".
 
 ## How it works
@@ -31,16 +32,16 @@ The checks are:
 | Workspace settings file | every key of `workspace.yaml` can be read; one that cannot is named with its line, and [Config files](/features/config-files) shows them all |
 | Git | `git --version` answers; with a "Git program" chosen in Settings the line names the git it runs, and it warns when the "Git program" from Settings did not answer and git from `PATH` is used instead |
 | Git access to repo hosts | git reaches every repo host of your repos, the way a sync does (one repo per host, without asking for a password); a host it cannot reach is named with the reason, such as no SSH key, an unknown host key or no sign-in for HTTPS, and in a dev container the fix points to [Git and SSH](/guide/dev-container#git-and-ssh); shown only when a repo has an HTTPS or SSH remote |
-| Copilot CLI | Trackwall finds it the way it starts sessions, and it is not older than the version Trackwall is tested with |
-| Copilot CLI trusted folder | `trustedFolders` in Copilot CLI's `config.json` covers your projects folder, so Copilot CLI does not ask before working in each repo and task |
-| Copilot CLI sandbox for tasks | Copilot CLI's sandbox can run on this computer, so the tasks you put in it in "Settings > Agents > Sandbox" can start; on Linux it needs the `bubblewrap` package, must be able to make its namespaces and needs `/dev/net/tun` for its network; in a container without the sandbox it warns that tasks without approvals then run with the container's full access, until you give the container the sandbox or set `sandbox.tasks: off`; otherwise not shown when no task runs in it ([Approvals](/features/approvals)) |
+| Copilot CLI | Trackwall finds it the way it starts sessions, and it is the version Trackwall is tested with; an older or newer one is a warning |
+| Copilot CLI trusted folder | `trustedFolders` in Copilot CLI's `config.json` covers your projects folder, so Copilot CLI does not ask before working in each repo and task; "Trust folder" in [Get started](/features/get-started) adds it for you |
+| Copilot CLI sandbox for tasks | Copilot CLI's sandbox can run on this computer, so the tasks you put in it in "Settings > Agents > Sandbox" can start; on Linux it needs the `bubblewrap` package, must be able to make its namespaces and needs `/dev/net/tun` for its network; on Windows it warns when Git for Windows does not let the sandbox start it, so a task there cannot commit, and names the command that fixes it; in a container without the sandbox it warns that tasks without approvals then run with the container's full access, until you give the container the sandbox or set `sandbox.tasks: off`; otherwise not shown when no task runs in it ([Approvals](/features/approvals)) |
 | Network for sessions | `github.com` and `api.githubcopilot.com` answer through the proxy your sessions use (`HTTPS_PROXY`, `NO_PROXY`) with a certificate Copilot CLI trusts (its own list plus `NODE_EXTRA_CA_CERTS`); when your company's proxy replaces certificates and this computer already trusts its certificate, the line names the file to put in `NODE_EXTRA_CA_CERTS` |
 | Model provider of the session profile | something accepts connections at the address in `COPILOT_PROVIDER_BASE_URL`, for example your local proxy in front of another model; shown only when a [session profile](/features/mise-environment) is set and its mise environment in your projects folder sets that address |
 | mise | `mise --version` answers; repo tasks, services and task verification need it |
 | Java navigation | tasks can start the Java language server with the paths in your settings; shown only once you set up [Java navigation](/features/java-navigation) |
 | GitHub CLI (gh), GitLab CLI (glab) | it is signed in to every repo host of that kind in "Repo hosts"; shown only when you have such a host |
 
-The doctor only looks. To time file writes it writes a few dozen small files into a temporary folder in each folder it checks and removes them right away. It never changes a setting, installs anything or signs you in, and its results are not saved or sent anywhere. The network check only opens a connection to GitHub and Copilot and closes it, without sending anything but the proxy's login when its address has one; a proxy is shown only as its host and port, never with the password its address may carry. The model provider check only opens a connection to the provider's host and closes it: it sends nothing to the provider, never reads your API key, and never shows the provider's address, which may carry a key.
+The doctor only looks. To time file writes it writes a few dozen small files into a temporary folder in each folder it checks and removes them right away. It never changes a setting, installs anything or signs you in ("Trust folder" in [Get started](/features/get-started) is a button you click, not a check), and its results are not saved or sent anywhere. The network check only opens a connection to GitHub and Copilot and closes it, without sending anything but the proxy's login when its address has one; a proxy is shown only as its host and port, never with the password its address may carry. The model provider check only opens a connection to the provider's host and closes it: it sends nothing to the provider, never reads your API key, and never shows the provider's address, which may carry a key.
 
 ## Use it
 
@@ -56,6 +57,8 @@ The doctor only looks. To time file writes it writes a few dozen small files int
 - The antivirus check compares your folders with each other. When an antivirus scans all of them alike, there is no warning, but the line still shows how long a file takes in each.
 - Your own MCP servers and the certificates of Java builds are not checked.
 - The model provider check tells whether something answers at the provider's address, not whether your key or model name is right; a session started with the profile shows that in its terminal.
+- Copilot CLI updates itself, often before a Trackwall tested with the new version comes out. While its version differs from the tested one, a strip at the top of every window says so, with "Diagnostics" to open this check and "Hide" to put it away until the next version. Sessions usually keep working; if one shows a wrong state, install the tested version again the way you installed Copilot CLI, or update Trackwall once it is tested with your version. In a [dev container](/guide/dev-container) the warning names the program that runs and the way to the tested version: the `mise use` command when it comes from mise, or the image and a rebuild when the image installs it, since an update made there any other way is gone after the next rebuild.
 - Whether Copilot CLI itself is signed in is not checked; a session that cannot sign in says so in its terminal.
 - [Get started](/features/get-started) shows the few checks that stand before a first session as steps.
 - Errors of Trackwall itself are listed under [Trackwall errors](/features/trackwall-errors).
+- [Troubleshooting](/guide/troubleshooting) explains the fixes the doctor points to, such as where to set a proxy or certificate variable on your system.

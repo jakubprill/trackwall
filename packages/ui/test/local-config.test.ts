@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import type { LocalConfigStore, RepoLocalConfig } from "@trackwall/protocol";
+import type { RepoLocalConfig, WorkspaceStore } from "@trackwall/protocol";
 import {
   canIgnore,
   canRestore,
   hasLocalConfig,
   localConfigFileStatus,
-  localConfigStoreLines,
   remoteToAllow,
+  workspaceStoreLines,
 } from "../src/lib/local-config.ts";
 
 describe("a repo's local config files", () => {
@@ -61,9 +61,9 @@ describe("a repo's local config files", () => {
   });
 });
 
-describe("the local config store in the settings", () => {
+describe("the workspace store in the settings", () => {
   const now = new Date("2026-10-26T15:00:00Z");
-  const store: LocalConfigStore = {
+  const store: WorkspaceStore = {
     dir: "C:\\Users\\me\\Dev\\.trackwall\\local",
     lastBackup: { hash: "abc", subject: "Back up orders: mise.local.toml", author: "Trackwall", date: "2026-10-26T14:55:00Z" },
     pushesTo: null,
@@ -76,18 +76,18 @@ describe("the local config store in the settings", () => {
   const remote = "https://git.example.com/me/trackwall-local.git";
 
   test("the last backup and, without a remote, that the backups stay on this computer", () => {
-    expect(localConfigStoreLines(store, now)).toEqual({
+    expect(workspaceStoreLines(store, now)).toEqual({
       backup: "Last backup 5 min ago: Back up orders: mise.local.toml",
       push: { text: "No remote: the backups stay on this computer." },
     });
-    expect(localConfigStoreLines({ ...store, lastBackup: null }, now).backup).toBe("Nothing backed up yet.");
+    expect(workspaceStoreLines({ ...store, lastBackup: null }, now).backup).toBe("Nothing backed up yet.");
     expect(remoteToAllow(store)).toBe(null);
   });
 
   test("a remote nobody allowed is not pushed to, and is offered to allow, or says why it cannot be", () => {
     const unallowed = { ...store, remote };
 
-    expect(localConfigStoreLines(unallowed, now).push).toEqual({
+    expect(workspaceStoreLines(unallowed, now).push).toEqual({
       tone: "warning",
       text: "Not pushed: the backups stay on this computer until you choose a remote to push to.",
     });
@@ -103,16 +103,16 @@ describe("the local config store in the settings", () => {
       push: { kind: "ok", at: "2026-10-26T14:59:30Z" },
     } as const;
 
-    expect(localConfigStoreLines(changed, now).push).toEqual({ tone: "ok", text: `Pushed to ${remote} just now.` });
+    expect(workspaceStoreLines(changed, now).push).toEqual({ tone: "ok", text: `Pushed to ${remote} just now.` });
     expect(remoteToAllow(changed)).toEqual({ remote: "https://elsewhere.example/x.git", problem: null });
     expect(remoteToAllow({ ...changed, remote, remoteAllowed: true })).toBe(null);
   });
 
   test("with an allowed remote, the next push, the last one or why it failed", () => {
     const allowed = { ...store, pushesTo: remote, remote, remoteAllowed: true };
-    expect(localConfigStoreLines(allowed, now).push).toEqual({ text: `Pushes to ${remote} after the next backup.` });
+    expect(workspaceStoreLines(allowed, now).push).toEqual({ text: `Pushes to ${remote} after the next backup.` });
     expect(
-      localConfigStoreLines({ ...allowed, push: { kind: "failed", at: "2026-10-26T14:59:30Z", message: "rejected" } }, now).push,
+      workspaceStoreLines({ ...allowed, push: { kind: "failed", at: "2026-10-26T14:59:30Z", message: "rejected" } }, now).push,
     ).toEqual({
       tone: "error",
       text: `Push to ${remote} failed: rejected`,

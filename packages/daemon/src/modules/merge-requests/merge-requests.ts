@@ -2,7 +2,6 @@ import {
   type BranchOnRemote,
   type FailedJob,
   type FollowedMergeRequest,
-  type FreshAutoReview,
   type HostedProject,
   type JobLog,
   type MergeRequest,
@@ -12,14 +11,16 @@ import {
   type MergeRequestForm,
   type MergeRequestLookup,
   type MergeRequestTemplate,
+  type MergeRequestThread,
   type MergeRequestThreads,
   PIPELINE_FIX_LOGS_MAX,
   type Pipeline,
   type PipelineFix,
   type PromptDelivery,
   type RepoHost,
-  type ReproductionCheck,
+  type SeenMergeRequestThread,
   type Task,
+  type TaskEvidence,
   type TaskMergeRequest,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
@@ -49,7 +50,7 @@ const AFTER_PUSH_MS = 10 * 60_000;
 
 /**
  * What the module needs from `agents`: the tasks, a task, its commits and uncommitted files, the squash of its round
- * commits (ADR-168), and a pipeline fix for its agent (ADR-197).
+ * commits (ADR-168), and a pipeline fix and merge request threads for its agent (ADR-197, ADR-256).
  */
 interface MergeRequestTasks {
   tasks(): Task[];
@@ -63,10 +64,6 @@ interface MergeRequestTasks {
   askToFixPipeline(id: string, fix: PipelineFix): PromptDelivery;
   /** Queues the merge request threads the user picked for the task's agent and asks its session to read them (ADR-256). */
   askToAddressThreads(id: string, comments: MergeRequestComments): PromptDelivery;
-  /** The task's last rules check (ADR-234), and whether the task's changes moved on after it; `null` without one. */
-  rulesCheck(id: string): Promise<FreshAutoReview | null>;
-  /** What the task's conversation has used so far, and on which models (ADR-228). */
-  taskConversationUse(id: string): Promise<Pick<MergeRequestEvidence, "usage" | "models">>;
 }
 
 /** What the module needs from `vcs`: the main remote as a project on a repo host, the task branch against it, and its push. */
@@ -96,8 +93,8 @@ export interface MergeRequestsDeps {
   openUrl: (url: string) => void;
   /** The end of a job's log, cleaned and masked like a log line (`logs`, ADR-197); `cut` when the daemon did not read all of it. */
   jobLogExcerpt: (raw: string, cut: boolean) => Promise<Omit<JobLog, "job">>;
-  /** The task's last reproduction check (`reproduction`, ADR-227); `null` without one. */
-  reproductionCheck: (task: string) => ReproductionCheck | null;
+  /** What Trackwall knows about the task's change (the facade's `taskEvidence`, ADR-276). */
+  taskEvidence: (task: string) => Promise<TaskEvidence>;
   /** The pipeline of a task's merge request failed since the read before (`pipelineFailedNow`). */
   onPipelineFailed: (task: Task, mergeRequest: MergeRequest) => void;
   log: (msg: string) => void;
@@ -148,12 +145,8 @@ export class MergeRequests {
    */
   async evidence(id: string): Promise<MergeRequestEvidence> {
     const task = this.#deps.tasks.task(id);
-    const [template, rules, use] = await Promise.all([
-      asRepoUnavailable(task, this.#template(task)),
-      this.#deps.tasks.rulesCheck(id),
-      this.#deps.tasks.taskConversationUse(id),
-    ]);
-    return { template, reproduction: this.#deps.reproductionCheck(id), rules, ...use };
+    const [template, evidence] = await Promise.all([asRepoUnavailable(task, this.#template(task)), this.#deps.taskEvidence(id)]);
+    return { ...evidence, template };
   }
 
   /** The repo's template for the repo host of its main remote; none without a known repo host. */
@@ -350,14 +343,25 @@ export class MergeRequests {
   }
 
   /**
-   * Hands the threads the user picked to the task's agent (ADR-256): read again, so the agent gets each as the repo host
-   * shows it now, and a thread resolved since the user saw it stays out. Refused when none of them is unresolved now.
+   * Hands the threads the user picked to the task's agent (ADR-256), as the user saw them: read again, so a thread resolved
+   * since then stays out, and refused when a picked thread's notes differ from what the user saw (an edit or a reply since),
+   * since text from other people reaches the agent only once the user has read it. Refused when none is unresolved now.
    */
-  async sendThreads(id: string, picked: readonly string[]): Promise<{ delivery: PromptDelivery; sent: number }> {
+  async sendThreads(id: string, picked: readonly SeenMergeRequestThread[]): Promise<{ delivery: PromptDelivery; sent: number }> {
     const { project, mergeRequest } = await this.#openMergeRequest(id, "has no open merge request");
-    const wanted = new Set(picked);
     const now = await this.#readThreads(project, mergeRequest);
-    const threads = now.threads.filter((t) => wanted.has(t.id));
+    const current = new Map(now.threads.map((t) => [t.id, t]));
+    const stillOpen = picked.flatMap((seen) => {
+      const thread = current.get(seen.id);
+      return thread ? [{ seen, thread }] : [];
+    });
+    const changed = stillOpen.filter(({ seen, thread }) => !sameNotes(seen, thread)).length;
+    if (changed > 0)
+      throw new DomainError(
+        "bad_request",
+        `${changed} of the threads you picked changed on the repo host since you read them: read them again`,
+      );
+    const threads = stillOpen.map(({ thread }) => thread);
     if (threads.length === 0) throw new DomainError("bad_request", "the threads you picked are resolved or gone on the repo host now");
     const comments = { mergeRequest: now.mergeRequest, threads };
     return { delivery: this.#deps.tasks.askToAddressThreads(id, comments), sent: comments.threads.length };
@@ -443,5 +447,14 @@ function unknownHost(task: Task): DomainError {
 function asRepoUnavailable<T>(task: Task, work: Promise<T>): Promise<T> {
   return work.catch((err: unknown) => {
     throw new DomainError("repo_unavailable", `${task.branch}: ${messageOf(err)}`);
+  });
+}
+
+/** Whether a thread as the repo host has it now carries the very notes the user saw of it. */
+function sameNotes(seen: SeenMergeRequestThread, thread: MergeRequestThread): boolean {
+  if (seen.notes.length !== thread.notes.length) return false;
+  return thread.notes.every((note, i) => {
+    const before = seen.notes[i];
+    return before !== undefined && before.author === note.author && before.text === note.text && before.at === note.at;
   });
 }

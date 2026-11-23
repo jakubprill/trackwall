@@ -6,6 +6,7 @@ import {
   type Task,
   type TaskMessage,
   type TaskOutcome,
+  type WorkspaceSettings,
 } from "@trackwall/protocol";
 import { Square, X } from "lucide-react";
 import { type ReactNode, useCallback, useRef, useState } from "react";
@@ -39,21 +40,21 @@ import { SHORTCUT_POSITIONS, sessionShortcut, sessionShortcutLabel } from "@/lib
 import { isLive, sessionPlace } from "@/lib/session-state";
 import type { SupervisorSummary } from "@/lib/supervisor";
 import { useAction } from "@/lib/use-action";
+import { useCloseAll } from "@/lib/use-close-all";
 import type { RemoteHandle } from "@/lib/use-remote";
 import { useSessionClose } from "@/lib/use-session-close";
 import type { SessionTree } from "@/lib/use-session-tree";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
 import { cn } from "@/lib/utils";
 import { SessionJavaNavigationMark } from "./JavaNavigationMark.tsx";
-import { NewSession } from "./NewSession.tsx";
+import { NewSessionPane } from "./NewSessionPane.tsx";
 import { ProposalInbox } from "./ProposalInbox.tsx";
-import { RoutineList } from "./RoutineList.tsx";
+import { SessionEditorButton } from "./SessionEditorButton.tsx";
 import { SessionEnvironment } from "./SessionEnvironment.tsx";
 import { SessionGrid } from "./SessionGrid.tsx";
 import { GroupFilterChip } from "./SessionGroupMarks.tsx";
 import { NEXT_WAITING, SessionListPanel } from "./SessionListPanel.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
-import { WorktreeCleanup } from "./WorktreeCleanup.tsx";
 
 /**
  * The Sessions view (§4.4, ADR-26, ADR-31): several Copilot CLI sessions at once, each in a repo from the projects
@@ -78,6 +79,9 @@ export function SessionsView({
   tree,
   supervisor,
   outcomes,
+  workspace,
+  onRetry,
+  onOpenGetStarted,
 }: {
   conn: Connection;
   sessions: RemoteHandle<SessionList>;
@@ -96,6 +100,12 @@ export function SessionsView({
   supervisor: SupervisorSummary;
   /** What each task's work came to, by task (ADR-154), for the marks on its row. */
   outcomes: ReadonlyMap<string, TaskOutcome>;
+  /** The window's read of the workspace settings (`useWorkspaceSettings`): the form waits for the projects folder, which the card above it sets. */
+  workspace: RemoteHandle<WorkspaceSettings>;
+  /** Reconnects to the daemon, for a read that failed because the daemon is gone. */
+  onRetry: () => void;
+  /** Opens Settings › Get started, with every step and what is good to have. */
+  onOpenGetStarted: () => void;
 }) {
   const list = sessions.data?.sessions ?? [];
   const { tasks, rows } = tree;
@@ -132,14 +142,19 @@ export function SessionsView({
     if (afterClose !== "keep") onSelect(afterClose);
     sessions.reload();
   };
-  // The ended task vanishes at once instead of after the list refresh, so that no panel shows it again without its worktree.
-  const taskRemoved = (task: string) => {
-    const removed = entries.find((entry) => entry.kind === "task" && entry.task.id === task);
-    const afterRemoval = removed ? selectionAfterRemoval(entries, latestSelected.current, removed) : "keep";
-    tree.hideTask(task);
+  // An ended task vanishes at once instead of after the list refresh, so that no panel shows it again without its
+  // worktree; so do the tasks "Close all" closed (ADR-294).
+  const tasksRemoved = (removedTasks: readonly string[]) => {
+    const removed = entries.filter((entry) => entry.kind === "task" && removedTasks.includes(entry.task.id));
+    const afterRemoval = selectionAfterRemoval(entries, latestSelected.current, removed);
+    for (const task of removedTasks) tree.hideTask(task);
     if (afterRemoval !== "keep") onSelect(afterRemoval);
+  };
+  const taskRemoved = (task: string) => {
+    tasksRemoved([task]);
     sessions.reload();
   };
+  const closeAll = useCloseAll(conn, sessions, tasksRemoved);
   const started = (selection: SessionSelection) => {
     select(selection);
     sessions.reload();
@@ -172,6 +187,7 @@ export function SessionsView({
         onShowGroup={showGroup}
         onSessionClosed={sessionClosed}
         onTaskRemoved={taskRemoved}
+        closeAll={closeAll}
       />
       <section className="flex min-h-0 min-w-0 flex-col">
         {!sessions.data && !sessions.error && (
@@ -180,16 +196,16 @@ export function SessionsView({
           </div>
         )}
         {sessions.data && !current && (
-          <div className="min-h-0 overflow-y-auto">
-            <NewSession
-              conn={conn}
-              sessions={sessions.data.sessions}
-              onStarted={started}
-              onCancel={entries.length > 0 ? () => select(undefined) : undefined}
-            />
-            <RoutineList conn={conn} onStarted={started} />
-            <WorktreeCleanup conn={conn} onRemoved={sessions.reload} />
-          </div>
+          <NewSessionPane
+            conn={conn}
+            sessions={sessions.data.sessions}
+            workspace={workspace}
+            onStarted={started}
+            onCancel={entries.length > 0 ? () => select(undefined) : undefined}
+            onWorktreesRemoved={sessions.reload}
+            onRetry={onRetry}
+            onOpenGetStarted={onOpenGetStarted}
+          />
         )}
         {current && (
           <SelectedEntry
@@ -500,6 +516,7 @@ function SessionPanel({
           {session.windowTitle && <span className="text-muted-foreground truncate text-xs">{session.windowTitle}</span>}
         </div>
         {error && <span className="text-destructive max-w-xs truncate text-xs">{error}</span>}
+        <SessionEditorButton conn={conn} session={session} />
         {live && (
           <ModelChangeButton
             open={changingModel}

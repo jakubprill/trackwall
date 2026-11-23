@@ -2,8 +2,9 @@ import { z } from "zod";
 import { alwaysAllowable } from "./always-allow.ts";
 import { apiEndpoints, Done } from "./api.ts";
 import { WorkingTreeChanges } from "./changes.ts";
+import { PutAside, PutAsideFile, PutAsideId } from "./put-aside.ts";
 import { CloneJob, CloneRequest, HostRepos, RemoteRepoSearch, RepoHosts } from "./repo-hosts.ts";
-import { SyncRun } from "./sync.ts";
+import { PullResult, SyncResult, SyncRun } from "./sync.ts";
 import { TaskModel } from "./task-model.ts";
 
 /**
@@ -56,6 +57,11 @@ export const RepoStatusOk = z.object({
   untracked: z.number().int().nonnegative(),
   /** The tracking branch with counters; `null` when the branch has none or it disappeared on the remote. */
   upstream: z.object({ name: z.string(), ahead: z.number().int(), behind: z.number().int() }).nullable(),
+  /**
+   * When the repo last fetched from a remote (ISO 8601, the time git wrote its `FETCH_HEAD`), so the commits to pull in
+   * `upstream` are as of then (ADR-293); `null` for a repo that never fetched, such as a fresh clone.
+   */
+  fetchedAt: z.iso.datetime().nullable(),
 });
 export type RepoStatusOk = z.infer<typeof RepoStatusOk>;
 
@@ -153,6 +159,51 @@ export const MAX_REPOS_PER_REQUEST = 50;
  */
 export const RepoWatchState = z.object({ startedAt: z.iso.datetime(), revision: z.number().int().nonnegative() });
 export type RepoWatchState = z.infer<typeof RepoWatchState>;
+
+/**
+ * The server check (ADR-295): every 15 minutes the daemon asks the server of each repo's checked-out branch, without
+ * fetching, whether that branch moved since the repo's last fetch. `last` is the newest round; `null` while the check is
+ * off (`serverCheck: false` in `workspace.yaml`) and before its first round, a minute after the daemon starts or the
+ * check is turned on.
+ */
+export const ServerCheckState = z.object({
+  on: z.boolean(),
+  last: z
+    .object({
+      /** When the round ended. */
+      endedAt: z.iso.datetime(),
+      /**
+       * The repos whose server moved a branch since their last fetch, each with the moment before it was asked: a fetch
+       * after that moment (`RepoStatusOk.fetchedAt`) has brought what the server had then. `remoteBranches` are the
+       * remote-tracking branches the server has moved past, as `origin/main`: the one the checked-out branch tracks
+       * (`RepoStatusOk.upstream`), the main remote's default branch, where a new task starts (`NewTaskBase`, ADR-297), or both.
+       */
+      newCommits: z.array(z.object({ repo: RepoId, checkedAt: z.iso.datetime(), remoteBranches: z.array(z.string()).min(1) })),
+      /** The repos whose server did not answer (or git could not read the repo); the doctor says why (ADR-195). */
+      unreached: z.array(RepoId),
+    })
+    .nullable(),
+});
+export type ServerCheckState = z.infer<typeof ServerCheckState>;
+
+/**
+ * Where a new task of a repo starts (ADR-297): the repo's default branch, which a task branches from (`Task.base`), against
+ * the remote-tracking branch a sync fast-forwards it to, as of the repo's last fetch. The New task form says when a task
+ * would start from older code than the server's, and offers that one repo's sync.
+ */
+export const NewTaskBase = z.object({
+  /** The default branch, `main`. */
+  branch: z.string(),
+  /** The remote-tracking branch a sync moves it to, `origin/main`. */
+  remoteBranch: z.string(),
+  /** Commits of `remoteBranch` the local branch lacks, as of the last fetch; 0 without a local branch (the task starts from `remoteBranch`). */
+  behind: z.number().int().nonnegative(),
+  /** Commits of the local branch that `remoteBranch` lacks, not pushed yet. */
+  ahead: z.number().int().nonnegative(),
+  /** When the repo last fetched, as `RepoStatusOk.fetchedAt`. */
+  fetchedAt: z.iso.datetime().nullable(),
+});
+export type NewTaskBase = z.infer<typeof NewTaskBase>;
 
 /**
  * A Copilot CLI tool permission pattern (ADR-66), `kind` or `kind(argument)` as `copilot help permissions` describes
@@ -378,6 +429,10 @@ export const WorkspaceSettings = z.object({
   runningTasksWarning: RunningTasksWarning.nullable(),
   /** Why `runningTasksWarning` in `workspace.yaml` cannot be read; the warning uses the computer's default until it is fixed. */
   runningTasksWarningProblem: z.string().nullable(),
+  /** `serverCheck` from `workspace.yaml` (ADR-295): whether the daemon asks the repos' servers for new commits; on without the key. */
+  serverCheck: z.boolean(),
+  /** Why `serverCheck` in `workspace.yaml` cannot be read; no server is asked until it is fixed or saved again. */
+  serverCheckProblem: z.string().nullable(),
   /** `alwaysAllow` from `workspace.yaml` (ADR-249): the tools always allowed in each repo's tasks. */
   alwaysAllow: AlwaysAllowedTools,
   /** Why `alwaysAllow` in `workspace.yaml` cannot be read; task sessions do not start until it is fixed or removed. */
@@ -558,6 +613,15 @@ export const workspaceApi = {
   changes: endpoint("changes", RepoRequest, WorkingTreeChanges),
   /** The work in the projects folder's repos that is on no remote, read only when the daemon runs in a container (ADR-162). */
   unpushedWork: endpoint("unpushed-work", z.object({}).strict(), UnpushedWork),
+  /** The last round of the server check (ADR-295), read from the daemon's memory: asking it starts no git. */
+  serverCheck: endpoint("server-check", z.object({}).strict(), ServerCheckState),
+  /** Where a new task of the repo starts, against the server as of the last fetch (ADR-297); `null` with nothing to compare. */
+  newTaskBase: endpoint("new-task-base", RepoRequest, NewTaskBase.nullable()),
+  /**
+   * Turns the server check on or off (ADR-295); `on: true` removes `serverCheck` from `workspace.yaml`. No MCP tool sets
+   * it: it is the user's choice of what Trackwall connects to.
+   */
+  setServerCheck: endpoint("set-server-check", z.object({ on: z.boolean() }).strict(), WorkspaceSettings),
   /** Opens an address from the README in the default browser (ADR-35), instead of in the app window. */
   openLink: endpoint("open-link", z.object({ url: ExternalLink }).strict(), Done),
   /** Opens `vscode://` in the system; the daemon does not know whether anything handled the address. */
@@ -590,4 +654,26 @@ export const workspaceApi = {
   sync: endpoint("sync", z.object({}).strict(), SyncRun),
   /** The last sync of the current projects folder since the daemon started; `null` when there was none. */
   syncRun: endpoint("sync-run", z.object({}).strict(), SyncRun.nullable()),
+  /**
+   * The sync of one repo, as "Sync all" syncs each (ADR-21), answered when it is done: "Sync main" in the New task form
+   * (ADR-297). No MCP tool does it: an agent does not move the user's branches.
+   */
+  syncRepo: endpoint("sync-repo", RepoRequest, SyncResult),
+  /**
+   * Pulls one repo from its header (ADR-269): the sync of its default branch, then a fast-forward of the checked-out branch
+   * to the branch it tracks, never a merge, rebase or overwrite; answers when both are done. No MCP tool does it: an agent
+   * does not move the user's branches.
+   */
+  pull: endpoint("pull", z.object({ repo: RepoId, putAside: z.boolean().default(false) }).strict(), PullResult),
+  /** The changed tracked files a pull with `putAside` would move into the stash (ADR-271), for the user to read first. */
+  putAsideFiles: endpoint("put-aside-files", RepoRequest, z.array(PutAsideFile)),
+  /** The changes Trackwall put aside in the repo (ADR-271), newest first. */
+  putAsides: endpoint("put-asides", RepoRequest, z.array(PutAside)),
+  /**
+   * Brings put-aside changes back into the working directory (`git stash pop --index`) and returns the ones left; when
+   * git refuses (the same files changed meanwhile), nothing changes and the put-aside stays.
+   */
+  restorePutAside: endpoint("restore-put-aside", z.object({ repo: RepoId, id: PutAsideId }).strict(), z.array(PutAside)),
+  /** Deletes put-aside changes for good (`git stash drop`) and returns the ones left. */
+  deletePutAside: endpoint("delete-put-aside", z.object({ repo: RepoId, id: PutAsideId }).strict(), z.array(PutAside)),
 };

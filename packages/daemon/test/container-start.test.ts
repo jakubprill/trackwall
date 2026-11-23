@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { ContainerStartResult, DaemonInfoResult } from "@trackwall/protocol";
 import { parseCommandLine } from "../src/infra/args.ts";
 import { afterExit, DAEMON_LOG, restartDelayMs, supervisorPidFile } from "../src/infra/container-supervisor.ts";
+import { readRestarts } from "../src/infra/daemon-restarts.ts";
 import { readDaemonFile } from "../src/infra/discovery.ts";
 import { loopbackRequest } from "../src/infra/loopback.ts";
 import { RUNTIMES } from "./support/runtimes.ts";
@@ -83,6 +84,8 @@ describe.each(RUNTIMES)("trackwall-container start under %s (ADR-164)", (_name, 
         expect(after.port).toBe(port);
         expect(after.token).not.toBe(before.token);
         expect(readFileSync(join(home, DAEMON_LOG), "utf8")).toContain("starting it again in 1 s");
+        // The restart is recorded for the container's health panel too (ADR-279).
+        expect(readRestarts(home, new Date(0))).toEqual([{ at: expect.any(String), exitCode: null, signal: "SIGKILL" }]);
 
         await loopbackRequest(after.port, "/api/daemon/shutdown", { method: "POST", token: after.token });
         await waitFor(() => (existsSync(supervisorPidFile(home)) ? undefined : true));

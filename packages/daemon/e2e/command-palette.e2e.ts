@@ -58,7 +58,9 @@ describe("the command palette (ADR-246)", () => {
     await expect(palette(page).count()).resolves.toBe(0);
     await page.keyboard.press(PALETTE_KEY_IN_TERMINAL);
     await goTo(page, "home", /^Views\s*Home/);
-    await expect(currentView(page).getAttribute("aria-label")).resolves.toBe("Home");
+    // Home has no icon on the view bar until the user shows it (ADR-294), and the palette opens it all the same.
+    await page.getByRole("heading", { name: /^Needs you/ }).waitFor();
+    await expect(currentView(page).count()).resolves.toBe(0);
 
     await page.keyboard.press(PALETTE_KEY);
     const command = palette(page).getByRole("option", { name: /^Sessions\s*shop/ });
@@ -70,12 +72,14 @@ describe("the command palette (ADR-246)", () => {
   }, 60_000);
 
   test("a theme from the palette repaints the window at once", async () => {
+    // The window opens on Sessions, where the session the test above started holds the keyboard in its terminal, so the
+    // palette opens with the key that works everywhere.
     const page = await trackwall().open();
-    await page.keyboard.press(PALETTE_KEY);
+    await page.keyboard.press(PALETTE_KEY_IN_TERMINAL);
     await goTo(page, "theme light", /Theme: Light/);
     await page.waitForFunction(() => document.documentElement.getAttribute("data-theme") === "light");
 
-    await page.keyboard.press(PALETTE_KEY);
+    await page.keyboard.press(PALETTE_KEY_IN_TERMINAL);
     await expect(
       palette(page)
         .getByRole("option", { name: /Theme: Light/ })

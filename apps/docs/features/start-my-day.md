@@ -1,6 +1,7 @@
 ---
 title: Start my day
 description: One button syncs every repo and starts the supervisor with a briefing of what changed since your last day and what waits for you.
+status: stable
 ---
 
 # Start my day
@@ -26,9 +27,9 @@ The report stays until the next day start. Ask the supervisor about it again lat
 
 ## Use it
 
-1. Set your projects folder in "Settings", if you have not yet.
+1. Set your projects folder in "Settings", if you have not yet. Until then, the panel offers "Get started" in place of "Start my day".
 2. If a supervisor is running, press "Stop" in its panel: a new day starts with a new supervisor.
-3. Press "Start my day" in the supervisor panel.
+3. Open the supervisor panel on the right, folded to a strip until you click it (Alt+0 does the same), and press "Start my day".
 4. Read the briefing, and start or reject its proposals in "Sessions" or from "Delegated" in the panel.
 
 ## Good to know

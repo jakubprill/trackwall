@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityBar, type ActivityView } from "@/components/ActivityBar";
 import { AwaySummary } from "@/components/AwaySummary";
 import { CommandPalette } from "@/components/CommandPalette";
+import { CopilotVersionNotice } from "@/components/CopilotVersionNotice";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -15,12 +16,16 @@ import { PageTokenForm } from "@/components/PageTokenForm";
 import { RemoteDaemonSurface } from "@/components/RemoteDaemonSurface";
 import { SupervisorPanel } from "@/components/SupervisorPanel";
 import { UpdateBanner } from "@/components/UpdateBanner";
+import { WhatsNew } from "@/components/WhatsNew";
 import { inDesktopShell, reportShown, START_PARAMS, startFromLocation } from "@/lib/app-window";
 import type { PaletteAction } from "@/lib/command-palette";
+import { containerAttentionCount } from "@/lib/container-health";
 import { DaemonPlaceContext, useDaemonPlace } from "@/lib/desktop";
 import { DROP_HINT } from "@/lib/dropped-folder";
 import type { DroppedPaths } from "@/lib/file-drop";
 import { FolderTerminalsLive } from "@/lib/folder-terminals";
+import { readOpenSteps } from "@/lib/get-started-memory";
+import type { HomeOnBar } from "@/lib/home-on-bar";
 import { KeyboardElsewhere } from "@/lib/keyboard-elsewhere";
 import { IS_MAC } from "@/lib/platform";
 import { entrySelection, findEntry, nextWaitingShortcut, type SessionSelection } from "@/lib/session-entries";
@@ -35,8 +40,10 @@ import { ShowTrackwallTarget } from "@/lib/trackwall-link";
 import { useAppMenu } from "@/lib/use-app-menu";
 import { useAppUpdate } from "@/lib/use-app-update";
 import { useConnection } from "@/lib/use-connection";
+import { CONTAINER_HEALTH_PACE, useContainerHealth } from "@/lib/use-container-health";
 import { useDaemonEvents, useDaemonLost } from "@/lib/use-daemon-events";
 import { useFileDrop } from "@/lib/use-file-drop";
+import { useHomeOnBar } from "@/lib/use-home-on-bar";
 import { useJumpRequest } from "@/lib/use-jump-request";
 import { useNewWindow } from "@/lib/use-new-window";
 import { useRepoWatch } from "@/lib/use-repo-watch";
@@ -46,6 +53,7 @@ import { useSessions } from "@/lib/use-sessions";
 import { useTabAttention } from "@/lib/use-tab-attention";
 import { useTaskOutcomes } from "@/lib/use-task-outcomes";
 import { useWindowShortcuts } from "@/lib/use-window-shortcuts";
+import { useWorkspaceSettings } from "@/lib/use-workspace-settings";
 import { zoomStepOf, zoomWindow } from "@/lib/zoom-shortcut";
 import { FlowView } from "@/views/flow/FlowView";
 import { GraphView } from "@/views/graph/GraphView";
@@ -55,28 +63,39 @@ import { ReposView } from "@/views/repos/ReposView";
 import { SessionsView } from "@/views/sessions/SessionsView";
 import { SettingsView } from "@/views/settings/SettingsView";
 
-/** Order and shortcuts of the view bar; "Home" is first (ADR-33), the next work views get the next digits. */
+/**
+ * Order and shortcuts of the view bar: "Sessions", where the work happens and the view the main window opens on, is
+ * first, and "Home", the dashboard, is the last of the work views (ADR-288); each work view takes the next digit. Home
+ * has an icon only once the user shows it in Settings (`viewsOnBar`, ADR-294).
+ */
 // The macOS menu bar has the same ids, labels and shortcuts (`app_menu.rs`); `apps/desktop/test/shell-events.test.ts`
 // compares them and reads each entry's keys in this order.
 const VIEWS = [
-  { id: "home", label: "Home", icon: Orbit, shortcut: "1", placement: "top" },
+  { id: "sessions", label: "Sessions", icon: SquareTerminal, shortcut: "1", placement: "top" },
   { id: "repos", label: "Repos", icon: FolderGit2, shortcut: "2", placement: "top" },
-  { id: "sessions", label: "Sessions", icon: SquareTerminal, shortcut: "3", placement: "top" },
-  { id: "graph", label: "Overview", icon: Network, shortcut: "4", placement: "top" },
-  { id: "plan", label: "Plan", icon: ListTree, shortcut: "5", placement: "top" },
-  { id: "flow", label: "Flow", icon: Columns3, shortcut: "6", placement: "top" },
+  { id: "graph", label: "Overview", icon: Network, shortcut: "3", placement: "top" },
+  { id: "plan", label: "Plan", icon: ListTree, shortcut: "4", placement: "top" },
+  { id: "flow", label: "Flow", icon: Columns3, shortcut: "5", placement: "top" },
+  { id: "home", label: "Home", icon: Orbit, shortcut: "6", placement: "top" },
   { id: "settings", label: "Settings", icon: Settings, shortcut: ",", placement: "bottom" },
 ] as const satisfies readonly ActivityView<string>[];
 type View = (typeof VIEWS)[number]["id"];
 const VIEW_IDS = VIEWS.map((v) => v.id);
+/** The view the main window opens on at every start, and a new window opened without one (ADR-288). */
+const START_VIEW: View = "sessions";
 /** The views that show sessions or tasks, which keep the session list fresh while open. */
 const VIEWS_WITH_SESSIONS: readonly View[] = ["home", "sessions", "plan", "graph", "flow"];
+
+/** The views with an icon on the bar: Home only once the user shows it (ADR-294); its shortcut opens it either way. */
+function viewsOnBar(home: HomeOnBar): readonly ActivityView<View>[] {
+  return home === "shown" ? VIEWS : VIEWS.map((v) => (v.id === "home" ? { ...v, placement: "none" } : v));
+}
 
 export function App() {
   // A repo opened from the dashboard belongs to the navigation, not to the view: any other navigation to "Repos" starts without it;
   // the same holds for the category Settings opens on.
   // An extra window starts with the view it was opened with or showed at the last run (ADR-49), the main window with
-  // Home. `visit` grows with every opening of a repo, of a Settings category or of a task's impact, so that the view is mounted again with it even when it is already open.
+  // `START_VIEW`. `visit` grows with every opening of a repo, of a Settings category or of a task's impact, so that the view is mounted again with it even when it is already open.
   const [{ view, repo, settingsCategory, impactTask, visit }, setNav] = useState<{
     view: View;
     repo?: string;
@@ -85,7 +104,7 @@ export function App() {
     impactTask?: string;
     visit: number;
   }>(() => ({
-    view: startFromLocation(window.location.search, START_PARAMS.view, VIEW_IDS) ?? "home",
+    view: startFromLocation(window.location.search, START_PARAMS.view, VIEW_IDS) ?? START_VIEW,
     visit: 0,
   }));
   const setView = useCallback((next: View) => setNav((nav) => ({ view: next, visit: nav.visit })), []);
@@ -95,6 +114,7 @@ export function App() {
     (category: SettingsCategory) => setNav((nav) => ({ view: "settings", settingsCategory: category, visit: nav.visit + 1 })),
     [],
   );
+  const openGetStarted = useCallback(() => openSettings("get-started"), [openSettings]);
   const [session, setSession] = useState<SessionSelection>();
   const [sessionLayout, setSessionLayout] = useState<SessionLayout>(
     () => startFromLocation(window.location.search, START_PARAMS.sessionLayout, SESSION_LAYOUTS) ?? "1",
@@ -145,6 +165,15 @@ export function App() {
   const mcpCallsLive = useMemo(() => events?.feed("mcp.calls.changed"), [events]);
   const terminalsLive = useMemo(() => events?.feed("terminals.changed"), [events]);
   const outcomes = useTaskOutcomes(conn, events);
+  // The supervisor's start card and the Sessions view wait for the projects folder, and Sessions sets it (ADR-289).
+  const workspace = useWorkspaceSettings(conn);
+  const projectsDir = workspace.data?.projectsDir;
+  // Home lists the container health's warnings (ADR-280), and the view bar counts them on Settings' icon, which then
+  // opens on Diagnostics, where they are (ADR-294): one read for all.
+  const containerHealth = useContainerHealth(conn, { pollMs: CONTAINER_HEALTH_PACE });
+  const containerWarnings = containerAttentionCount(containerHealth.data);
+  const homeOnBar = useHomeOnBar();
+  const barViews = useMemo(() => viewsOnBar(homeOnBar.value), [homeOnBar.value]);
   const appUpdate = useAppUpdate(sessions.data && agentsInTurn(sessions.data.sessions));
   const tree = useSessionTree(sessions);
   const { rows } = tree;
@@ -240,19 +269,21 @@ export function App() {
           <FolderTerminalsLive.Provider value={terminalsLive}>
             <div className="flex h-screen">
               <ActivityBar
-                views={VIEWS}
+                views={barViews}
                 active={view}
                 onSelect={setView}
                 newWindow={newWindow}
-                badges={{ sessions: attentionCount(sessions.data) }}
+                badges={{ sessions: attentionCount(sessions.data), settings: containerWarnings }}
               />
               <div className="flex min-w-0 flex-1 flex-col">
                 {appUpdate && <UpdateBanner handle={appUpdate} />}
+                {conn && <CopilotVersionNotice conn={conn} onDiagnostics={() => openSettings("diagnostics")} />}
                 <NotificationOffer />
                 <AwaySummary list={sessions.data} onOpen={openInSessions} />
                 <ErrorBanner message={error} action={{ label: "Try again", onClick: retry }} />
                 <ErrorBanner message={windowError} action={{ label: "Dismiss", onClick: dismissWindowError }} />
                 <ErrorBanner message={sessionLink.notice} action={{ label: "Dismiss", onClick: sessionLink.dismiss }} />
+                <WhatsNew conn={conn} projectsDir={workspace.data?.projectsDir} onShow={runCommand} />
                 {conn && dropped && (
                   <FolderDrop
                     key={dropped.seq}
@@ -293,6 +324,7 @@ export function App() {
                           eventsLost={eventsLost}
                           repoWatch={repoWatch}
                           sessions={sessions}
+                          containerWarnings={containerHealth.data?.warnings}
                           onOpenInSessions={openInSessions}
                           onOpenRepo={openRepos}
                           onOpenDaemon={() => openSettings("diagnostics")}
@@ -325,6 +357,9 @@ export function App() {
                           outcomes={outcomes.byTask}
                           layout={sessionLayout}
                           onLayout={setSessionLayout}
+                          workspace={workspace}
+                          onRetry={retry}
+                          onOpenGetStarted={openGetStarted}
                         />
                       )}
                       {conn && view === "graph" && (
@@ -361,11 +396,19 @@ export function App() {
                         <div className="p-6">
                           <SettingsView
                             conn={conn}
-                            initialCategory={settingsCategory ?? firstSettingsCategory(sessions.data?.sessions.length)}
+                            initialCategory={
+                              settingsCategory ??
+                              firstSettingsCategory({
+                                sessions: sessions.data?.sessions.length,
+                                openSteps: readOpenSteps(() => window.localStorage),
+                                containerWarnings,
+                              })
+                            }
                             update={appUpdate}
                             warmupLive={warmupLive}
                             mcpCallsLive={mcpCallsLive}
                             sessions={sessions.data}
+                            homeOnBar={homeOnBar}
                             onRetry={retry}
                             onSaved={() => setView("repos")}
                             onStart={() => setView("sessions")}
@@ -387,6 +430,8 @@ export function App() {
                     focused={supervisorFocused}
                     onFocusedChange={setSupervisorFocused}
                     onOpenInSessions={openInSessions}
+                    projectsDir={projectsDir}
+                    onOpenGetStarted={openGetStarted}
                     onChanged={sessions.reload}
                   />
                 </KeyboardElsewhere.Provider>

@@ -63,10 +63,15 @@ const STEPS: readonly { id: DoctorCheckId; title: string; need: GetStartedNeed; 
     later: "Checked once the projects folder is set.",
   },
   { id: "git-remotes", title: "Git access to your repo hosts", need: "recommended" },
+  // Verify, services and the agents' builds and tests run as mise tasks, so the repos' readiness blocks without it (ADR-292).
+  { id: "mise", title: "mise for builds and tests", need: "recommended" },
 ];
 
+/** The step Trackwall settles itself on the user's click, with "Trust folder" (ADR-270). */
+export const TRUST_FOLDER_STEP: DoctorCheckId = "copilot-trusted-folder";
+
 /** Tools Trackwall works without, in the order of how much they add. */
-const GOOD_TO_HAVE: readonly DoctorCheckId[] = ["mise", "copilot-sandbox", "github-cli", "gitlab-cli"];
+const GOOD_TO_HAVE: readonly DoctorCheckId[] = ["copilot-sandbox", "github-cli", "gitlab-cli"];
 
 function stepState(check: DoctorCheck, need: GetStartedNeed): GetStartedState {
   if (check.status === "ok") return "done";
@@ -109,6 +114,27 @@ export function getStartedHeadline({ neededOpen, open }: Pick<GetStartedPlan, "n
   return "Ready. Everything Trackwall needs to start a session is in place.";
 }
 
+/**
+ * Whether the Sessions view shows what is left before a first session above its form (ADR-289): while no projects folder
+ * is set (`undefined` is not known yet), and after that, until a session exists, while the doctor's last run in this
+ * browser left a step open. Not on every new task after that: the card runs the doctor, which ADR-262 keeps off every
+ * start, and the steps still open stay a line under "Get started" in Settings (ADR-268).
+ */
+export function getStartedInSessions(projectsDir: string | null | undefined, sessionCount: number, openSteps: number | null): boolean {
+  return projectsDir === null || (sessionCount === 0 && openSteps !== null && openSteps > 0);
+}
+
+/** The steps a short list shows one by one: those not done, which keep their order. */
+export function stepsLeft(plan: Pick<GetStartedPlan, "steps">): GetStartedStep[] {
+  return plan.steps.filter((s) => s.state !== "done");
+}
+
+/** The done steps in one line, for a list that shows only the steps left; `null` while none is done. */
+export function doneStepsLine(plan: Pick<GetStartedPlan, "steps">): string | null {
+  const done = plan.steps.filter((s) => s.state === "done").map((s) => s.title);
+  return done.length === 0 ? null : `Done: ${done.join(", ")}.`;
+}
+
 /** Where Trackwall runs, which decides what the steps find; Trackwall knows it, so the user is never asked. */
 export function getStartedPlace(place: Pick<DaemonPlace, "container">): string {
   return place.container === null ? "on this computer" : "in a container";
@@ -129,4 +155,16 @@ export function goodToHaveSummary(items: readonly GoodToHave[]): string {
 export function fixCommand(fix: string | null): string | null {
   const commands = [...(fix ?? "").matchAll(/`([^`]+)`/g)].map((m) => m[1] ?? "");
   return commands.length === 1 && commands[0] !== undefined && commands[0].includes(" ") ? commands[0] : null;
+}
+
+/** What the entry of "Get started" in the list of Settings categories says under its name (ADR-268), and whether it calls for the user. */
+export interface GetStartedEntry {
+  text: string;
+  state: "unknown" | "to-do" | "done";
+}
+
+export function getStartedEntry(open: number | null): GetStartedEntry {
+  if (open === null) return { text: "Check your setup", state: "unknown" };
+  if (open === 0) return { text: "All set", state: "done" };
+  return { text: open === 1 ? "1 step to do" : `${open} steps to do`, state: "to-do" };
 }

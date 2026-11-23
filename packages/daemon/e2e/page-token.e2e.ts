@@ -10,7 +10,7 @@ describe("the page's token in a browser (ADR-161)", () => {
     const page = await trackwall().openWithoutToken();
     const once = address();
     await page.goto(once);
-    await page.getByRole("button", { name: "Fold the supervisor panel" }).waitFor();
+    await page.getByRole("button", { name: /^Pin the supervisor panel open/ }).waitFor();
     expect(page.url()).toBe(`${origin}/`);
     const saved = await page.evaluate(() => localStorage.getItem("trackwall.token"));
     expect(JSON.parse(saved ?? "{}").token).toBe(readDaemonFile(daemon.home)?.token);
@@ -28,7 +28,7 @@ describe("the page's token in a browser (ADR-161)", () => {
     const spent = address();
     const used = await trackwall().openWithoutToken();
     await used.goto(spent);
-    await used.getByRole("button", { name: "Fold the supervisor panel" }).waitFor();
+    await used.getByRole("button", { name: /^Pin the supervisor panel open/ }).waitFor();
     const page = await trackwall().openWithoutToken();
 
     const field = page.getByRole("textbox", { name: "Address of the daemon" });
@@ -39,11 +39,11 @@ describe("the page's token in a browser (ADR-161)", () => {
     await field.fill(address());
     await page.getByRole("button", { name: "Connect" }).click();
     await field.waitFor({ state: "detached" });
-    await page.getByRole("button", { name: "Fold the supervisor panel" }).waitFor();
+    await page.getByRole("button", { name: /^Pin the supervisor panel open/ }).waitFor();
 
     const tab = await page.context().newPage();
     await tab.goto(origin);
-    await tab.getByRole("button", { name: "Fold the supervisor panel" }).waitFor();
+    await tab.getByRole("button", { name: /^Pin the supervisor panel open/ }).waitFor();
     expect(await tab.getByRole("textbox", { name: "Address of the daemon" }).count()).toBe(0);
   }, 60_000);
 
