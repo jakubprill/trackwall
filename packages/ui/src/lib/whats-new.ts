@@ -37,6 +37,12 @@ export interface WhatsNewEntry {
  */
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
+    id: "accept-changed-git-hooks",
+    title: "Accept changed git hooks",
+    text: "When a package install in a sandboxed task changes the repo's git hooks, the error names them, and End task shows them with Accept these settings, so the task can end.",
+    show: { place: { kind: "view", view: "sessions" } },
+  },
+  {
     id: "sync-main-in-new-task",
     title: "Sync main in the New task form",
     text: "When a repo's main is behind the server, the New task form says so above Create task and offers Sync main, so the task starts from the newest code.",
@@ -65,12 +71,6 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     title: "Home off the view bar",
     text: "Home's icon comes back once you show it in Settings › App › Home; its shortcut and the command palette open it either way.",
     show: { place: { kind: "settings", category: "app" } },
-  },
-  {
-    id: "all-repos",
-    title: "All repos",
-    text: "Repos opens on a table of the repos that need a look, each with its next step, and Sync all above it.",
-    show: { place: { kind: "view", view: "repos" } },
   },
 ];
 
