@@ -13,6 +13,7 @@ import type {
   StatusRead,
   SyncResult,
   TaskChanges,
+  TaskRunSettings,
   TreeEntry,
   WorkingTreeChanges,
 } from "@trackwall/protocol";
@@ -76,7 +77,14 @@ import {
   type SquashedRounds,
   squashRounds,
 } from "./round-commits.ts";
-import { assertRunSettings, type RunSettingsBaseline, runSettingsDigest, useRunSettingsBaselines } from "./run-settings.ts";
+import {
+  acceptanceRefusal,
+  assertRunSettings,
+  type RunSettingsBaseline,
+  readRunSettings,
+  useRunSettingsBaselines,
+} from "./run-settings.ts";
+import { type RunSettings, type RunSettingsGuard, reviewRunSettings } from "./run-settings-places.ts";
 import { StatusMemo, type TimedStatus } from "./status-memo.ts";
 import { syncRepo } from "./sync.ts";
 import { mergeIntoRepo, trialMergeConflicts, trialMergeInput } from "./trial-merge.ts";
@@ -388,10 +396,36 @@ export class Vcs {
    * The digest of the run settings of the repo `dir` lies in (ADR-181 addendum), refused when the repo's other sandboxed
    * tasks have digests it does not match, so a new task cannot take another task's change for its baseline.
    */
-  async runSettingsBaseline(dir: string): Promise<string | null> {
+  async runSettingsBaseline(dir: string): Promise<RunSettingsGuard | null> {
     const read = (file: string) => readConfigFile(dir, file);
     await assertRunSettings(dir, read);
-    return runSettingsDigest(dir, read);
+    return guardOf(await readRunSettings(dir, read));
+  }
+
+  /**
+   * The run settings of the repo `dir` lies in against the `guards` of its sandboxed tasks, with what each changed place
+   * holds (ADR-181 addendum). Without the guard, which refuses exactly when there is something to review: it runs no git
+   * but `git config --file`, which the guard itself runs.
+   */
+  async reviewRunSettings(dir: string, guards: readonly RunSettingsGuard[]): Promise<TaskRunSettings | null> {
+    const now = await this.currentRunSettings(dir);
+    return now === null ? null : reviewRunSettings(now, guards);
+  }
+
+  /**
+   * The run settings of the repo `dir` lies in, which the user accepts as the version with `digest` they reviewed; a
+   * refusal says why (`acceptanceRefusal`), `null` when the repo has no git directory.
+   */
+  async acceptRunSettings(dir: string, guards: readonly RunSettingsGuard[], digest: string): Promise<RunSettingsGuard | null> {
+    const now = await this.currentRunSettings(dir);
+    if (now === null) return null;
+    const refused = acceptanceRefusal(now, guards, digest);
+    if (refused !== null) throw new Error(refused);
+    return guardOf(now);
+  }
+
+  private currentRunSettings(dir: string): Promise<RunSettings | null> {
+    return readRunSettings(dir, (file) => readConfigFile(dir, file));
   }
 
   /** Process-wide, like the git program: `git()` checks them before every call (`run-settings.ts`). */
@@ -629,4 +663,9 @@ export class Vcs {
 /** The hash of the empty tree in the repo's object format (SHA-1 or SHA-256), without writing to `.git/objects`. */
 async function emptyTree(dir: string): Promise<string> {
   return (await git(dir, ["hash-object", "-t", "tree", "--stdin"], { stdin: "" })).stdout.toString("utf8").trim();
+}
+
+/** The part of the run settings a sandboxed task keeps. */
+function guardOf(settings: RunSettings | null): RunSettingsGuard | null {
+  return settings === null ? null : { digest: settings.digest, snapshot: settings.snapshot };
 }

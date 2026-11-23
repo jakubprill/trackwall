@@ -5,6 +5,14 @@ import { join } from "node:path";
 import { isInside } from "../../infra/path-inside.ts";
 import { gitDirs, readIfExists, statIfExists } from "./git-dir.ts";
 import { pathKey } from "./path-key.ts";
+import {
+  changedPlacesText,
+  placesOf,
+  type RunSettings,
+  type RunSettingsFiles,
+  type RunSettingsGuard,
+  reviewRunSettings,
+} from "./run-settings-places.ts";
 
 /**
  * A repo's run settings (`CONTEXT.md`): what in its git directory makes git run a program, which a task session in
@@ -48,15 +56,19 @@ const HOOKS_PATH = "core.hookspath";
 /** Reads `git config --file <file> --list -z --no-includes`: the caller runs git, so this file stays without a process. */
 export type ReadConfigFile = (file: string) => Promise<string>;
 
-/** A sandboxed task's worktree, its repo's root and the digest of the repo's run settings when the task started. */
-export interface RunSettingsBaseline {
+/** A sandboxed task's worktree, its repo's root and the guard it keeps of the repo's run settings. */
+export interface RunSettingsBaseline extends RunSettingsGuard {
   worktree: string;
   repoDir: string;
-  digest: string;
+  /** The task's branch, which a refusal names, so the user knows whose guard it is. */
+  branch: string;
 }
 
-/** The digest of the run settings of the repo `dir` lies in; `null` when `dir` has no git directory. */
-export async function runSettingsDigest(dir: string, readConfig: ReadConfigFile): Promise<string | null> {
+/** At most this many changed places in a refusal's message. */
+const MAX_NAMED_CHANGES = 5;
+
+/** The run settings of the repo `dir` lies in; `null` when `dir` has no git directory. */
+export async function readRunSettings(dir: string, readConfig: ReadConfigFile): Promise<RunSettings | null> {
   const dirs = await gitDirs(dir);
   if (dirs === null) return null;
   const common = dirs.commonDir;
@@ -64,13 +76,33 @@ export async function runSettingsDigest(dir: string, readConfig: ReadConfigFile)
   const [config, attributes, hooks, worktreeConfigs] = await Promise.all([
     (await statIfExists(configFile)) ? readConfig(configFile) : "",
     readIfExists(join(common, "info", "attributes")),
-    hookContents(common),
-    worktreeConfigContents(common),
+    hookFiles(common),
+    worktreeConfigContents(common, readConfig),
   ]);
+  const configEntries = countedEntries(config);
+  // The digest's form stays as tasks saved it before places were named, so their digests still match.
+  const hookParts = hooks.map(([name, content]) => `${name}\n${content === null ? "-" : sha256(content)}`);
+  const parts = [...configEntries, "\0attributes", attributes, "\0hooks", ...hookParts, "\0worktrees"];
+  for (const { file, content } of worktreeConfigs) parts.push(`${file}\n${content}`);
   const hash = createHash("sha256");
-  for (const part of [...countedEntries(config), "\0attributes", attributes, "\0hooks", ...hooks, "\0worktrees", ...worktreeConfigs])
-    hash.update(part).update("\0");
-  return hash.digest("hex");
+  for (const part of parts) hash.update(part).update("\0");
+  return placesOf({ configEntries, attributes, hooks, worktreeConfigs }, hash.digest("hex"));
+}
+
+/**
+ * Whether the user may accept the run settings `now`, reviewed as the version with `digest`: not once they changed
+ * again, and not while a changed place is one only undoing clears (`run-settings-places.ts`). Returns the reason it may not.
+ */
+export function acceptanceRefusal(now: RunSettings, guards: readonly RunSettingsGuard[], digest: string): string | null {
+  if (now.digest !== digest) return "they changed again; review them before accepting them";
+  const undoOnly = reviewRunSettings(now, guards).changes.filter((c) => !c.acceptable);
+  if (undoOnly.length > 0)
+    return `${undoOnly.map((c) => c.place).join(", ")} can make git run a program Trackwall does not check; undo it in the repo instead`;
+  return null;
+}
+
+function sha256(content: string | Buffer): string {
+  return createHash("sha256").update(content).digest("hex");
 }
 
 /** The entries of `git config -z --list` (`key\nvalue`, separated by NUL) that count, in their order. */
@@ -105,9 +137,9 @@ export function useRunSettingsBaselines(next: readonly RunSettingsBaseline[]): v
   const same =
     next.length === baselines.length &&
     next.every((b, i) => b.worktree === baselines[i]?.worktree && b.repoDir === baselines[i]?.repoDir && b.digest === baselines[i]?.digest);
-  if (same) return;
+  // Kept whatever the digests: a baseline can get its snapshot (the places a refusal names) with the same digest.
   baselines = next;
-  matched.clear();
+  if (!same) matched.clear();
 }
 
 /**
@@ -124,22 +156,37 @@ export async function assertRunSettings(dir: string, readConfig: ReadConfigFile)
   const dirKey = await pathKey(dir);
   const gitDir = dirs === null ? null : await pathKey(dirs.gitDir);
   const expected = new Set<string>();
+  const known: RunSettingsBaseline[] = [];
   for (const b of baselines) {
     const repoCommon = await repoCommonDir(b.repoDir);
-    if (repoCommon !== null && repoCommon === common) expected.add(b.digest);
-    else if (await belongsTo(b, repoCommon, dirKey, gitDir))
+    if (repoCommon !== null && repoCommon === common) {
+      expected.add(b.digest);
+      known.push(b);
+    } else if (await belongsTo(b, repoCommon, dirKey, gitDir))
       throw new Error(`git in ${dir} is refused: its .git no longer leads to its repo's git directory`);
   }
   if (common === null || expected.size === 0) return false;
   const stamp = await runSettingsStamp(common);
   if (matched.get(common) === stamp) return true;
-  const digest = await runSettingsDigest(dir, readConfig);
-  if (digest === null || !expected.has(digest))
-    throw new Error(
-      `git in ${dir} is refused: the repo's git settings that make git run a program (.git/config, .git/info/attributes or .git/hooks) changed since a task in the sandbox started; check them and undo the change`,
-    );
+  const now = await readRunSettings(dir, readConfig);
+  if (now === null || !expected.has(now.digest)) throw new Error(refusal(dir, now, known));
   matched.set(common, stamp);
   return true;
+}
+
+/**
+ * The refusal of git in `dir`: what changed against the guard closest to `now`, the tasks whose guards these are, the
+ * two ways out, and how to keep a package install in a task from writing the shared hooks again.
+ */
+function refusal(dir: string, now: RunSettings | null, known: readonly RunSettingsBaseline[]): string {
+  const what = changedPlacesText(now, known, MAX_NAMED_CHANGES);
+  const tasks = [...new Set(known.map((b) => b.branch))].join(", ");
+  return [
+    `git in ${dir} is refused: the repo's git settings that make git run a program changed since a task in the sandbox started (${what}).`,
+    `Tasks in the sandbox in this repo: ${tasks}.`,
+    "Undo the change, or, for a hook or .git/info/attributes, read it and accept it in Trackwall under End task of one of those tasks.",
+    "A package install in a task (lefthook, simple-git-hooks) writes the hooks every worktree shares; to prevent it, add the repo's .git/hooks and .git/config to readonlyPaths in the sandbox settings of Copilot CLI.",
+  ].join(" ");
 }
 
 /**
@@ -171,7 +218,7 @@ function stampOf(info: Stats | undefined): string {
   return info ? `${info.mtimeMs}:${info.ctimeMs}:${info.size}:${info.ino}` : "-";
 }
 
-/** The identities of every file `runSettingsDigest` reads, without reading them. */
+/** The identities of every file `readRunSettings` reads, without reading them. */
 async function runSettingsStamp(common: string): Promise<string> {
   const [config, attributes, hooks, worktrees] = await Promise.all([
     statIfExists(join(common, "config")),
@@ -188,26 +235,31 @@ async function folderStamp(folder: string): Promise<string> {
   return keys.join(",");
 }
 
-async function hookContents(common: string): Promise<string[]> {
+/** Each hook file's name and bytes, sorted by name; a folder named like a hook has none. */
+async function hookFiles(common: string): Promise<[string, Buffer | null][]> {
   const folder = join(common, "hooks");
   const names = await namesIn(folder);
-  return Promise.all(names.map(async (name) => `${name}\n${await readHook(join(folder, name))}`));
+  return Promise.all(
+    names.map(async (name): Promise<[string, Buffer | null]> => {
+      const path = join(folder, name);
+      const info = await statIfExists(path);
+      return [name, info?.isFile() ? await readFile(path) : null];
+    }),
+  );
 }
 
-/** A hook's bytes as hex; a folder named like a hook has none. */
-async function readHook(path: string): Promise<string> {
-  const info = await statIfExists(path);
-  if (!info?.isFile()) return "-";
-  return createHash("sha256")
-    .update(await readFile(path))
-    .digest("hex");
-}
-
-async function worktreeConfigContents(common: string): Promise<string[]> {
+/** Each existing `config.worktree` with its path from the common directory (starting with a separator), its text and entries. */
+async function worktreeConfigContents(common: string, readConfig: ReadConfigFile): Promise<RunSettingsFiles["worktreeConfigs"]> {
   const files = await worktreeConfigFiles(common);
   // Only those that exist: a new task's worktree must not change the digest the other tasks of the repo started with.
-  const contents = await Promise.all(files.map(async (file) => [file.slice(common.length), await readIfExists(file)] as const));
-  return contents.filter(([, content]) => content !== "").map(([file, content]) => `${file}\n${content}`);
+  const read = await Promise.all(
+    files.map(async (path) => {
+      const content = await readIfExists(path);
+      const entries = content === "" ? [] : (await readConfig(path)).split("\0").filter((entry) => entry !== "");
+      return { file: path.slice(common.length), content, entries, counted: countedEntries(entries.join("\0")) };
+    }),
+  );
+  return read.filter(({ content }) => content !== "");
 }
 
 /** `config.worktree` of the repo and of each of its worktrees (`worktrees/<name>/`), whether or not it exists. */
