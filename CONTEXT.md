@@ -218,7 +218,7 @@ The daemon's comparison, every second, of the set of repos in the projects folde
 _Avoid_: file watcher (the daemon does not use file system notifications), working directory watch (the working directory is not watched)
 
 **Server check** (`ServerCheck`, snapshot `ServerCheckState`, `workspaceApi.serverCheck`, key `serverCheck`; in the UI "new on the server", and *Check for new commits* in Settings > Repo hosts):
-The daemon's question, every 15 minutes, to the server of each repo: has the branch the checked-out branch tracks, or the default branch, moved since the repo's last fetch? It asks with one `git ls-remote` from outside the repo, with only the user's own sign-in, as the doctor does (ADR-195, ADR-295, ADR-297), fetches nothing, and names the remote-tracking branches the server moved past (`remoteBranches`). A repo whose checked-out branch's server has such commits reads "new on the server" in All repos and the repo list, and one whose default branch has gets a line in the New task form (the new task base), until a fetch counts them. On without the key; `serverCheck: false` turns it off.
+The daemon's question, every 15 minutes, to the server of each repo: has the branch the checked-out branch tracks, or the default branch, moved since the repo's last fetch? It asks with one `git ls-remote` from outside the repo, with only the user's own sign-in, as the doctor does (ADR-195, ADR-295, ADR-298), fetches nothing, and names the remote-tracking branches the server moved past (`remoteBranches`). A repo whose checked-out branch's server has such commits reads "new on the server" in All repos and the repo list, and one whose default branch has gets a line in the New task form (the new task base), until a fetch counts them. On without the key; `serverCheck: false` turns it off.
 _Avoid_: background fetch, auto-fetch (nothing is fetched), remote watch (the repo watch reads only the repo's own files)
 
 **Changes** (working directory changes, `WorkingTreeChanges`, the `changes` action; the "Changes" tab in the UI):
@@ -274,7 +274,7 @@ A separate git working directory for a task, on the task's branch, in `<task wor
 The commit of the default branch from which the task's branch started. The task changes (`TaskChanges`) are the worktree's working directory against it: the task's commits and uncommitted files together.
 
 **New task base** (`NewTaskBase`, `workspaceApi.newTaskBase`, `new-task-base`; in the UI the line above "Create task" and its "Sync main", `NewTaskBaseNote`):
-Where a new task of a repo starts against the server: the repo's local default branch, which a task branches from, against the remote-tracking branch a sync moves it to, as of the repo's last fetch (ADR-297). The New task form says when it is behind, also when the server check found newer commits since, and "Sync main" syncs that one repo (`sync-repo`).
+Where a new task of a repo starts against the server: the repo's local default branch, which a task branches from, against the remote-tracking branch a sync moves it to, as of the repo's last fetch (ADR-298). The New task form says when it is behind, also when the server check found newer commits since, and "Sync main" syncs that one repo (`sync-repo`).
 _Avoid_: base branch (the branch a task already started from), outdated main
 
 **Task port** (`Task.port`, `TASK_PORT_FIRST`…`TASK_PORT_LAST`, `TASK_PORT_ENV`):
@@ -295,8 +295,8 @@ The files a repo keeps outside git on purpose, only for this clone: `mise.local.
 _Avoid_: overlay, local files (that is `.worktreeinclude`'s included files)
 
 **Workspace store** (`TrackwallFolder` `local`: `.trackwall/local`, `WorkspaceStore`, `workspaceStoreDir`; UI "Workspace store"):
-The git repo in the projects folder where Trackwall keeps what the user set up for the workspace, with its history: today the local config of every repo as `repos/<repo folder>/<file>` (ADR-297), committed by Trackwall a few seconds after a file changes and pushed only to the address the user allowed (ADR-86, ADR-127). The repo list skips it. Its folder and the `workspace.yaml` key of its remote (`localConfigRemote`) keep the names they had before ADR-297.
-_Avoid_: local config store (its name before ADR-297), backup repo, overlay folder
+The git repo in the projects folder where Trackwall keeps what the user set up for the workspace, with its history: today the local config of every repo as `repos/<repo folder>/<file>` (ADR-298), committed by Trackwall a few seconds after a file changes and pushed only to the address the user allowed (ADR-86, ADR-127). The repo list skips it. Its folder and the `workspace.yaml` key of its remote (`localConfigRemote`) keep the names they had before ADR-298.
+_Avoid_: local config store (its name before ADR-298), backup repo, overlay folder
 
 **Work backup** (`WorkBackup`, module `work-backup`, `WorkBackupInfo`; UI "Container work backup"):
 One file, `trackwall-backup-<date>-<time>.tar.gz`, with everything that lives only in the container's volume: for each repo with unpushed work a `git bundle` of its branches, stashes and the uncommitted changes of each of its worktrees, and Trackwall's own files a new container lacks (ADR-275). Only where the daemon runs in a container; only the last one stays there, and the user downloads it to their computer. Files git ignores and sign-ins never go in. Restoring one (`WorkRestore`, `WorkBackupRestore`; UI "Restore from a backup…") brings it back into clones the user made and only adds: new branches, forward moves, stashes, `restored/` branches and missing `.trackwall` files.

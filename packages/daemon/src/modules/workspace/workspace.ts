@@ -416,7 +416,7 @@ export class Workspace {
   }
 
   /**
-   * Sync of one repo, for the batch command (§4.8) and "Sync main" in the New task form (ADR-297); a repo that is being
+   * Sync of one repo, for the batch command (§4.8) and "Sync main" in the New task form (ADR-298); a repo that is being
    * cloned is an error. A running sync of the whole folder does not get in the way, because `vcs` syncs one `.git`
    * directory at a time.
    */
@@ -426,7 +426,7 @@ export class Workspace {
     return this.deps.vcs.sync(entry.path);
   }
 
-  /** Where a new task of the repo starts, against the server as of the last fetch (ADR-297). */
+  /** Where a new task of the repo starts, against the server as of the last fetch (ADR-298). */
   async newTaskBase(id: string): Promise<NewTaskBase | null> {
     const entry = await this.entry(id);
     return this.inRepo(entry, () => this.deps.vcs.newTaskBase(entry.path));

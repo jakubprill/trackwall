@@ -2,8 +2,8 @@ import { basename } from "node:path";
 import { LOCAL_CONFIG_FILES, type LocalConfigFileName } from "@trackwall/protocol";
 
 /**
- * Where things lie in the workspace store (§4.13, ADR-297): the repos' local config files under `repos/<repo folder>/`, so
- * the store's other folders can never be mistaken for a repo named like them. A store from before ADR-297 kept them at
+ * Where things lie in the workspace store (§4.13, ADR-298): the repos' local config files under `repos/<repo folder>/`, so
+ * the store's other folders can never be mistaken for a repo named like them. A store from before ADR-298 kept them at
  * `<repo folder>/<file>`; `moveToReposFolder` names the moves that bring such a store, or a file an older Trackwall on
  * another computer committed into it, into this layout.
  */
@@ -23,7 +23,7 @@ export interface StoreMove {
 }
 
 /**
- * The files of the store at `paths` (a commit's files, with `/`) that lie where a store from before ADR-297 put them: a
+ * The files of the store at `paths` (a commit's files, with `/`) that lie where a store from before ADR-298 put them: a
  * local config file right under a repo's folder. Nothing else at two levels is a repo's file, so the store's other
  * folders stay where they are.
  */

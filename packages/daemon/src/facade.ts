@@ -247,7 +247,7 @@ export { HOSTING_CLIS } from "./modules/vcs/hosting.ts";
 const WORKSPACE_FILE = "workspace.yaml";
 const RUNTIME_FILE = "runtime.json";
 const CARDS_DIR = "cards";
-/** The repo the workspace store is pushed from (ADR-127); its folder keeps the name it had before the store was renamed (ADR-297), so an existing push repo stays in use. */
+/** The repo the workspace store is pushed from (ADR-127); its folder keeps the name it had before the store was renamed (ADR-298), so an existing push repo stays in use. */
 const WORKSPACE_STORE_PUSH_DIR = "local-config-push";
 const DAY_START_FILE = "day-start.json";
 const ROUTINE_APPROVALS_FILE = "routine-approvals.json";

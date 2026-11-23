@@ -230,13 +230,13 @@ export class Vcs {
 
   /**
    * The remote-tracking branches the server moved past since the last fetch, out of the one the checked-out branch tracks
-   * and the default branch, asked outside the repo (ADR-295, ADR-297); git's error when a server does not answer.
+   * and the default branch, asked outside the repo (ADR-295, ADR-298); git's error when a server does not answer.
    */
   newOnServer(dir: string): Promise<string[]> {
     return newOnServer(dir, this.serverQuestionsDir);
   }
 
-  /** Where a new task of the repo starts, against the server as of the last fetch (ADR-297); `null` with nothing to compare. */
+  /** Where a new task of the repo starts, against the server as of the last fetch (ADR-298); `null` with nothing to compare. */
   readonly newTaskBase = newTaskBase;
 
   private async readStatus(dir: string): Promise<TimedStatus> {

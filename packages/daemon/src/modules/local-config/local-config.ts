@@ -21,7 +21,7 @@ import { moveToReposFolder, storePath } from "./store-layout.ts";
 
 /**
  * The `local-config` module (§4.13, ADR-86): the files a repo keeps outside git on purpose (`LOCAL_CONFIG_FILES`), backed
- * up into the workspace store, `.trackwall/local` in the projects folder (ADR-125), as `repos/<repo folder>/<file>` (ADR-297). The store is a git
+ * up into the workspace store, `.trackwall/local` in the projects folder (ADR-125), as `repos/<repo folder>/<file>` (ADR-298). The store is a git
  * repo the daemon commits to and, when the user allowed its remote (ADR-127), pushes, so every version is in its history and a new computer
  * clones it. The store's last commit is the backup: every few seconds the daemon compares each repo's files by `stat`,
  * reads only the changed ones and commits those whose content differs from the last commit's. The repo's file wins: a
@@ -379,7 +379,7 @@ export class LocalConfig {
   }
 
   /**
-   * Moves the files of a store from before ADR-297 into `repos/` with one commit, and their copies in the store's folder
+   * Moves the files of a store from before ADR-298 into `repos/` with one commit, and their copies in the store's folder
    * with them; the store's commit after it. Only when the commit is new to this pass, so a pass with nothing changed
    * still starts no git process; a store an older Trackwall on another computer pushed to is moved again after a pull.
    */
@@ -488,7 +488,7 @@ export class LocalConfig {
   }
 }
 
-/** The message of the commit that brings a store from before ADR-297 into its layout. */
+/** The message of the commit that brings a store from before ADR-298 into its layout. */
 const LAYOUT_MESSAGE = "Move the repos' local config into repos/";
 
 /** A store holds a few files per repo; a listing past this is not one Trackwall wrote, and only its first part is moved. */
