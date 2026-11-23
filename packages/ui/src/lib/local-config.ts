@@ -1,9 +1,9 @@
-import type { LocalConfigFileState, LocalConfigStore, RepoLocalConfig } from "@trackwall/protocol";
+import type { LocalConfigFileState, RepoLocalConfig, WorkspaceStore } from "@trackwall/protocol";
 import { relativeTime } from "./format.ts";
 import type { StatusTone } from "./repo-status.ts";
 
 /**
- * The local config store in the UI (ADR-86): what each local config file of a repo says against the store, which actions
+ * The workspace store in the UI (ADR-86): what each local config file of a repo says against the store, which actions
  * a repo offers, and one line for the store in the settings. Pure functions, tested in `test/local-config.test.ts`.
  */
 
@@ -39,7 +39,7 @@ export function hasLocalConfig(config: RepoLocalConfig): boolean {
 }
 
 /** The last backup, and the push to the address the user allowed (ADR-127), in one line each. */
-export function localConfigStoreLines(store: LocalConfigStore, now: Date): { backup: string; push: { tone?: StatusTone; text: string } } {
+export function workspaceStoreLines(store: WorkspaceStore, now: Date): { backup: string; push: { tone?: StatusTone; text: string } } {
   const backup = store.lastBackup
     ? `Last backup ${relativeTime(store.lastBackup.date, now)}: ${store.lastBackup.subject}`
     : "Nothing backed up yet.";
@@ -64,7 +64,7 @@ export function localConfigStoreLines(store: LocalConfigStore, now: Date): { bac
  * The store's remote when it is not the address the store is pushed to (ADR-127): the user added it, or an agent did, so
  * the user decides. `problem` says why it cannot be allowed; `null` when it is the allowed one or there is none.
  */
-export function remoteToAllow(store: LocalConfigStore): { remote: string; problem: string | null } | null {
+export function remoteToAllow(store: WorkspaceStore): { remote: string; problem: string | null } | null {
   if (store.remote === null || store.remoteAllowed) return null;
   return { remote: store.remote, problem: store.remoteProblem };
 }

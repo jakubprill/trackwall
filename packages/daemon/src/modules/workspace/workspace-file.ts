@@ -33,7 +33,7 @@ import { type WorkspaceKeyValues, workspaceKeyValue } from "./workspace-key-valu
 /**
  * `workspace.yaml` (§4.5, ADR-13): the workspace configuration, which the user can edit by hand and keep
  * in a private repo. Read on every use, so a manual edit works without restarting the daemon. A write changes
- * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the local config store writes, or `sessionProfile`, or `autoReview`, or `alwaysAllow`, which "Always allow" in an approval dialog and Settings › Agents write, or `supervisorModel`, or `retryModel`, or `taskTokenBudget`, or `runningTasksWarning`, or `serverCheck`, or `supervisor`, or `sandbox`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `agentSecrets` and `taskBranchPrefix` only by hand) and keeps comments and the other keys,
+ * only one key (`projectsDir`, `worktreesDir`, `gitProgram`, `repoHosts`, `starredRepos`, which the star in Repos writes, `javaNavigation`, which the Java navigation install writes, or `localConfigRemote`, which "Push to this remote" for the workspace store writes, or `sessionProfile`, or `autoReview`, or `alwaysAllow`, which "Always allow" in an approval dialog and Settings › Agents write, or `supervisorModel`, or `retryModel`, or `taskTokenBudget`, or `runningTasksWarning`, or `serverCheck`, or `supervisor`, or `sandbox`; `repoTags`, `graph`, `toolPermissions`, `dayStart`, `agentSecrets` and `taskBranchPrefix` only by hand) and keeps comments and the other keys,
  * including the `repos` list from version 0.2.0, which is no longer read (ADR-18): it is the user's file, so removing it is up to them.
  */
 
@@ -109,7 +109,7 @@ const Keys: { [K in WorkspaceKey]: z.ZodType<WorkspaceKeyValues[K], unknown> } =
     .refine((settings) => settings.runtimes.every((path) => !path.includes(",")), "a runtimes path must not contain a comma")
     .nullish()
     .transform((settings) => settings ?? null),
-  // The only address the local config store is pushed to (ADR-127); set by "Push to this remote" in Settings or by hand.
+  // The only address the workspace store is pushed to (ADR-127); set by "Push to this remote" in Settings or by hand.
   localConfigRemote: z
     .string()
     .min(1)
@@ -222,7 +222,7 @@ export class WorkspaceFile {
     return this.get("retryModel", Keys.retryModel);
   }
 
-  /** The address the local config store may be pushed to (`localConfigRemote`, ADR-127); `null` keeps it unpushed. */
+  /** The address the workspace store may be pushed to (`localConfigRemote`, ADR-127); `null` keeps it unpushed. */
   localConfigRemote(): string | null {
     return this.get("localConfigRemote", Keys.localConfigRemote);
   }

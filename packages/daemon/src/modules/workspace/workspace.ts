@@ -773,7 +773,7 @@ export class Workspace {
     return this.deps.file.agentSecrets();
   }
 
-  /** The only address the local config store is pushed to (ADR-127); `null` until the user allows one. */
+  /** The only address the workspace store is pushed to (ADR-127); `null` until the user allows one. */
   localConfigRemote(): string | null {
     return this.deps.file.localConfigRemote();
   }

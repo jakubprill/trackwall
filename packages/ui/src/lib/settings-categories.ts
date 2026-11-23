@@ -19,7 +19,7 @@ export const SETTINGS_CATEGORIES = [
     label: "Workspace",
     description:
       "Where your repos and task worktrees live, which git reads them, and the backups of their local config and of a container's work.",
-    sections: ["projects-folder", "worktrees-dir", "git-program", "local-config-store", "work-backup"],
+    sections: ["projects-folder", "worktrees-dir", "git-program", "workspace-store", "work-backup"],
     wide: false,
     group: "settings",
   },

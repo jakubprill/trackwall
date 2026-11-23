@@ -15,7 +15,7 @@ import { useRemote } from "@/lib/use-remote";
 const POLL_MS = 10_000;
 
 /**
- * The repo's local config files against the local config store (ADR-86): `mise.local.toml` and `.worktreeinclude`, kept
+ * The repo's local config files against the workspace store (ADR-86): `mise.local.toml` and `.worktreeinclude`, kept
  * outside git, backed up on their own; Restore after a new clone and Ignore locally for a file git would commit.
  */
 export function RepoLocalConfig({ conn, repo, onRestored }: { conn: Connection; repo: string; onRestored: () => void }) {
@@ -55,13 +55,12 @@ function LocalConfigPanel({
   if (!hasLocalConfig(config)) {
     return (
       <p className="text-muted-foreground text-xs">
-        Tasks only for this computer go in mise.local.toml in the repo root: Trackwall backs it up to the local config store, outside the
-        repo.
+        Tasks only for this computer go in mise.local.toml in the repo root: Trackwall backs it up to the workspace store, outside the repo.
       </p>
     );
   }
   return (
-    <Surface label="Local config" note="Kept outside git and backed up to the local config store in your projects folder.">
+    <Surface label="Local config" note="Kept outside git and backed up to the workspace store in your projects folder.">
       <ul className="divide-y">
         {config.files.map((state) => (
           <li key={state.file} className="flex items-center gap-3 px-3 py-2 text-sm">

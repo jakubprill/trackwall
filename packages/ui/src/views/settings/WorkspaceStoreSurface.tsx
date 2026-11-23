@@ -6,18 +6,18 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { localConfigStoreLines, remoteToAllow } from "@/lib/local-config";
+import { remoteToAllow, workspaceStoreLines } from "@/lib/local-config";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
 const POLL_MS = 10_000;
 
 /**
- * The local config store (ADR-86): where the repos' local config files are backed up, the last backup and the push to
+ * The workspace store (ADR-86): where the repos' local config files are backed up, the last backup and the push to
  * the store's remote. The store follows the projects folder, and the user adds a remote with git, then allows it here
  * (ADR-127), since an agent can add one too.
  */
-export function LocalConfigStoreSurface({ conn }: { conn: Connection }) {
+export function WorkspaceStoreSurface({ conn }: { conn: Connection }) {
   const load = useCallback(() => post(conn, localConfigApi.store, {}), [conn]);
   const store = useRemote(load, { pollMs: POLL_MS });
   const allow = useAction((remote: string) => post(conn, localConfigApi.allowRemote, { remote }), store.reload);
@@ -34,7 +34,7 @@ export function LocalConfigStoreSurface({ conn }: { conn: Connection }) {
       {!store.data && !store.error && <Loading />}
       {store.data?.dir === null && <p className="text-sm">Set the projects folder first.</p>}
       {store.data?.dir && (
-        <StoreDetails dir={store.data.dir} {...localConfigStoreLines(store.data, new Date())} problem={store.data.problem} />
+        <StoreDetails dir={store.data.dir} {...workspaceStoreLines(store.data, new Date())} problem={store.data.problem} />
       )}
       {store.data?.pushesTo && (
         <div className="flex items-center gap-3">
@@ -57,7 +57,7 @@ function StoreDetails({
 }: {
   dir: string;
   backup: string;
-  push: ReturnType<typeof localConfigStoreLines>["push"];
+  push: ReturnType<typeof workspaceStoreLines>["push"];
   problem: string | null;
 }) {
   return (

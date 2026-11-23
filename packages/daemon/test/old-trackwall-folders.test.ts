@@ -32,7 +32,7 @@ async function setup() {
   return { projects, facade, logged, move: () => facade.workspace.moveOldTrackwallFolders(log) };
 }
 
-/** A local config store from before ADR-125: a git repo with one backup and a remote. */
+/** A workspace store from before ADR-125: a git repo with one backup and a remote. */
 function oldStore(projects: string): string {
   const store = join(projects, ".trackwall-local");
   mkdirSync(join(store, "orders"), { recursive: true });
@@ -45,7 +45,7 @@ function oldStore(projects: string): string {
 }
 
 describe("the folders from before .trackwall", () => {
-  test("the local config store, removed repos, task indexes and scratch folder move into .trackwall, and the old folders go", async () => {
+  test("the workspace store, removed repos, task indexes and scratch folder move into .trackwall, and the old folders go", async () => {
     const { projects, move } = await setup();
     oldStore(projects);
     mkdirSync(join(projects, ".trackwall-removed", "old-api"), { recursive: true });

@@ -85,7 +85,7 @@ function noMiseReason(card: RepoCard, repo: TaggedRepo): string | undefined {
 
 /**
  * `local-mise`: the repo has mise tasks only this clone has, in files git does not keep (ADR-110), so a new clone or another
- * computer lacks them until they are restored from the local config store.
+ * computer lacks them until they are restored from the workspace store.
  */
 function localMiseReason(repo: TaggedRepo): string | undefined {
   const files = [...new Set(repo.localMiseTasks.map((t) => t.evidence.path))];

@@ -12,7 +12,7 @@ import { commitFiles, gitIn, makeRepo } from "./support/git-repo.ts";
 import { fakeHostingClis } from "./support/hosting.ts";
 
 /**
- * The local config store (ADR-86) through the real facade, on a real projects folder and real git; the test runs each
+ * The workspace store (ADR-86) through the real facade, on a real projects folder and real git; the test runs each
  * backup itself instead of the timer, and waits for the store's push with `settled`.
  */
 async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-")), hostingClis = HOSTING_CLIS) {
@@ -73,7 +73,7 @@ function restoreEnv(name: string, value: string | undefined): void {
   else process.env[name] = value;
 }
 
-describe("the local config store", () => {
+describe("the workspace store", () => {
   test("a repo's mise.local.toml and .worktreeinclude land in the store as a commit by Trackwall, and the repo list skips the store", async () => {
     const { projects, store, facade, backUp, storeLog } = await setup();
     const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
@@ -82,9 +82,9 @@ describe("the local config store", () => {
 
     await backUp();
 
-    expect(readFileSync(join(store, "orders", "mise.local.toml"), "utf8")).toBe(TASKS);
+    expect(readFileSync(join(store, "repos", "orders", "mise.local.toml"), "utf8")).toBe(TASKS);
     expect(storeLog()).toBe(
-      "Trackwall|Back up orders: .worktreeinclude, mise.local.toml\n\norders/.worktreeinclude\norders/mise.local.toml",
+      "Trackwall|Back up orders: .worktreeinclude, mise.local.toml\n\nrepos/orders/.worktreeinclude\nrepos/orders/mise.local.toml",
     );
     expect((await facade.workspace.list("fresh")).repos.map((r) => r.id)).toEqual(["orders"]);
   });
@@ -96,7 +96,7 @@ describe("the local config store", () => {
 
     await backUp();
 
-    expect(storeLog()).toBe("Trackwall|Back up orders: mise.local.toml\n\norders/mise.local.toml");
+    expect(storeLog()).toBe("Trackwall|Back up orders: mise.local.toml\n\nrepos/orders/mise.local.toml");
     expect(readdirSync(join(projects, ".trackwall", "scratch"))).toEqual([]);
   });
 
@@ -113,8 +113,8 @@ describe("the local config store", () => {
     await backUp();
 
     expect(storeCommits()).toBe(2);
-    expect(readFileSync(join(store, "orders", "mise.local.toml"), "utf8")).toBe(changed);
-    expect(gitIn(store, "show", "HEAD~1:orders/mise.local.toml")).toBe(TASKS);
+    expect(readFileSync(join(store, "repos", "orders", "mise.local.toml"), "utf8")).toBe(changed);
+    expect(gitIn(store, "show", "HEAD~1:repos/orders/mise.local.toml")).toBe(TASKS);
     expect(gitIn(store, "status", "--porcelain")).toBe("");
   });
 
@@ -124,7 +124,7 @@ describe("the local config store", () => {
 
     await backUp();
 
-    expect(existsSync(join(store, "web"))).toBe(false);
+    expect(existsSync(join(store, "repos", "web"))).toBe(false);
     expect((await facade.localConfig.repo("web")).files).toEqual([
       { kind: "tracked", file: "mise.toml" },
       { kind: "absent", file: "mise.local.toml" },
@@ -137,14 +137,14 @@ describe("the local config store", () => {
     const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
     writeFileSync(join(orders, "mise.toml"), TASKS);
     await backUp();
-    expect(storeLog()).toBe("Trackwall|Back up orders: mise.toml\n\norders/mise.toml");
+    expect(storeLog()).toBe("Trackwall|Back up orders: mise.toml\n\nrepos/orders/mise.toml");
 
     await removeFolder(orders);
     makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
     await facade.localConfig.restore("orders");
 
     expect(readFileSync(join(orders, "mise.toml"), "utf8")).toBe(TASKS);
-    expect(readFileSync(join(store, "orders", "mise.toml"), "utf8")).toBe(TASKS);
+    expect(readFileSync(join(store, "repos", "orders", "mise.toml"), "utf8")).toBe(TASKS);
     expect(readFileSync(join(orders, ".git", "info", "exclude"), "utf8")).toEndWith("\n/mise.toml\n");
   });
 
@@ -258,7 +258,7 @@ describe("the local config store", () => {
     rmSync(join(orders, "mise.toml"));
 
     expect((await facade.localConfig.repo("orders")).files[0]).toEqual({ kind: "tracked", file: "mise.toml" });
-    await expect(facade.localConfig.restore("orders")).rejects.toThrow("the local config store has nothing this repo lacks");
+    await expect(facade.localConfig.restore("orders")).rejects.toThrow("the workspace store has nothing this repo lacks");
     expect(existsSync(join(orders, "mise.toml"))).toBe(false);
   });
 
@@ -316,7 +316,7 @@ describe("the local config store", () => {
     const { projects, facade } = await setup();
     makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
 
-    await expect(facade.localConfig.restore("orders")).rejects.toThrow("the local config store has nothing this repo lacks");
+    await expect(facade.localConfig.restore("orders")).rejects.toThrow("the workspace store has nothing this repo lacks");
   });
 
   test(
@@ -353,7 +353,7 @@ describe("the local config store", () => {
         // Another computer pushed first: the push is refused, never forced.
         const other = join(mkdtempSync(join(tmpdir(), "trackwall-other-")), "store");
         gitIn(projects, "clone", "-q", "-b", "main", bare, other);
-        commitFiles(other, { "web/mise.local.toml": TASKS }, "Back up web: mise.local.toml");
+        commitFiles(other, { "repos/web/mise.local.toml": TASKS }, "Back up web: mise.local.toml");
         gitIn(other, "push", "-q", "origin", "main");
         writeFileSync(join(orders, "mise.local.toml"), `${TASKS}# third\n`);
         await backUp();
@@ -550,7 +550,7 @@ describe("the local config store", () => {
 
     await backUp();
 
-    expect(gitIn(store, "show", "HEAD:orders/.worktreeinclude")).toBe("mise.local.toml\n");
+    expect(gitIn(store, "show", "HEAD:repos/orders/.worktreeinclude")).toBe("mise.local.toml\n");
     expect((await facade.localConfig.store()).problem).toContain("mise.local.toml");
   });
 
@@ -569,7 +569,7 @@ describe("the local config store", () => {
     await backUp();
     await backUp();
 
-    expect(existsSync(join(store, "orders"))).toBe(false);
+    expect(existsSync(join(store, "repos", "orders"))).toBe(false);
     expect((await facade.localConfig.store()).problem).toContain("mise.local.toml is not a regular file");
     expect(logged).toHaveLength(1);
   });
@@ -596,11 +596,53 @@ describe("the local config store", () => {
     writeFileSync(join(orders, "mise.local.toml"), TASKS);
     await backUp();
 
-    commitFiles(store, { "orders/mise.local.toml": "# from another computer\n" }, "Back up orders: mise.local.toml");
+    commitFiles(store, { "repos/orders/mise.local.toml": "# from another computer\n" }, "Back up orders: mise.local.toml");
     await backUp();
 
     expect(storeCommits()).toBe(3);
-    expect(gitIn(store, "show", "HEAD:orders/mise.local.toml")).toBe(TASKS);
+    expect(gitIn(store, "show", "HEAD:repos/orders/mise.local.toml")).toBe(TASKS);
+  });
+
+  test("a store from before repos/ moves its repos' files there in one commit, their copies with them, and Restore finds them", async () => {
+    const { projects, store, facade, backUp } = await setup();
+    mkdirSync(join(projects, ".trackwall"));
+    makeRepo({ "orders/mise.local.toml": TASKS, "web/.worktreeinclude": ".env\n" }, "local", join(projects, ".trackwall"));
+    makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+
+    await backUp();
+
+    expect(gitIn(store, "log", "-1", "--format=%an|%s", "--name-status").trim()).toBe(
+      [
+        "Trackwall|Move the repos' local config into repos/",
+        "",
+        "R100\torders/mise.local.toml\trepos/orders/mise.local.toml",
+        "R100\tweb/.worktreeinclude\trepos/web/.worktreeinclude",
+      ].join("\n"),
+    );
+    expect(readdirSync(store).sort()).toEqual([".git", "repos"]);
+    expect(readFileSync(join(store, "repos", "orders", "mise.local.toml"), "utf8")).toBe(TASKS);
+    expect(gitIn(store, "status", "--porcelain")).toBe("");
+    expect((await facade.localConfig.restore("orders")).files).toContainEqual({
+      kind: "backed_up",
+      file: "mise.local.toml",
+      ignored: true,
+    });
+    expect(readFileSync(join(projects, "orders", "mise.local.toml"), "utf8")).toBe(TASKS);
+  });
+
+  test("a file an older Trackwall on another computer commits in the old place is moved into repos/ after the pull", async () => {
+    const { projects, store, backUp, storeCommits } = await setup();
+    const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+    writeFileSync(join(orders, "mise.local.toml"), TASKS);
+    await backUp();
+
+    commitFiles(store, { "web/mise.local.toml": "# from another computer\n" }, "Back up web: mise.local.toml");
+    await backUp();
+    await backUp();
+
+    expect(storeCommits()).toBe(3);
+    expect(gitIn(store, "show", "HEAD:repos/web/mise.local.toml")).toBe("# from another computer\n");
+    expect(existsSync(join(store, "web"))).toBe(false);
   });
 
   test("a store whose .git/config could run a program is refused until the key is gone, and nothing runs meanwhile", async () => {
@@ -634,7 +676,7 @@ describe("the local config store", () => {
 
     await backUp();
 
-    expect(existsSync(join(store, "orders"))).toBe(false);
+    expect(existsSync(join(store, "repos", "orders"))).toBe(false);
     expect((await facade.localConfig.store()).problem).toContain("is larger than 256 KB");
   });
 

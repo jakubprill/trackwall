@@ -21,10 +21,11 @@ Everything Trackwall keeps beside your repos lives in one folder of your project
 │   ├── mise.local.toml          your tasks, only on this computer
 │   └── .worktreeinclude         which ignored files a task's worktree gets
 └── .trackwall/
-    ├── local/                   the local config store, a git repo of its own
-    │   └── orders-api/
-    │       ├── mise.local.toml  every version of your file, one commit each
-    │       └── .worktreeinclude
+    ├── local/                   the workspace store, a git repo of its own
+    │   └── repos/
+    │       └── orders-api/
+    │           ├── mise.local.toml   every version of your file, one commit each
+    │           └── .worktreeinclude
     ├── worktrees/               the agent tasks' worktrees
     │   └── orders-api/
     │       └── fix-login/       one task: its branch, plus your copied files
@@ -89,7 +90,7 @@ Only files git ignores are copied, and a file you ignore with "Ignore locally" c
 
 Some teams keep mise config out of their repos. Then your own tasks go into `mise.local.toml`, or into a whole `mise.toml` that git ignores. These files live only in your clone: delete the folder, and they are gone.
 
-The local config store keeps them safe: Trackwall copies each of them, and `.worktreeinclude`, to `.trackwall/local/<repo>/` a few seconds after it changes, with every version kept, and puts them back when you clone the repo again.
+The workspace store keeps them safe: Trackwall copies each of them, and `.worktreeinclude`, to `.trackwall/local/repos/<repo>/` a few seconds after it changes, with every version kept, and puts them back when you clone the repo again.
 
 The store and the worktrees never meet. The store backs up and restores your repo's own folder; a worktree gets its files from the repo root through `.worktreeinclude`. So the path of a file is always store → repo → worktree, and you only ever edit the one in the repo. [Local config backup](/features/local-config) has the details, including a private remote for a second computer.
 
