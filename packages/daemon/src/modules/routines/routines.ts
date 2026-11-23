@@ -1,6 +1,7 @@
 import type { Routine, RoutineDigest, RoutineEntry, RoutineList, RoutineName } from "@trackwall/protocol";
 import { type ApprovedFile, ApprovedFolder } from "../../infra/approved-folder.ts";
 import { DomainError } from "../../infra/errors.ts";
+import type { FolderCopies } from "../../infra/named-file-folder.ts";
 import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 import { ROUTINE_FILE_FORMAT, writeRoutineFile } from "./routine-file.ts";
 
@@ -38,6 +39,11 @@ export class Routines {
   async list(): Promise<RoutineList> {
     const { files, problems } = await this.#folder.list();
     return { routines: files.map(entry), problems };
+  }
+
+  /** The approved routines' files as they are on disk, for the workspace store (ADR-298); proposals stay out. */
+  storeCopies(): Promise<FolderCopies> {
+    return this.#folder.approvedCopies();
   }
 
   /** Writes the routine an agent proposed (`propose_routine`); it waits for approval unless its bytes are the approved ones. */

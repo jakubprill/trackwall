@@ -36,6 +36,21 @@ export interface FolderFile<T> {
   bytes: Buffer;
 }
 
+/** A file as the workspace store keeps it (ADR-298): its file name in the folder and its bytes. */
+export interface FileCopy {
+  file: string;
+  bytes: Buffer;
+}
+
+/**
+ * A folder as the workspace store keeps it (ADR-298): the files to copy, and the files there whose current bytes must not
+ * go (a version waiting for approval, a file that cannot be read now), which the store keeps as it has them.
+ */
+export interface FolderCopies {
+  copies: FileCopy[];
+  held: string[];
+}
+
 export interface FolderProblem {
   file: string;
   message: string;
@@ -75,6 +90,17 @@ export class NamedFileFolder<T> {
     }
     if (names.length > maxFiles) problems.push({ file: names[maxFiles]?.file ?? "", message: `the list reads at most ${maxFiles} files` });
     return { files, problems };
+  }
+
+  /**
+   * The files that hold a value and pass `keep`, as they are on disk, for the workspace store (ADR-298); the rest, and a
+   * file that holds nothing, are held.
+   */
+  async copies(keep: (file: FolderFile<T>) => boolean = () => true): Promise<FolderCopies> {
+    const { files, problems } = await this.list();
+    const copies = files.filter(keep).map(({ name, bytes }) => ({ file: this.#fileName(name), bytes }));
+    const held = [...files.filter((file) => !keep(file)).map((file) => this.#fileName(file.name)), ...problems.map((p) => p.file)];
+    return { copies, held };
   }
 
   /** `undefined` when there is no file; a problem for one that holds nothing. */

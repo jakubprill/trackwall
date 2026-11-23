@@ -12,6 +12,7 @@ import {
 } from "@trackwall/protocol";
 import { type ApprovedFile, ApprovedFolder } from "../../infra/approved-folder.ts";
 import { DomainError } from "../../infra/errors.ts";
+import type { FolderCopies } from "../../infra/named-file-folder.ts";
 import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 import { KNOWLEDGE_FILE_FORMAT, writeKnowledgeFile } from "./knowledge-file.ts";
 
@@ -59,6 +60,11 @@ export class Knowledge {
   async list(): Promise<KnowledgeList> {
     const { files, problems } = await this.#folder.list();
     return { entries: files.map(listEntry), problems };
+  }
+
+  /** The approved entries' files as they are on disk, for the workspace store (ADR-298); proposals stay out. */
+  storeCopies(): Promise<FolderCopies> {
+    return this.#folder.approvedCopies();
   }
 
   /** The approved entries about `repo` (all of them without one), by name, without their evidence; what an agent may read. */

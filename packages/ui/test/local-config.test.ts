@@ -5,6 +5,7 @@ import {
   canRestore,
   hasLocalConfig,
   localConfigFileStatus,
+  planAndKnowledgeDestination,
   remoteToAllow,
   workspaceStoreLines,
 } from "../src/lib/local-config.ts";
@@ -71,6 +72,7 @@ describe("the workspace store in the settings", () => {
     remoteAllowed: false,
     remoteProblem: null,
     push: { kind: "none" },
+    keepsPlanAndKnowledge: false,
     problem: null,
   };
   const remote = "https://git.example.com/me/trackwall-local.git";
@@ -117,5 +119,15 @@ describe("the workspace store in the settings", () => {
       tone: "error",
       text: `Push to ${remote} failed: rejected`,
     });
+  });
+
+  test("turning on Plan and knowledge says where they go: nowhere without a pushed remote, or to the allowed address", () => {
+    expect(planAndKnowledgeDestination(store)).toBe("They stay on this computer: the store is pushed nowhere.");
+    expect(planAndKnowledgeDestination({ ...store, remote, remoteAllowed: false })).toBe(
+      "They stay on this computer: the store is pushed nowhere.",
+    );
+    expect(planAndKnowledgeDestination({ ...store, pushesTo: remote, remote, remoteAllowed: true })).toBe(
+      `They go to ${remote} with every push. Keep work knowledge on your company's server, not on a personal account.`,
+    );
   });
 });

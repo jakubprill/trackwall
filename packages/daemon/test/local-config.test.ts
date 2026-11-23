@@ -726,7 +726,9 @@ describe("the workspace store", () => {
       const { facade } = await setup(projects);
       const vcs = new Vcs(systemTempFolder, tmpdir());
       const pushDir = join(mkdtempSync(join(tmpdir(), "trackwall-home-")), "local-config-push");
-      const localConfig = new LocalConfig({ repos: facade.workspace, vcs, log: () => {}, pushDir, pushRetryMs: 0 });
+      const none = async () => ({ copies: [], held: [] });
+      const storeFolders = { knowledge: none, routines: none, board: none, "task-templates": none };
+      const localConfig = new LocalConfig({ repos: facade.workspace, vcs, storeFolders, log: () => {}, pushDir, pushRetryMs: 0 });
       const backUp = async () => {
         await localConfig.backUp();
         await localConfig.settled();
@@ -778,6 +780,7 @@ describe("the workspace store", () => {
       remoteAllowed: false,
       remoteProblem: null,
       push: { kind: "none" },
+      keepsPlanAndKnowledge: false,
       problem: null,
     });
   });
@@ -792,4 +795,171 @@ describe("the workspace store", () => {
 
     expect(await tagNames()).not.toContain("no-mise");
   });
+});
+
+describe("knowledge, routines, the board and task templates in the workspace store (ADR-298)", () => {
+  const TEST_IT = {
+    name: "shop-integration-tests",
+    kind: "how-to" as const,
+    repos: [],
+    text: "Integration tests run with mise run test-it; mise run test skips them.",
+    evidence: "mise run test passed without running ShopIT.",
+  };
+  const ROUTINE = {
+    name: "check-docs",
+    title: "Check the docs",
+    repo: "orders",
+    model: null,
+    approvals: "ask" as const,
+    prompt: "Read the docs.",
+  };
+  const IDEA = {
+    kind: "item" as const,
+    title: "Retry the invoice export",
+    body: "",
+    parent: null,
+    repos: [],
+    link: null,
+    column: "ideas" as const,
+  };
+
+  /** Each of the four folders with one file, and a knowledge proposal the user has not approved. */
+  async function fillFolders(facade: Awaited<ReturnType<typeof setup>>["facade"]) {
+    await facade.knowledge.write(TEST_IT);
+    await facade.knowledge.propose({ ...TEST_IT, name: "guess", text: "Maybe the cache is stale." }, null);
+    const routine = await facade.routines.save(ROUTINE);
+    await facade.routines.approve(routine.name, routine.digest);
+    const idea = await facade.board.create(IDEA, { kind: "user" });
+    await facade.taskTemplates.save({ title: "Fix a flaky test", prompt: "Find why the test fails now and then." });
+    return { idea };
+  }
+
+  const kept = (store: string) => gitIn(store, "ls-tree", "-r", "--name-only", "HEAD").trim().split("\n");
+  const inStore = (store: string, path: string) => gitIn(store, "show", `HEAD:${path}`);
+
+  test("off by default: the store keeps none of them, not even after a pass", async () => {
+    const { projects, store, facade } = await setup();
+    await fillFolders(facade);
+
+    await facade.localConfig.keepFolders();
+
+    expect(existsSync(join(store, ".git"))).toBe(false);
+    expect((await facade.localConfig.store()).keepsPlanAndKnowledge).toBe(false);
+    expect(existsSync(join(projects, ".trackwall", "knowledge"))).toBe(true);
+  });
+
+  test(
+    "turned on, the approved entries, routines, board items and templates go in byte for byte with one commit by Trackwall, the proposal does not",
+    async () => {
+      const { projects, store, facade, storeLog } = await setup();
+      const { idea } = await fillFolders(facade);
+
+      const shown = await facade.localConfig.keepPlanAndKnowledge(true);
+
+      expect(shown.keepsPlanAndKnowledge).toBe(true);
+      expect(storeLog()).toBe(
+        [
+          "Trackwall|Keep knowledge, routines, board, task-templates",
+          "",
+          "README.md",
+          `board/${idea.id}.md`,
+          "knowledge/shop-integration-tests.md",
+          "routines/check-docs.md",
+          "task-templates/fix-a-flaky-test.md",
+        ].join("\n"),
+      );
+      const onDisk = readFileSync(join(projects, ".trackwall", "knowledge", "shop-integration-tests.md"), "utf8");
+      expect(inStore(store, "knowledge/shop-integration-tests.md")).toBe(onDisk);
+      expect(readFileSync(join(store, "knowledge", "shop-integration-tests.md"), "utf8")).toBe(onDisk);
+      expect(kept(store)).not.toContain("knowledge/guess.md");
+      expect(readFileSync(facade.workspace.configFile(), "utf8")).toContain("storePlanAndKnowledge: true");
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "a routine changed after its approval stays in the store in the approved version until the user approves the change",
+    async () => {
+      const { store, facade, storeCommits } = await setup();
+      await fillFolders(facade);
+      await facade.localConfig.keepPlanAndKnowledge(true);
+      const approved = inStore(store, "routines/check-docs.md");
+
+      const changed = await facade.routines.save({ ...ROUTINE, prompt: "Read the docs and fix the links." });
+      await facade.localConfig.keepFolders();
+
+      expect(changed.approved).toBe(false);
+      expect(storeCommits()).toBe(1);
+      expect(inStore(store, "routines/check-docs.md")).toBe(approved);
+
+      await facade.routines.approve(changed.name, changed.digest);
+      await facade.localConfig.keepFolders();
+
+      expect(storeCommits()).toBe(2);
+      expect(inStore(store, "routines/check-docs.md")).toContain("fix the links");
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "a removed board item leaves the store with the next pass, and a pass with nothing changed starts no git process",
+    async () => {
+      const { store, facade, storeLog } = await setup();
+      const { idea } = await fillFolders(facade);
+      await facade.localConfig.keepPlanAndKnowledge(true);
+      await facade.localConfig.keepFolders();
+
+      const before = gitProcessesStarted();
+      await facade.localConfig.keepFolders();
+      await facade.localConfig.keepFolders();
+      expect(gitProcessesStarted() - before).toBe(0);
+
+      await facade.board.remove(idea.id);
+      await facade.localConfig.keepFolders();
+
+      expect(storeLog().split("\n").slice(0, 3)).toEqual(["Trackwall|Keep board", "", `board/${idea.id}.md`]);
+      expect(kept(store)).not.toContain(`board/${idea.id}.md`);
+      expect(existsSync(join(store, "board", `${idea.id}.md`))).toBe(false);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "turned off, the four folders leave the store with one commit and the repos' files stay",
+    async () => {
+      const { projects, store, facade, backUp } = await setup();
+      const orders = makeRepo({ "pom.xml": "<project/>" }, "orders", projects);
+      writeFileSync(join(orders, "mise.local.toml"), TASKS);
+      await backUp();
+      await fillFolders(facade);
+      await facade.localConfig.keepPlanAndKnowledge(true);
+
+      const shown = await facade.localConfig.keepPlanAndKnowledge(false);
+
+      expect(shown.keepsPlanAndKnowledge).toBe(false);
+      expect(gitIn(store, "log", "-1", "--format=%s").trim()).toBe("Stop keeping knowledge, routines, board, task-templates");
+      expect(kept(store)).toEqual(["README.md", "repos/orders/mise.local.toml"]);
+      expect(existsSync(join(store, "knowledge"))).toBe(false);
+      expect(readFileSync(facade.workspace.configFile(), "utf8")).not.toContain("storePlanAndKnowledge");
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "a workspace.yaml that cannot be read takes nothing out of the store, and the store shows the setting as off",
+    async () => {
+      const { store, facade, storeCommits } = await setup();
+      await fillFolders(facade);
+      await facade.localConfig.keepPlanAndKnowledge(true);
+
+      const config = facade.workspace.configFile();
+      writeFileSync(config, readFileSync(config, "utf8").replace("storePlanAndKnowledge: true", "storePlanAndKnowledge: maybe"));
+      await facade.localConfig.keepFolders();
+
+      expect(storeCommits()).toBe(1);
+      expect(kept(store)).toContain("knowledge/shop-integration-tests.md");
+      expect((await facade.localConfig.store()).keepsPlanAndKnowledge).toBe(false);
+    },
+    REAL_GIT_TIMEOUT,
+  );
 });

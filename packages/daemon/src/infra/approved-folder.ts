@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { ContentDigest } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError } from "./errors.ts";
-import { type FolderFile, type FolderFormat, type FolderProblem, NamedFileFolder } from "./named-file-folder.ts";
+import { type FolderCopies, type FolderFile, type FolderFormat, type FolderProblem, NamedFileFolder } from "./named-file-folder.ts";
 import { readStateFile, type StateFormat, stateFormat, writeStateFile } from "./state-file.ts";
 
 /**
@@ -53,6 +53,15 @@ export class ApprovedFolder<T> {
     const { files, problems } = await this.#folder.list();
     const approved = this.#approvals().approved;
     return { files: files.map((file) => withApproval(file, approved)), problems };
+  }
+
+  /**
+   * The files whose bytes are the ones the user approved, as they are on disk, for the workspace store (ADR-298): a
+   * proposal, or a file changed since its approval, never leaves the computer unread.
+   */
+  async approvedCopies(): Promise<FolderCopies> {
+    const { approved } = this.#approvals();
+    return this.#folder.copies((file) => approved[file.name] === digestOf(file.bytes));
   }
 
   /** Writes a file's text; it is approved only when its bytes are the approved ones, or with `approve`. */
