@@ -8,8 +8,9 @@ import { type ScriptedModel, startScriptedModel } from "./support/scripted-model
 
 // The keys that edit a word in Copilot CLI's input box, as the session terminal's xterm.js sends them. The session
 // terminal sends Ctrl+Backspace as Ctrl+W (`packages/ui/src/lib/terminal-word-delete.ts`), because the `^H` xterm.js
-// sends for it deletes one character in Copilot CLI; the other keys go as xterm.js sends them, and these tests show
-// that Copilot CLI edits a word on each. A Copilot CLI that changes one of them fails here.
+// sends for it deletes one character in Copilot CLI on macOS and Linux (on Windows ConPTY turns it into the
+// Ctrl+Backspace key, which deletes a word, so Ctrl+W is right on every system); the other keys go as xterm.js sends them,
+// and these tests show that Copilot CLI edits a word on each. A Copilot CLI that changes one of them fails here.
 
 const SESSION_MS = 60_000;
 setDefaultTimeout(4 * SESSION_MS);
@@ -69,10 +70,11 @@ describe("editing a word in Copilot CLI's input box with the real Copilot CLI", 
     expect(await boxText("alpha beta")).toBe("alpha beta");
   });
 
-  test("^H, what xterm.js sends for Ctrl+Backspace, deletes only one character", async () => {
+  test("^H, what xterm.js sends for Ctrl+Backspace, deletes only one character outside Windows, where ConPTY makes it a word", async () => {
     await typeIntoEmptyBox("alpha beta gamma");
     window.attachment.input("\x08");
-    expect(await boxText("alpha beta gamm")).toBe("alpha beta gamm");
+    const expected = process.platform === "win32" ? "alpha beta" : "alpha beta gamm";
+    expect(await boxText(expected)).toBe(expected);
   });
 
   test("Alt+Backspace (ESC DEL) deletes the word before the cursor too", async () => {
