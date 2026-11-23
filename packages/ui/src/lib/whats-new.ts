@@ -37,6 +37,12 @@ export interface WhatsNewEntry {
  */
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
+    id: "plan-and-knowledge-in-the-store",
+    title: "Plan and knowledge in the workspace store",
+    text: "Turn on Keep Plan and knowledge in the store, and the approved knowledge, routines, board and your task templates get a history in git and go with the store's pushes.",
+    show: { place: { kind: "settings", category: "workspace" } },
+  },
+  {
     id: "sync-main-in-new-task",
     title: "Sync main in the New task form",
     text: "When a repo's main is behind the server, the New task form says so above Create task and offers Sync main, so the task starts from the newest code.",
@@ -65,12 +71,6 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     title: "Home off the view bar",
     text: "Home's icon comes back once you show it in Settings › App › Home; its shortcut and the command palette open it either way.",
     show: { place: { kind: "settings", category: "app" } },
-  },
-  {
-    id: "all-repos",
-    title: "All repos",
-    text: "Repos opens on a table of the repos that need a look, each with its next step, and Sync all above it.",
-    show: { place: { kind: "view", view: "repos" } },
   },
 ];
 

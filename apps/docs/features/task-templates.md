@@ -38,6 +38,7 @@ To keep a prompt for later, write it, open "Templates", press "Save as template"
 
 ## Good to know
 
+- The [workspace store](/features/local-config) can keep your own templates in git, with its history, and push them to your remote: turn on "Keep Plan and knowledge in the store" in "Settings > Workspace".
 - Your templates are Markdown files in `.trackwall/task-templates` of your projects folder: the title at the top, the prompt below. You can write or edit one in any editor; the form shows it the next time it opens.
 - Saving under the title of an existing template replaces it. Saved under a built-in template's title, yours takes its place; remove yours to bring the built-in one back.
 - To remove one of your templates, pick it and press "Remove" under the row.

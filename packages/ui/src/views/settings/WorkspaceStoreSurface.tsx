@@ -1,4 +1,4 @@
-import { localConfigApi } from "@trackwall/protocol";
+import { localConfigApi, type WorkspaceStore } from "@trackwall/protocol";
 import { useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -6,7 +6,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { remoteToAllow, workspaceStoreLines } from "@/lib/local-config";
+import { planAndKnowledgeDestination, remoteToAllow, workspaceStoreLines } from "@/lib/local-config";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -22,6 +22,7 @@ export function WorkspaceStoreSurface({ conn }: { conn: Connection }) {
   const store = useRemote(load, { pollMs: POLL_MS });
   const allow = useAction((remote: string) => post(conn, localConfigApi.allowRemote, { remote }), store.reload);
   const stop = useAction(() => post(conn, localConfigApi.stopPushing, {}), store.reload);
+  const keep = useAction((on: boolean) => post(conn, localConfigApi.keepPlanAndKnowledge, { on }), store.reload);
   return (
     <div className="flex flex-col gap-3 p-4">
       <p className="text-muted-foreground text-sm">
@@ -45,6 +46,44 @@ export function WorkspaceStoreSurface({ conn }: { conn: Connection }) {
         </div>
       )}
       {store.data?.dir && <AllowRemote offer={remoteToAllow(store.data)} pending={allow.pending} error={allow.error} onAllow={allow.run} />}
+      {store.data?.dir && <KeepPlanAndKnowledge store={store.data} pending={keep.pending} error={keep.error} onChange={keep.run} />}
+    </div>
+  );
+}
+
+/**
+ * Whether the store also keeps the workspace's knowledge, routines, board and task templates (ADR-298). Off until the user
+ * turns it on, since the store's remote may have been allowed for a few mise files only.
+ */
+function KeepPlanAndKnowledge({
+  store,
+  pending,
+  error,
+  onChange,
+}: {
+  store: WorkspaceStore;
+  pending: boolean;
+  error: string | undefined;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 border-t pt-3">
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="accent-primary size-4 shrink-0"
+          checked={store.keepsPlanAndKnowledge}
+          disabled={pending}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        Keep Plan and knowledge in the store
+      </label>
+      <p className="text-muted-foreground text-xs">
+        The store also keeps the knowledge entries and routines in the version you approved, the board and your own task templates, so their
+        history is in git and a new computer can get them from the remote. Proposals you have not approved stay out.{" "}
+        {planAndKnowledgeDestination(store)}
+      </p>
+      {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   );
 }

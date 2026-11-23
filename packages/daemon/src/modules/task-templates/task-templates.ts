@@ -8,7 +8,7 @@ import {
   taskTemplateNameOf,
 } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
-import { NamedFileFolder } from "../../infra/named-file-folder.ts";
+import { type FolderCopies, NamedFileFolder } from "../../infra/named-file-folder.ts";
 import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 import { TASK_TEMPLATE_FILE_FORMAT, writeTaskTemplateFile } from "./task-template-file.ts";
 
@@ -39,6 +39,11 @@ export class TaskTemplates {
   async list(): Promise<TaskTemplateList> {
     const { files, problems } = await this.#folder.list();
     return { templates: merged(files.map((f) => f.value)), problems };
+  }
+
+  /** The user's own templates' files as they are on disk, for the workspace store (ADR-298). */
+  storeCopies(): Promise<FolderCopies> {
+    return this.#folder.copies();
   }
 
   /** Saves the user's own template under the name its title gives, replacing the one of that name. */

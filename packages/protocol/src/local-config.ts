@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { WORKTREE_INCLUDE_FILE } from "./agents.ts";
 import { apiEndpoints } from "./api.ts";
+import type { TrackwallFolder } from "./trackwall-dir.ts";
 import { Commit, RepoId } from "./workspace.ts";
 
 /**
@@ -63,6 +64,14 @@ export const WorkspaceStorePush = z.discriminatedUnion("kind", [
 ]);
 export type WorkspaceStorePush = z.infer<typeof WorkspaceStorePush>;
 
+/**
+ * The folders of `.trackwall` the workspace store also keeps while the user allows it (`storePlanAndKnowledge`, ADR-298),
+ * each at the same name in the store: only the approved versions of knowledge entries and routines, the whole board and
+ * the user's own task templates.
+ */
+export const WORKSPACE_STORE_FOLDERS = ["knowledge", "routines", "board", "task-templates"] as const satisfies readonly TrackwallFolder[];
+export type WorkspaceStoreFolder = (typeof WORKSPACE_STORE_FOLDERS)[number];
+
 export const WorkspaceStore = z.object({
   /** `null` while the projects folder is not set. */
   dir: z.string().nullable(),
@@ -83,6 +92,11 @@ export const WorkspaceStore = z.object({
   /** Why `remote` cannot be allowed (not HTTPS or SSH, several addresses); `null` when it can. */
   remoteProblem: z.string().nullable(),
   push: WorkspaceStorePush,
+  /**
+   * Whether the store also keeps the workspace knowledge, routines, board and task templates (`storePlanAndKnowledge` in
+   * `workspace.yaml`, ADR-298); off without the key, and off while the key cannot be read.
+   */
+  keepsPlanAndKnowledge: z.boolean(),
   /** Why the last backup did not finish (a file that cannot be read, a git error); `null` when it did. */
   problem: z.string().nullable(),
 });
@@ -123,4 +137,9 @@ export const localConfigApi = {
   allowRemote: endpoint("allow-remote", z.object({ remote: z.string() }).strict(), WorkspaceStore),
   /** Pushes the store nowhere from now on (removes `localConfigRemote`). Only from the UI, like `allowRemote`. */
   stopPushing: endpoint("stop-pushing", z.object({}).strict(), WorkspaceStore),
+  /**
+   * Has the store keep the workspace knowledge, routines, board and task templates, or stop keeping them (ADR-298), and
+   * brings the store up to date at once. Only from the UI, never from MCP: it decides what goes to the remote.
+   */
+  keepPlanAndKnowledge: endpoint("keep-plan-and-knowledge", z.object({ on: z.boolean() }).strict(), WorkspaceStore),
 };

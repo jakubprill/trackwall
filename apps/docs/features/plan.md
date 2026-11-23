@@ -69,6 +69,7 @@ The item then follows its tasks. When the agent says it is done (it reports its 
 
 ## Good to know
 
+- The [workspace store](/features/local-config) can keep every board item in git, with its history, and push them to your remote: turn on "Keep Plan and knowledge in the store" in "Settings > Workspace". Changes within a minute go into one commit.
 - Each item is a Markdown file in `.trackwall/board/` of your projects folder, next to your repos, so it survives a rebuilt container and you can read it in an editor. Removing an item deletes its file, and nothing keeps a copy.
 - Nothing in "Plan" starts work by itself. Agents can write ideas and items and move them between "Idea" and "Ready", and their task's item goes to "In review" when they report, but only you create projects, move items in the outline, start tasks or mark something done, by hand or by closing its last task.
 - An item with items under it cannot be removed; move or remove those first. "Archive project" moves a finished project under "Archived".
