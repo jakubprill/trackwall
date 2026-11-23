@@ -58,6 +58,7 @@ import {
   type TaskProposal,
   type TaskRefresh,
   type TaskRounds,
+  type TaskRunSettings,
   type TaskSharedFiles,
   type TaskUpdate,
   type TaskWorktree,
@@ -1289,6 +1290,16 @@ export class Agents {
     const trusted = await this.#tasks.trustMiseConfig(id, digest);
     this.miseTrusted({ repo, task: id });
     return trusted;
+  }
+
+  /** The run settings of the task's repo against those its sandboxed tasks keep (ADR-181 addendum). */
+  taskRunSettings(id: string): Promise<TaskRunSettings> {
+    return this.#tasks.runSettings(id);
+  }
+
+  /** The user accepts the run settings of the task's repo they reviewed (`digest`), only from the UI (ADR-181 addendum). */
+  acceptTaskRunSettings(id: string, digest: string): Promise<TaskRunSettings> {
+    return this.#tasks.acceptRunSettings(id, digest);
   }
 
   /**

@@ -71,6 +71,15 @@ export const StoredTask = Task.omit({ worktree: true }).extend({
     .nullable()
     .default(null),
   /**
+   * Each place of those run settings with the SHA-256 of what it held (`.git/config core.fsmonitor`, `.git/hooks/pre-commit`),
+   * so a refusal names what changed and the user reviews it; `null` without the sandbox, and in a task saved by an older
+   * version, whose refusals then name only the kinds of files.
+   */
+  runSettingsSnapshot: z
+    .record(z.string().max(4096), z.string().regex(/^[0-9a-f]{64}$/))
+    .nullable()
+    .default(null),
+  /**
    * The worktree's mise config the user trusted (ADR-59): path to SHA-256, taken when the worktree was created and
    * replaced when the user trusts a changed one. `null` in a task saved by an older version, whose config then needs
    * the user's trust once.

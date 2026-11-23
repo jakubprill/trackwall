@@ -263,6 +263,8 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(agentsApi.approvePlan, (f, b) => f.agents.approvePlan(b.task)),
   route(agentsApi.taskMiseConfig, (f, b) => f.agents.taskMiseConfig(b.task)),
   route(agentsApi.trustTaskMiseConfig, (f, b) => f.agents.trustTaskMiseConfig(b.task, b.digest)),
+  route(agentsApi.taskRunSettings, (f, b) => f.agents.taskRunSettings(b.task)),
+  route(agentsApi.acceptTaskRunSettings, (f, b) => f.agents.acceptTaskRunSettings(b.task, b.digest)),
   route(agentsApi.openTaskEditor, (f, b) => {
     f.agents.openTaskEditor(b.task);
     return null;

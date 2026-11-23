@@ -915,6 +915,49 @@ export const TaskMiseConfig = z.object({
 });
 export type TaskMiseConfig = z.infer<typeof TaskMiseConfig>;
 
+/**
+ * How one place of a repo's run settings differs from what its sandboxed tasks started with (ADR-181 addendum): a key of
+ * `.git/config` (`.git/config core.fsmonitor`), `.git/info/attributes`, a hook (`.git/hooks/pre-commit`) or a
+ * `config.worktree`.
+ */
+export const RunSettingsChange = z.object({
+  place: z.string(),
+  change: z.enum(["added", "modified", "removed"]),
+  /**
+   * What the place holds now, to be read before accepting it, with characters that could disguise a command (control,
+   * zero-width, direction) written as `<U+XXXX>`; `null` when removed, too long to show or a credential
+   * (`http.*.extraHeader`, `*.password`, an address with a password).
+   */
+  content: z.string().nullable(),
+  /**
+   * The user can accept the change after reading it: a hook, the attributes, `extensions.worktreeConfig` or
+   * `core.bare`. `false` for every other key of the configuration that counts: a filter, a driver or a credential helper
+   * can name a script the agent changes later, an include makes git read a file Trackwall does not check, a proxy or
+   * `url.*.insteadOf` sends credentials or branches elsewhere, and an alias runs in the user's shell. Only undoing it in
+   * the repo clears it.
+   */
+  acceptable: z.boolean(),
+});
+export type RunSettingsChange = z.infer<typeof RunSettingsChange>;
+
+/**
+ * The run settings of a task's repo against those its sandboxed tasks started with or the user accepted (ADR-181
+ * addendum): while they differ, the daemon runs no git in the repo, ending its tasks included.
+ */
+export const TaskRunSettings = z.object({
+  /** A task in the sandbox guards the repo; without one nothing is compared and `changes` is empty. */
+  guarded: z.boolean(),
+  /** The run settings match those of a sandboxed task of the repo, so git runs there; `false` while they wait for the user. */
+  matches: z.boolean(),
+  /** `false` when the tasks were saved by an older Trackwall that kept no list of places: every place is shown as added. */
+  baselineKnown: z.boolean(),
+  /** Sorted by place; empty exactly when `matches`. */
+  changes: z.array(RunSettingsChange),
+  /** A hash of the run settings now: accepting passes it back, so the user accepts what they saw, not a newer change. */
+  digest: z.string(),
+});
+export type TaskRunSettings = z.infer<typeof TaskRunSettings>;
+
 const endpoint = apiEndpoints("agents");
 
 /**
@@ -1250,6 +1293,18 @@ export const agentsApi = {
    * that changed again since then is `bad_request`. Only from the UI, never from MCP.
    */
   trustTaskMiseConfig: endpoint("trust-task-mise-config", TaskRequest.extend({ digest: z.string().min(1).max(128) }), TaskMiseConfig),
+  /** The run settings of the task's repo against those its sandboxed tasks started with (ADR-181 addendum); reads only. */
+  taskRunSettings: endpoint("task-run-settings", TaskRequest, TaskRunSettings),
+  /**
+   * The user accepts the run settings of the task's repo they reviewed, named by the `digest` from `task-run-settings`,
+   * for every sandboxed task of the repo, so git runs there again; settings that changed again since then are
+   * `bad_request`. Only from the UI, never from MCP: the agent whose sandbox could write them must not accept them.
+   */
+  acceptTaskRunSettings: endpoint(
+    "accept-task-run-settings",
+    TaskRequest.extend({ digest: z.string().regex(/^[0-9a-f]{64}$/) }),
+    TaskRunSettings,
+  ),
   /**
    * Ending a task: removes the worktree, and without `keepBranch` also the branch. Changes that would be lost (uncommitted
    * files and commits outside the branch, and without `keepBranch` also the task's commits) the daemon deletes only with

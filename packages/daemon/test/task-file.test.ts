@@ -33,6 +33,7 @@ const stored = {
   retryOf: null,
   impactProposed: { "orders-bff": ["GET /api/orders/{id}"] },
   runSettings: "c".repeat(64),
+  runSettingsSnapshot: { ".git/config core.fsmonitor": "d".repeat(64), ".git/hooks/pre-commit": "e".repeat(64) },
   trustedMiseConfig: { "mise.toml": "b".repeat(64) },
   port: 41003,
   included: { files: [".env", "config/application-local.yml"], problems: ["data.db is not a regular file (a link or a special file)"] },
@@ -64,6 +65,7 @@ describe("tasks.json", () => {
       conversation: _conversation,
       summary: ___,
       runSettings: _runSettings,
+      runSettingsSnapshot: _runSettingsSnapshot,
       trustedMiseConfig: ____,
       port: _____,
       included: ______,
@@ -86,6 +88,7 @@ describe("tasks.json", () => {
         summary: null,
         handoff: null,
         runSettings: null,
+        runSettingsSnapshot: null,
         trustedMiseConfig: null,
         port: null,
         included: { files: [], problems: [] },
@@ -103,10 +106,18 @@ describe("tasks.json", () => {
 
   test("a sandboxed task saved before run settings were guarded comes back without their digest, which its next start takes", () => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
-    const { runSettings: _, ...old } = stored;
+    const { runSettings: _, runSettingsSnapshot: __, ...old } = stored;
     writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
 
-    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, runSettings: null }]);
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, runSettings: null, runSettingsSnapshot: null }]);
+  });
+
+  test("a sandboxed task saved before refusals named the changed places comes back with its digest and without the places", () => {
+    const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
+    const { runSettingsSnapshot: _, ...old } = stored;
+    writeFileSync(join(home, "tasks.json"), JSON.stringify({ tasks: [old] }));
+
+    expect(new TaskFile(join(home, "tasks.json"), () => {}).read()).toEqual([{ ...old, runSettingsSnapshot: null }]);
   });
 
   test("a task saved before task ports comes back without a port and without included files", () => {
@@ -235,6 +246,7 @@ describe("tasks.json", () => {
     ["a relative task worktrees folder, because the worktree is deleted from it", { worktreesDir: "worktrees" }],
     ["a trusted mise config hash that is not SHA-256", { trustedMiseConfig: { "mise.toml": "not-a-hash" } }],
     ["a run settings digest that is not SHA-256", { runSettings: "not-a-hash" }],
+    ["a run settings place hash that is not SHA-256", { runSettingsSnapshot: { ".git/hooks/pre-commit": "not-a-hash" } }],
   ])("a task with %s moves the file aside and does not come back", (_, change) => {
     const home = mkdtempSync(join(tmpdir(), "trackwall-tasks-"));
     const logged: string[] = [];
