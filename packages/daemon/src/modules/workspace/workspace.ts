@@ -778,6 +778,15 @@ export class Workspace {
     return this.deps.file.localConfigRemote();
   }
 
+  /** Whether the workspace store also keeps knowledge, routines, the board and task templates (ADR-298). */
+  storePlanAndKnowledge(): boolean {
+    return this.deps.file.storePlanAndKnowledge();
+  }
+
+  setStorePlanAndKnowledge(on: boolean): void {
+    this.deps.file.setStorePlanAndKnowledge(on);
+  }
+
   setLocalConfigRemote(url: string | null): void {
     this.deps.file.setLocalConfigRemote(url);
   }

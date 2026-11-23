@@ -61,6 +61,15 @@ export function workspaceStoreLines(store: WorkspaceStore, now: Date): { backup:
 }
 
 /**
+ * Where the knowledge, routines, board and task templates go once the store keeps them (ADR-298): the address the store is
+ * pushed to, which the user may have allowed long ago for a few mise files, or nowhere.
+ */
+export function planAndKnowledgeDestination(store: WorkspaceStore): string {
+  if (store.pushesTo === null) return "They stay on this computer: the store is pushed nowhere.";
+  return `They go to ${store.pushesTo} with every push. Keep work knowledge on your company's server, not on a personal account.`;
+}
+
+/**
  * The store's remote when it is not the address the store is pushed to (ADR-127): the user added it, or an agent did, so
  * the user decides. `problem` says why it cannot be allowed; `null` when it is the allowed one or there is none.
  */

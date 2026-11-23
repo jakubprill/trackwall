@@ -36,6 +36,7 @@ You can also write an entry yourself with "New entry" at the top of the list. Yo
 
 ## Good to know
 
+- The [workspace store](/features/local-config) can keep the entries you approved in git, with its history, and push them to your remote: turn on "Keep Plan and knowledge in the store" in "Settings > Workspace". A proposal stays out until you approve it.
 - A fact about one repo that its team would agree with belongs in that repo's own `AGENTS.md` or Copilot instructions, where everyone reads it. Workspace knowledge is for facts between repos, about your own machine, or about repos you cannot change.
 - Each entry is a Markdown file in `.trackwall/knowledge` of your projects folder. You can edit it in any editor; an edited entry waits for your approval again before agents read it.
 - Agents read entries as your notes, not as rules: when an entry no longer matches what an agent sees, it proposes a correction under the same name.

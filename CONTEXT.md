@@ -295,7 +295,7 @@ The files a repo keeps outside git on purpose, only for this clone: `mise.local.
 _Avoid_: overlay, local files (that is `.worktreeinclude`'s included files)
 
 **Workspace store** (`TrackwallFolder` `local`: `.trackwall/local`, `WorkspaceStore`, `workspaceStoreDir`; UI "Workspace store"):
-The git repo in the projects folder where Trackwall keeps what the user set up for the workspace, with its history: today the local config of every repo as `repos/<repo folder>/<file>` (ADR-298), committed by Trackwall a few seconds after a file changes and pushed only to the address the user allowed (ADR-86, ADR-127). The repo list skips it. Its folder and the `workspace.yaml` key of its remote (`localConfigRemote`) keep the names they had before ADR-298.
+The git repo in the projects folder where Trackwall keeps what the user set up for the workspace, with its history: the local config of every repo as `repos/<repo folder>/<file>` (ADR-298), committed by Trackwall a few seconds after a file changes, and, while "Keep Plan and knowledge in the store" is on (`storePlanAndKnowledge`), the approved knowledge and routines, the board and the user's task templates in folders of their own (`WORKSPACE_STORE_FOLDERS`), committed once a minute; pushed only to the address the user allowed (ADR-86, ADR-127). Only Trackwall commits to it, and it is a copy: nothing is read back from it. The repo list skips it. Its folder and the `workspace.yaml` key of its remote (`localConfigRemote`) keep the names they had before ADR-298.
 _Avoid_: local config store (its name before ADR-298), backup repo, overlay folder
 
 **Work backup** (`WorkBackup`, module `work-backup`, `WorkBackupInfo`; UI "Container work backup"):

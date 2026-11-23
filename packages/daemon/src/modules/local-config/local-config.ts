@@ -7,16 +7,20 @@ import {
   type LocalConfigFileState,
   MAX_LOCAL_CONFIG_BYTES,
   type RepoLocalConfig,
+  WORKSPACE_STORE_FOLDERS,
   type WorkspaceStore,
+  type WorkspaceStoreFolder,
   type WorkspaceStorePush,
   withoutUserInfo,
 } from "@trackwall/protocol";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { fileKey } from "../../infra/file-key.ts";
+import type { FolderCopies } from "../../infra/named-file-folder.ts";
 import { workspaceStoreDir } from "../../infra/old-trackwall-folders.ts";
 import { readRegularFile } from "../../infra/regular-file.ts";
 import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
 import { removeStoreCopy, writeStoreCopy } from "./store-copies.ts";
+import { keepMessage, keptFiles, storeFolderChanges, storeReadme } from "./store-folders.ts";
 import { moveToReposFolder, storePath } from "./store-layout.ts";
 
 /**
@@ -28,10 +32,14 @@ import { moveToReposFolder, storePath } from "./store-layout.ts";
  * store that changed under the daemon (a pull, a projects folder moved) is compared again in full, and a file that differs
  * is committed on top. A file that disappears from a repo stays in the store, which is what makes the backup worth
  * having: a new clone gets it back with "Restore". A file the repo's commits have is not local config and is left alone.
+ * While the user allows it, the store also keeps the workspace's knowledge, routines, board and task templates
+ * (`store-folders.ts`): compared once a minute, so a board being edited makes one commit, not one per change.
  */
 
 /** How often the repos' files are compared: a saved file is in the store within this time plus a commit. */
 const CHECK_MS = 5000;
+/** How often the workspace's folders are compared: edits within this time go into one commit. */
+const FOLDERS_MS = 60_000;
 /** How long after a failed push the next one is tried: a remote that is down is not asked every few seconds. */
 const PUSH_RETRY_MS = 60_000;
 
@@ -45,6 +53,9 @@ interface LocalConfigRepos {
   localConfigRemote(): string | null;
   /** `null` removes the key. */
   setLocalConfigRemote(url: string | null): void;
+  /** Whether the store also keeps the workspace's folders (`storePlanAndKnowledge`, ADR-298). */
+  storePlanAndKnowledge(): boolean;
+  setStorePlanAndKnowledge(on: boolean): void;
 }
 
 /** What `local-config` needs from `vcs`; wired in the facade. */
@@ -59,7 +70,7 @@ interface LocalConfigVcs {
     removed: readonly string[],
     message: string,
   ): Promise<boolean>;
-  commitFiles(dir: string, commit: string, maxBytes: number): Promise<{ files: { path: string }[]; truncated: boolean }>;
+  commitFiles(dir: string, commit: string, maxBytes: number): Promise<{ files: { path: string; oid: string }[]; truncated: boolean }>;
   storeHead(dir: string): Promise<string | null>;
   readFiles(dir: string, commit: string, paths: readonly string[], maxBytes: number): Promise<Map<string, Buffer>>;
   backupRemote(dir: string): Promise<{ url: string; problem: string | null } | null>;
@@ -70,6 +81,11 @@ interface LocalConfigVcs {
 export interface LocalConfigDeps {
   repos: LocalConfigRepos;
   vcs: LocalConfigVcs;
+  /**
+   * The copies of each folder the store keeps while the user allows it (ADR-298), from `knowledge`, `routines`, `board`
+   * and `task-templates`; wired in the facade.
+   */
+  storeFolders: Record<WorkspaceStoreFolder, () => Promise<FolderCopies>>;
   log: (msg: string) => void;
   /** The bare repo in the state folder the store is pushed from (ADR-127), out of reach of the sessions in the projects folder. */
   pushDir: string;
@@ -93,10 +109,16 @@ export class LocalConfig {
   #compared: { store: string; head: string | null } | undefined;
   /** The store and its last commit known to be in the current layout (`store-layout.ts`). */
   #laidOut: { store: string; head: string } | undefined;
-  #timer: NodeJS.Timeout | undefined;
+  /** The store, its last commit and the blob ids of its kept folders' files (`keptFiles`) at that commit. */
+  #kept: { store: string; head: string; files: Map<string, string> } | undefined;
+  #timers: NodeJS.Timeout[] = [];
   /** A slow drive must not stack comparisons: the next one starts only after the previous one ended. */
   #checking: Promise<void> | undefined;
-  #problem: string | null = null;
+  #keeping: Promise<void> | undefined;
+  /** The backup or folders pass in progress: both commit to the store, so they go one at a time. */
+  #turn: Promise<unknown> = Promise.resolve();
+  /** Why the last pass of each kind did not finish; `null` when it did. */
+  readonly #problems: Record<"backup" | "folders", string | null> = { backup: null, folders: null };
   #push: WorkspaceStorePush = { kind: "none" };
   /**
    * The store commit and the address of the last push (or of a pass without an address to push to); `undefined` at the
@@ -111,25 +133,37 @@ export class LocalConfig {
     this.#deps = deps;
   }
 
-  /** The first backup at once, then every `intervalMs`. */
-  start(intervalMs = CHECK_MS): void {
-    if (this.#timer) return;
+  /** The first backup and folders pass at once, then every `intervalMs` and `foldersMs`. */
+  start(intervalMs = CHECK_MS, foldersMs = FOLDERS_MS): void {
+    if (this.#timers.length > 0) return;
     this.#tick();
-    this.#timer = setInterval(() => this.#tick(), intervalMs);
-    this.#timer.unref();
+    this.#keepTick();
+    this.#timers = [setInterval(() => this.#tick(), intervalMs), setInterval(() => this.#keepTick(), foldersMs)];
+    for (const timer of this.#timers) timer.unref();
   }
 
   close(): void {
-    clearInterval(this.#timer);
-    this.#timer = undefined;
+    for (const timer of this.#timers) clearInterval(timer);
+    this.#timers = [];
   }
 
   /** One backup; a call during a running one gets that one instead of starting another. */
   backUp(): Promise<void> {
-    this.#checking ??= this.#backUp().finally(() => {
+    this.#checking ??= this.#inTurn(() => this.#backUp()).finally(() => {
       this.#checking = undefined;
     });
     return this.#checking;
+  }
+
+  /**
+   * One folders pass (ADR-298): the store's folders brought to the workspace's, or emptied while the user does not allow
+   * them; a call during a running one gets that one.
+   */
+  keepFolders(): Promise<void> {
+    this.#keeping ??= this.#inTurn(() => this.#keepFolders()).finally(() => {
+      this.#keeping = undefined;
+    });
+    return this.#keeping;
   }
 
   /** Resolves once a running push has ended, whatever its result. */
@@ -139,7 +173,9 @@ export class LocalConfig {
 
   async store(): Promise<WorkspaceStore> {
     const dir = await this.#storeDir();
-    const base = { push: this.#push, problem: this.#problem };
+    const problems = [this.#problems.backup, this.#problems.folders].filter((p) => p !== null);
+    const keepsPlanAndKnowledge = configOrProblem(() => this.#deps.repos.storePlanAndKnowledge(), false).value;
+    const base = { push: this.#push, keepsPlanAndKnowledge, problem: problems.length === 0 ? null : problems.join("; ") };
     const allowed = this.#allowedRemote();
     const pushesTo = allowed === null ? null : withoutUserInfo(allowed);
     if (dir === null) return { dir, lastBackup: null, pushesTo, remote: null, remoteAllowed: false, remoteProblem: null, ...base };
@@ -168,6 +204,13 @@ export class LocalConfig {
       throw new DomainError("bad_request", `The store's remote is no longer ${shown}; look at it again before you allow it`);
     if (remote.problem !== null) throw new DomainError("bad_request", remote.problem);
     this.#deps.repos.setLocalConfigRemote(remote.url);
+    return this.store();
+  }
+
+  /** Has the store keep the workspace's folders, or stop keeping them (ADR-298), at once rather than within a minute. */
+  async keepPlanAndKnowledge(on: boolean): Promise<WorkspaceStore> {
+    this.#deps.repos.setStorePlanAndKnowledge(on);
+    await this.keepFolders();
     return this.store();
   }
 
@@ -289,14 +332,24 @@ export class LocalConfig {
 
   /** From a timer an exception would be an unhandled rejection, which ends the process under Node. */
   #tick(): void {
-    this.backUp().catch((err: unknown) => this.#setProblems([messageOf(err)]));
+    this.backUp().catch((err: unknown) => this.#setProblems("backup", [messageOf(err)]));
   }
 
-  /** A problem is logged once, not every few seconds, and shown with the store until a backup has none. */
-  #setProblems(problems: readonly string[]): void {
+  #keepTick(): void {
+    this.keepFolders().catch((err: unknown) => this.#setProblems("folders", [messageOf(err)]));
+  }
+
+  /** A problem is logged once, not with every pass, and shown with the store until a pass of its kind has none. */
+  #setProblems(kind: "backup" | "folders", problems: readonly string[]): void {
     const message = problems.length === 0 ? null : problems.join("; ");
-    if (message !== null && message !== this.#problem) this.#deps.log(`workspace store backup: ${message}`);
-    this.#problem = message;
+    if (message !== null && message !== this.#problems[kind]) this.#deps.log(`workspace store ${kind}: ${message}`);
+    this.#problems[kind] = message;
+  }
+
+  #inTurn<T>(step: () => Promise<T>): Promise<T> {
+    const run = this.#turn.then(step);
+    this.#turn = run.catch(() => {});
+    return run;
   }
 
   async #backUp(): Promise<void> {
@@ -319,8 +372,61 @@ export class LocalConfig {
     } catch (err) {
       problems.push(messageOf(err));
     }
-    this.#setProblems(problems);
+    this.#setProblems("backup", problems);
     this.#pushIfDue(store, await this.#deps.vcs.storeHead(store));
+  }
+
+  /**
+   * Brings the store's folders to the workspace's copies, with one commit, then writes them into the store's folder for
+   * the user to browse. A `workspace.yaml` that cannot be read changes nothing: Settings › Files says what to fix, and an
+   * unread setting must not take the folders out. A folder that cannot be read stays as the store has it.
+   */
+  async #keepFolders(): Promise<void> {
+    const store = await this.#storeDir();
+    const setting = configOrProblem(() => this.#deps.repos.storePlanAndKnowledge(), false);
+    if (store === null || setting.problem !== null) return;
+    const problems: string[] = [];
+    const wanted = new Map<WorkspaceStoreFolder, FolderCopies>();
+    for (const folder of WORKSPACE_STORE_FOLDERS) {
+      try {
+        wanted.set(folder, setting.value ? await this.#deps.storeFolders[folder]() : { copies: [], held: [] });
+      } catch (err) {
+        problems.push(`${folder}: ${messageOf(err)}`);
+      }
+    }
+    const head = await this.#deps.vcs.storeHead(store);
+    const changes = storeFolderChanges(await this.#keptFiles(store, head), wanted, setting.value ? storeReadme() : null);
+    if (changes.folders.length > 0) {
+      await this.#ensureStore(store);
+      await this.#deps.vcs.commitBackups(store, changes.files, changes.removed, keepMessage(changes, setting.value));
+      this.#advance(store, head, await this.#deps.vcs.storeHead(store));
+      for (const file of changes.files)
+        await writeStoreCopy(store, file.path, file.content).catch((err: unknown) => problems.push(messageOf(err)));
+      for (const path of changes.removed) await removeStoreCopy(store, path).catch((err: unknown) => problems.push(messageOf(err)));
+    }
+    this.#setProblems("folders", problems);
+    this.#pushIfDue(store, await this.#deps.vcs.storeHead(store));
+  }
+
+  /** The blob ids of the store's kept files at `head`, listed by git only when the commit is new to the daemon. */
+  async #keptFiles(store: string, head: string | null): Promise<Map<string, string>> {
+    if (head === null) return new Map();
+    if (this.#kept?.store === store && this.#kept.head === head) return this.#kept.files;
+    // A commit someone else made comes with a store someone else may have configured, so it is checked before git reads it.
+    await this.#ensureStore(store);
+    const files = keptFiles((await this.#deps.vcs.commitFiles(store, head, MAX_STORE_LISTING_BYTES)).files);
+    this.#kept = { store, head, files };
+    return files;
+  }
+
+  /**
+   * After a folders commit from `from` to `to`, what was known of `from` holds for `to` as well, since the commit changed
+   * only the folders: the repos' files need not be read again, nor the layout checked.
+   */
+  #advance(store: string, from: string | null, to: string | null): void {
+    if (to === null) return;
+    if (this.#compared?.store === store && this.#compared.head === from) this.#compared = { store, head: to };
+    if (this.#laidOut?.store === store && this.#laidOut.head === from) this.#laidOut = { store, head: to };
   }
 
   /**

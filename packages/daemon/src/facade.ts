@@ -394,7 +394,6 @@ export function createFacade(o: FacadeOptions): Facade {
     now: () => new Date(),
     log: o.log,
   });
-  const localConfig = new LocalConfig({ repos: workspace, vcs, log: o.log, pushDir: join(o.home, WORKSPACE_STORE_PUSH_DIR) });
   const board = new Board({ projectsDir: () => workspace.projectsDir() });
   const routines = new Routines({
     projectsDir: () => workspace.projectsDir(),
@@ -405,6 +404,19 @@ export function createFacade(o: FacadeOptions): Facade {
     projectsDir: () => workspace.projectsDir(),
     approvalsFile: join(o.home, KNOWLEDGE_APPROVALS_FILE),
     log: o.log,
+  });
+  const taskTemplates = new TaskTemplates({ projectsDir: () => workspace.projectsDir() });
+  const localConfig = new LocalConfig({
+    repos: workspace,
+    vcs,
+    storeFolders: {
+      knowledge: () => knowledge.storeCopies(),
+      routines: () => routines.storeCopies(),
+      board: () => board.storeCopies(),
+      "task-templates": () => taskTemplates.storeCopies(),
+    },
+    log: o.log,
+    pushDir: join(o.home, WORKSPACE_STORE_PUSH_DIR),
   });
   const taskJournal = new TaskJournal({
     file: join(o.home, TASK_JOURNAL_FILE),
@@ -731,7 +743,7 @@ export function createFacade(o: FacadeOptions): Facade {
     batch,
     board,
     routines,
-    taskTemplates: new TaskTemplates({ projectsDir: () => workspace.projectsDir() }),
+    taskTemplates,
     knowledge,
     agents,
     services,

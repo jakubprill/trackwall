@@ -32,6 +32,7 @@ When the routine changes, whether an agent saved a new version or someone edited
 
 ## Good to know
 
+- The [workspace store](/features/local-config) can keep the routines you approved in git, with its history, and push them to your remote: turn on "Keep Plan and knowledge in the store" in "Settings > Workspace". A routine changed after its approval stays there as you approved it until you approve the change.
 - Each routine is a Markdown file in `.trackwall/routines` of your projects folder: the title, repo, model and approvals mode at the top, the prompt below. You can read and edit it in any editor; an edit needs a new approval.
 - Your approval covers the routine's prompt, not the mise tasks it runs. Those run like any mise task in that repo, so check a mise task the agent added for the routine as you would any other.
 - A routine runs only when you press "Run". There is no schedule yet.

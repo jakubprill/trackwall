@@ -39,6 +39,7 @@ javaNavigation:
   runtimes:
     - <tools>/jdk-21
 localConfigRemote: https://git.example.com/me/local-config.git
+storePlanAndKnowledge: true
 supervisor:
   changesCode: false
 repoTags:

@@ -44,6 +44,7 @@ Under `workspace.yaml` a table lists its keys:
 | `taskBranchPrefix` | what the branch of a new task starts with, such as `feature/` | by hand |
 | `javaNavigation` | the Java language server and Java that tasks get for code navigation | "Settings > Agents" |
 | `localConfigRemote` | the only remote the workspace store is pushed to | "Settings > Workspace" |
+| `storePlanAndKnowledge` | whether the workspace store also keeps the approved knowledge and routines, the board and your task templates | "Settings > Workspace" |
 | `supervisor` | whether the supervisor may change code itself | "Settings > Agents" |
 | `repoTags` | your own tags on repo cards | by hand |
 | `dayStart` | your addition to the first message of Start my day | by hand |

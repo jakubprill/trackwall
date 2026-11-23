@@ -48,6 +48,7 @@ export interface WorkspaceKeyValues {
   graph: GraphConfig;
   javaNavigation: JavaNavigationSettings | null;
   localConfigRemote: string | null;
+  storePlanAndKnowledge: boolean;
 }
 
 /** How long a value from the file may be in the line; a longer one is cut. */
@@ -88,6 +89,7 @@ export const workspaceKeyValue: { [K in WorkspaceKey]: (value: WorkspaceKeyValue
   },
   javaNavigation: (settings) => (settings === null ? "not set" : `jdtls: ${settings.jdtls}`),
   localConfigRemote: (url) => (url === null ? "none: the store is not pushed" : withoutUserInfo(url)),
+  storePlanAndKnowledge: (on) => (on ? "on" : "off"),
 };
 
 function oneLine(text: string): string {

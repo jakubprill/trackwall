@@ -16,6 +16,7 @@ import {
 import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
+import type { FileCopy, FolderCopies } from "../../infra/named-file-folder.ts";
 import { readRegularFile } from "../../infra/regular-file.ts";
 import { ensureTrackwallDir } from "../../infra/trackwall-dir.ts";
 import { itemFileName, itemIdOfFile, readItemFile, writeItemFile } from "./board-file.ts";
@@ -75,7 +76,18 @@ export class Board {
    * so a read beside a write in the background (an item following its tasks, ADR-213) would lose that item.
    */
   board(): Promise<{ items: BoardItem[]; problems: BoardProblem[] }> {
-    return this.#inTurn(async () => readBoard(await this.#dir()));
+    return this.#inTurn(async () => {
+      const { items, problems } = await readBoard(await this.#dir());
+      return { items, problems };
+    });
+  }
+
+  /** The files that hold an item, byte for byte, for the workspace store (ADR-298); a file that holds none is held. */
+  storeCopies(): Promise<FolderCopies> {
+    return this.#inTurn(async () => {
+      const { copies, problems } = await readBoard(await this.#dir());
+      return { copies, held: problems.map((p) => p.file) };
+    });
   }
 
   async item(id: string): Promise<BoardItem> {
@@ -226,11 +238,12 @@ function taskWorkMoves(current: BoardColumn, column: TaskWorkColumn): boolean {
   return TASK_WORK_FROM[column].has(current);
 }
 
-async function readItem(path: string, id: string): Promise<{ item: BoardItem } | { problem: string }> {
+async function readItem(path: string, id: string): Promise<{ item: BoardItem; bytes: Buffer } | { problem: string }> {
   try {
     const bytes = await readRegularFile(path, MAX_ITEM_FILE_BYTES);
     if (bytes === undefined) return { problem: "the file disappeared while the board was read" };
-    return readItemFile(id, bytes.toString("utf8"));
+    const read = readItemFile(id, bytes.toString("utf8"));
+    return "item" in read ? { item: read.item, bytes } : read;
   } catch (err) {
     return { problem: messageOf(err) };
   }
@@ -289,7 +302,7 @@ function orderBefore(siblings: readonly BoardItem[], before: string | null): num
 }
 
 /** Every item file of the folder, read a few at a time; a file that holds no item is a problem, the rest still loads. */
-async function readBoard(dir: string): Promise<{ items: BoardItem[]; problems: BoardProblem[] }> {
+async function readBoard(dir: string): Promise<{ items: BoardItem[]; problems: BoardProblem[]; copies: FileCopy[] }> {
   const files = (await readdir(dir)).sort().flatMap((name) => {
     const id = itemIdOfFile(name);
     return id === undefined ? [] : [{ name, id }];
@@ -300,11 +313,14 @@ async function readBoard(dir: string): Promise<{ items: BoardItem[]; problems: B
   }));
   const items: BoardItem[] = [];
   const problems: BoardProblem[] = [];
+  const copies: FileCopy[] = [];
   for (const { name, file } of read) {
-    if ("item" in file) items.push(file.item);
-    else problems.push({ file: name, message: file.problem });
+    if ("item" in file) {
+      items.push(file.item);
+      copies.push({ file: name, bytes: file.bytes });
+    } else problems.push({ file: name, message: file.problem });
   }
   if (files.length > MAX_ITEM_FILES)
     problems.push({ file: files[MAX_ITEM_FILES]?.name ?? "", message: `the board reads at most ${MAX_ITEM_FILES} files` });
-  return { items, problems };
+  return { items, problems, copies };
 }

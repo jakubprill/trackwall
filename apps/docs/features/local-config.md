@@ -14,7 +14,7 @@ Keep mise tasks only on your computer, out of the repo, with every version backe
 - A backup a few seconds after you or an agent save the file, with every earlier version kept.
 - Your files back by themselves when Trackwall clones a repo again, so a deleted folder costs you nothing.
 - "Ignore locally", so the file never slips into a commit or a merge request.
-- The same tasks on a second computer, through a private repo you choose as the remote.
+- The same tasks on a second computer, through a private repo you choose as the remote, and, if you turn it on, your approved knowledge and routines, the board and your task templates with them.
 
 ## How it works
 
@@ -26,6 +26,8 @@ The "mise tasks" tab of a repo shows a "Local config" section with each file's s
 
 "Settings > Workspace" shows where the store is, the last backup, and whether it was pushed. Without a remote the backups stay on this computer. With one, an HTTPS or SSH address of a private repo on a repo host that you allowed there, Trackwall pushes after every backup, and on another computer you clone the store into its projects folder; repos you then clone with Trackwall get their files back by themselves, and a repo already there gets them with "Restore from the store".
 
+The store can also keep what you set up in Trackwall itself. Turn on "Keep Plan and knowledge in the store" under the workspace store in "Settings > Workspace", and once a minute Trackwall copies into the store the [knowledge](/features/knowledge) entries and [routines](/features/routines) in the version you approved, every item of the [board](/features/plan) and your own [task templates](/features/task-templates), each kind in a folder of its own. Changes made within that minute go into one commit. An entry an agent proposed stays out until you approve it, and an entry changed after you approved it stays in the store as you approved it until you approve the change. The store is only a copy: Trackwall and its agents keep reading these things from the projects folder, never from the store. Turning it off takes the four folders out of the store with one commit; their history stays.
+
 ## Use it
 
 1. Write your tasks in `mise.local.toml` in the repo root, under `[tasks]` as in `mise.toml`.
@@ -33,12 +35,15 @@ The "mise tasks" tab of a repo shows a "Local config" section with each file's s
 3. Open the repo's "mise tasks" tab and press "Ignore locally" if the section shows a warning.
 4. For a copy off this computer, create an empty private repo on your repo host and add it to the store with git: `git -C <projects folder>/.trackwall/local remote add origin <HTTPS or SSH address>`.
 5. Open "Settings > Workspace" and press "Push to this remote" under the workspace store. Trackwall pushes the next backup there.
+6. To keep your knowledge, routines, board and task templates in the store as well, tick "Keep Plan and knowledge in the store" there.
 
 ## Good to know
 
 - Only `mise.toml`, `mise.local.toml` and `.worktreeinclude` are backed up, and only real files of up to 256 KB, never a link.
 - Values in `[env]` of a backed-up `mise.toml` or `mise.local.toml` go into the store and to its remote. Keep secrets out of the file, or keep the remote private.
-- The store's commits are made by "Trackwall", without your git hooks and signing.
+- The store's commits are made by "Trackwall", without your git hooks and signing. Agents never commit to the store.
+- With "Keep Plan and knowledge in the store" on, your knowledge, routines, board and task templates go to the same remote as the mise files. If the remote is a private repo on a personal account, knowledge about work repos does not belong there: keep a work store on your company's repo host. The setting says where they go before you turn it on.
+- The store gets a `README.md` with the first of these folders, which says what lies where. Trackwall writes it once and never over a `README.md` the store already has.
 - Trackwall pushes the store only to the address you allowed, whatever the store's remote says later. An agent that can write in your projects folder could change that remote; the backups still go only to your address, and "Settings" shows the new remote with "Push to this remote". Press it only if you changed the remote yourself.
 - "Stop pushing" under the store keeps the backups on this computer again. Removing the store's remote with git does not stop the pushes, since Trackwall pushes to the address you chose, not to whatever the store's remote says.
 - Trackwall keeps the address you allowed in `~/.trackwall/workspace.yaml` as you wrote it. If it has a token in it and you keep that file in a repo, use a credential helper instead of the token.

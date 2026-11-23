@@ -43,6 +43,12 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     show: { place: { kind: "view", view: "sessions" } },
   },
   {
+    id: "plan-and-knowledge-in-the-store",
+    title: "Plan and knowledge in the workspace store",
+    text: "Turn on Keep Plan and knowledge in the store, and the approved knowledge, routines, board and your task templates get a history in git and go with the store's pushes.",
+    show: { place: { kind: "settings", category: "workspace" } },
+  },
+  {
     id: "sync-main-in-new-task",
     title: "Sync main in the New task form",
     text: "When a repo's main is behind the server, the New task form says so above Create task and offers Sync main, so the task starts from the newest code.",
@@ -65,12 +71,6 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     title: "Close all in Sessions",
     text: "The tasks whose agent says its work is over are counted at the top of the Sessions list, with Close all.",
     show: { place: { kind: "view", view: "sessions" } },
-  },
-  {
-    id: "home-off-the-view-bar",
-    title: "Home off the view bar",
-    text: "Home's icon comes back once you show it in Settings › App › Home; its shortcut and the command palette open it either way.",
-    show: { place: { kind: "settings", category: "app" } },
   },
 ];
 
