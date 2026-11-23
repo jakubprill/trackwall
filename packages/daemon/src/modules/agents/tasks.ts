@@ -28,6 +28,7 @@ import {
   type TaskMiseConfig,
   type TaskPause,
   type TaskRefresh,
+  type TaskRunSettings,
   type TaskSharedFiles,
   type TaskWorktree,
   type TaskWorktreeLoss,
@@ -117,9 +118,19 @@ export interface TasksVcs extends HandoffGit, EndedTaskGit {
    * The digest of the run settings of the repo `dir` lies in (`run-settings.ts`), refused when the repo's other sandboxed
    * tasks have digests it does not match; `null` without a git directory.
    */
-  runSettingsBaseline(dir: string): Promise<string | null>;
+  runSettingsBaseline(dir: string): Promise<RunSettingsGuard | null>;
+  /** The run settings of the repo `dir` lies in against `guards`, with what each change holds for the user to read. */
+  reviewRunSettings(dir: string, guards: readonly RunSettingsGuard[]): Promise<TaskRunSettings | null>;
+  /** The run settings the user accepts, reviewed as `digest`; throws with the reason when they may not. */
+  acceptRunSettings(dir: string, guards: readonly RunSettingsGuard[], digest: string): Promise<RunSettingsGuard | null>;
   /** From now on git in a repo with one of these worktrees runs only while its run settings match one of their digests. */
-  useRunSettingsBaselines(baselines: readonly { worktree: string; repoDir: string; digest: string }[]): void;
+  useRunSettingsBaselines(baselines: readonly ({ worktree: string; repoDir: string; branch: string } & RunSettingsGuard)[]): void;
+}
+
+/** A repo's run settings as a sandboxed task keeps them: the digest, and each place's hash, which a refusal names. */
+interface RunSettingsGuard {
+  digest: string;
+  snapshot: Readonly<Record<string, string>> | null;
 }
 
 /**
@@ -449,6 +460,7 @@ export class AgentTasks {
       retryOf,
       impactProposed: {},
       runSettings: null,
+      runSettingsSnapshot: null,
       trustedMiseConfig: null,
       port: freeTaskPort([...this.#tasks.map((t) => t.port), ...this.#creatingPorts]),
       included: noIncludedFiles(),
@@ -463,7 +475,7 @@ export class AgentTasks {
       // config the user trusted (ADR-59, ADR-61).
       task.trustedMiseConfig = await this.#initialMiseConfig(task);
       // Before the agent's session starts, so the digest is of the settings the user left (ADR-181 addendum).
-      if (task.sandbox) task.runSettings = await this.#deps.vcs.runSettingsBaseline(task.worktree);
+      if (task.sandbox) Object.assign(task, runSettingsFields(await this.#deps.vcs.runSettingsBaseline(task.worktree)));
       // Saved before the session starts: the worktree is already on disk and must not disappear from the list if the daemon crashes.
       this.#save([task, ...this.#tasks]);
       if (launch === "launch") await this.#launchNew(task);
@@ -1146,6 +1158,43 @@ export class AgentTasks {
   }
 
   /**
+   * The run settings of the task's repo against those its sandboxed tasks keep (ADR-181 addendum), with the text of each
+   * change for the user to read. Works also while git in the repo is refused: that is when the user needs it.
+   */
+  async runSettings(id: string): Promise<TaskRunSettings> {
+    const task = this.#get(id);
+    const review = await this.#deps.vcs.reviewRunSettings(task.repoDir, this.#guardsOf(task.repoDir));
+    if (review === null) throw new DomainError("repo_unavailable", `${task.repo}: no git directory in ${task.repoDir}`);
+    return review;
+  }
+
+  /**
+   * The user accepts the run settings of the task's repo they reviewed (ADR-181 addendum): every sandboxed task of the
+   * repo keeps them from now on, so git runs there again. `digest` is the one they saw: settings changed again in the
+   * meantime are refused, so the acceptance never covers a version nobody looked at, and so is a change that makes git
+   * read a file the guard does not read.
+   */
+  async acceptRunSettings(id: string, digest: string): Promise<TaskRunSettings> {
+    const task = this.#get(id);
+    const guards = this.#guardsOf(task.repoDir);
+    if (guards.length === 0) throw new DomainError("bad_request", `no task in the sandbox guards the git settings of repo ${task.repo}`);
+    const accepted = await this.#deps.vcs.acceptRunSettings(task.repoDir, guards, digest).catch((err: unknown) => {
+      throw new DomainError("bad_request", `the git settings of repo ${task.repo} cannot be accepted: ${messageOf(err)}`);
+    });
+    if (accepted === null) throw new DomainError("repo_unavailable", `${task.repo}: no git directory in ${task.repoDir}`);
+    const fields = runSettingsFields(accepted);
+    this.#save(this.#tasks.map((t) => (t.repoDir === task.repoDir && t.runSettings !== null ? { ...t, ...fields } : t)));
+    return { guarded: true, matches: true, baselineKnown: true, changes: [], digest };
+  }
+
+  /** The run settings the sandboxed tasks of the repo at `repoDir` keep. */
+  #guardsOf(repoDir: string): RunSettingsGuard[] {
+    return this.#tasks.flatMap((t) =>
+      t.repoDir === repoDir && t.runSettings !== null ? [{ digest: t.runSettings, snapshot: t.runSettingsSnapshot }] : [],
+    );
+  }
+
+  /**
    * The worktree of a task of `repo` for running a mise task in it (ADR-59), only while it has the mise config the user
    * trusted and the task is not being ended: `mise_unavailable` names the changed files, and only the user can trust
    * them, in the task's panel.
@@ -1472,8 +1521,7 @@ export class AgentTasks {
    */
   async #withRunSettings(task: KnownTask): Promise<KnownTask> {
     if (!task.sandbox || task.runSettings !== null) return task;
-    const runSettings = await this.#deps.vcs.runSettingsBaseline(task.worktree);
-    const guarded = { ...task, runSettings };
+    const guarded = { ...task, ...runSettingsFields(await this.#deps.vcs.runSettingsBaseline(task.worktree)) };
     this.#save(this.#tasks.map((t) => (t.id === task.id ? guarded : t)));
     return guarded;
   }
@@ -1522,7 +1570,11 @@ export class AgentTasks {
   /** The digests of the listed sandboxed tasks guard git in their repos (ADR-181 addendum). */
   #guardRunSettings(): void {
     this.#deps.vcs.useRunSettingsBaselines(
-      this.#tasks.flatMap((t) => (t.runSettings === null ? [] : [{ worktree: t.worktree, repoDir: t.repoDir, digest: t.runSettings }])),
+      this.#tasks.flatMap((t) =>
+        t.runSettings === null
+          ? []
+          : [{ worktree: t.worktree, repoDir: t.repoDir, branch: t.branch, digest: t.runSettings, snapshot: t.runSettingsSnapshot }],
+      ),
     );
   }
 }
@@ -1554,9 +1606,15 @@ function view({
   impactProposed: ______,
   stoppedAtTokenBudget: _______,
   runSettings: ________,
+  runSettingsSnapshot: _________,
   ...task
 }: KnownTask): Task {
   return task;
+}
+
+/** A task's fields for the run settings it keeps; both `null` when the repo had no git directory to read. */
+function runSettingsFields(baseline: RunSettingsGuard | null): Pick<KnownTask, "runSettings" | "runSettingsSnapshot"> {
+  return { runSettings: baseline?.digest ?? null, runSettingsSnapshot: baseline?.snapshot ?? null };
 }
 
 /** A git error in the repo or the task's worktree as `repo_unavailable` with git's message. */

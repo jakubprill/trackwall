@@ -7,8 +7,7 @@ import type { Connection } from "@/lib/connection";
 import { changedSinceShown, shownMiseConfig } from "@/lib/mise-config-review";
 import { useAction } from "@/lib/use-action";
 import type { TaskDetails } from "@/lib/use-task-details";
-
-const CHANGE_LABEL: Record<MiseConfigChange["change"], string> = { added: "added", modified: "changed", removed: "deleted" };
+import { CHANGE_LABEL, ChangedText } from "./ChangedText.tsx";
 
 /**
  * The warning above a task's tabs when the agent changed the mise config of its worktree (ADR-59): Trackwall runs no
@@ -94,16 +93,12 @@ function heading(config: Config): string {
 }
 
 function ChangedFile({ change }: { change: MiseConfigChange }) {
-  const label = `${CHANGE_LABEL[change.change]} ${change.path}`;
-  if (change.change === "removed") return <p className="text-muted-foreground truncate font-mono text-xs">{label}</p>;
   return (
-    <details className="text-xs">
-      <summary className="text-muted-foreground cursor-pointer truncate font-mono">{label}</summary>
-      {change.content === null ? (
-        <p className="text-muted-foreground mt-1">Too long to show here; open the worktree in VS Code to read it.</p>
-      ) : (
-        <pre className="bg-background mt-1 max-h-64 overflow-auto rounded border p-2 font-mono whitespace-pre-wrap">{change.content}</pre>
-      )}
-    </details>
+    <ChangedText
+      label={`${CHANGE_LABEL[change.change]} ${change.path}`}
+      removed={change.change === "removed"}
+      content={change.content}
+      notShown="Too long to show here; open the worktree in VS Code to read it."
+    />
   );
 }

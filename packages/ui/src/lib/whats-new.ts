@@ -37,6 +37,12 @@ export interface WhatsNewEntry {
  */
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
+    id: "accept-changed-git-hooks",
+    title: "Accept changed git hooks",
+    text: "When a package install in a sandboxed task changes the repo's git hooks, the error names them, and End task shows them with Accept these settings, so the task can end.",
+    show: { place: { kind: "view", view: "sessions" } },
+  },
+  {
     id: "plan-and-knowledge-in-the-store",
     title: "Plan and knowledge in the workspace store",
     text: "Turn on Keep Plan and knowledge in the store, and the approved knowledge, routines, board and your task templates get a history in git and go with the store's pushes.",
@@ -65,12 +71,6 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     title: "Close all in Sessions",
     text: "The tasks whose agent says its work is over are counted at the top of the Sessions list, with Close all.",
     show: { place: { kind: "view", view: "sessions" } },
-  },
-  {
-    id: "home-off-the-view-bar",
-    title: "Home off the view bar",
-    text: "Home's icon comes back once you show it in Settings › App › Home; its shortcut and the command palette open it either way.",
-    show: { place: { kind: "settings", category: "app" } },
   },
 ];
 
