@@ -7,9 +7,10 @@ import {
   type LocalConfigFileState,
   MAX_LOCAL_CONFIG_BYTES,
   type RepoLocalConfig,
+  SETTINGS_STORE_FOLDERS,
+  type StoreFolder,
   WORKSPACE_STORE_FOLDERS,
   type WorkspaceStore,
-  type WorkspaceStoreFolder,
   type WorkspaceStorePush,
   withoutUserInfo,
 } from "@trackwall/protocol";
@@ -33,7 +34,9 @@ import { moveToReposFolder, storePath } from "./store-layout.ts";
  * is committed on top. A file that disappears from a repo stays in the store, which is what makes the backup worth
  * having: a new clone gets it back with "Restore". A file the repo's commits have is not local config and is left alone.
  * While the user allows it, the store also keeps the workspace's knowledge, routines, board and task templates
- * (`store-folders.ts`): compared once a minute, so a board being edited makes one commit, not one per change.
+ * (`store-folders.ts`), and while the user allows that too, `workspace.yaml` and the Copilot CLI user files with their
+ * secrets masked (`settings-copies.ts`, ADR-299): compared once a minute, so a board being edited makes one commit, not
+ * one per change. Only the user turning a group off takes its folders out, never a pass on its own.
  */
 
 /** How often the repos' files are compared: a saved file is in the store within this time plus a commit. */
@@ -56,6 +59,9 @@ interface LocalConfigRepos {
   /** Whether the store also keeps the workspace's folders (`storePlanAndKnowledge`, ADR-298). */
   storePlanAndKnowledge(): boolean;
   setStorePlanAndKnowledge(on: boolean): void;
+  /** Whether the store also keeps `workspace.yaml` and the Copilot CLI user files (`storeSettings`, ADR-299). */
+  storeSettings(): boolean;
+  setStoreSettings(on: boolean): void;
 }
 
 /** What `local-config` needs from `vcs`; wired in the facade. */
@@ -82,16 +88,31 @@ export interface LocalConfigDeps {
   repos: LocalConfigRepos;
   vcs: LocalConfigVcs;
   /**
-   * The copies of each folder the store keeps while the user allows it (ADR-298), from `knowledge`, `routines`, `board`
-   * and `task-templates`; wired in the facade.
+   * The copies of each folder the store keeps while the user allows it: from `knowledge`, `routines`, `board` and
+   * `task-templates` (ADR-298), and of `workspace.yaml` and the Copilot CLI user files (`settings-copies.ts`, ADR-299),
+   * with why a held file was held; wired in the facade.
    */
-  storeFolders: Record<WorkspaceStoreFolder, () => Promise<FolderCopies>>;
+  storeFolders: Record<StoreFolder, () => Promise<StoreFolderCopies>>;
   log: (msg: string) => void;
   /** The bare repo in the state folder the store is pushed from (ADR-127), out of reach of the sessions in the projects folder. */
   pushDir: string;
   /** `PUSH_RETRY_MS` in the daemon; shorter in tests. */
   pushRetryMs?: number;
 }
+
+/** A folder's copies, and why a held file was held where the folder says so. */
+interface StoreFolderCopies extends FolderCopies {
+  problems?: readonly string[];
+}
+
+/** The groups of store folders, each behind a setting of its own. */
+const STORE_GROUPS = ["planAndKnowledge", "settings"] as const;
+type StoreGroup = (typeof STORE_GROUPS)[number];
+
+const GROUP_FOLDERS: Record<StoreGroup, readonly StoreFolder[]> = {
+  planAndKnowledge: WORKSPACE_STORE_FOLDERS,
+  settings: SETTINGS_STORE_FOLDERS,
+};
 
 /** A repo's local config file that changed since the last comparison, with what was read. */
 interface Changed {
@@ -174,8 +195,9 @@ export class LocalConfig {
   async store(): Promise<WorkspaceStore> {
     const dir = await this.#storeDir();
     const problems = [this.#problems.backup, this.#problems.folders].filter((p) => p !== null);
-    const keepsPlanAndKnowledge = configOrProblem(() => this.#deps.repos.storePlanAndKnowledge(), false).value;
-    const base = { push: this.#push, keepsPlanAndKnowledge, problem: problems.length === 0 ? null : problems.join("; ") };
+    const keepsPlanAndKnowledge = this.#setting("planAndKnowledge").value;
+    const keepsSettings = this.#setting("settings").value;
+    const base = { push: this.#push, keepsPlanAndKnowledge, keepsSettings, problem: problems.length === 0 ? null : problems.join("; ") };
     const allowed = this.#allowedRemote();
     const pushesTo = allowed === null ? null : withoutUserInfo(allowed);
     if (dir === null) return { dir, lastBackup: null, pushesTo, remote: null, remoteAllowed: false, remoteProblem: null, ...base };
@@ -208,9 +230,22 @@ export class LocalConfig {
   }
 
   /** Has the store keep the workspace's folders, or stop keeping them (ADR-298), at once rather than within a minute. */
-  async keepPlanAndKnowledge(on: boolean): Promise<WorkspaceStore> {
+  keepPlanAndKnowledge(on: boolean): Promise<WorkspaceStore> {
     this.#deps.repos.setStorePlanAndKnowledge(on);
-    await this.keepFolders();
+    return this.#keepOrStop("planAndKnowledge", on);
+  }
+
+  /**
+   * Has the store keep `workspace.yaml` and the Copilot CLI user files, or stop keeping them (ADR-299), at once rather
+   * than within a minute.
+   */
+  keepSettings(on: boolean): Promise<WorkspaceStore> {
+    this.#deps.repos.setStoreSettings(on);
+    return this.#keepOrStop("settings", on);
+  }
+
+  async #keepOrStop(group: StoreGroup, on: boolean): Promise<WorkspaceStore> {
+    await (on ? this.keepFolders() : this.#inTurn(() => this.#keepFolders(group)));
     return this.store();
   }
 
@@ -377,28 +412,25 @@ export class LocalConfig {
   }
 
   /**
-   * Brings the store's folders to the workspace's copies, with one commit, then writes them into the store's folder for
-   * the user to browse. A `workspace.yaml` that cannot be read changes nothing: Settings › Files says what to fix, and an
-   * unread setting must not take the folders out. A folder that cannot be read stays as the store has it.
+   * Brings the store's folders to the copies of the groups the user allows, with one commit, then writes them into the
+   * store's folder for the user to browse; with `stopping`, takes that group's folders out instead. A group that is off
+   * is left as the store has it: only the user turning it off takes it out, since a state folder made afresh (a new
+   * container, ADR-299) has no setting while its store still holds the last computer's copies. A `workspace.yaml` that
+   * cannot be read changes nothing either: Settings › Files says what to fix. A folder that cannot be read stays as the
+   * store has it.
    */
-  async #keepFolders(): Promise<void> {
+  async #keepFolders(stopping?: StoreGroup): Promise<void> {
     const store = await this.#storeDir();
-    const setting = configOrProblem(() => this.#deps.repos.storePlanAndKnowledge(), false);
-    if (store === null || setting.problem !== null) return;
+    if (store === null) return;
     const problems: string[] = [];
-    const wanted = new Map<WorkspaceStoreFolder, FolderCopies>();
-    for (const folder of WORKSPACE_STORE_FOLDERS) {
-      try {
-        wanted.set(folder, setting.value ? await this.#deps.storeFolders[folder]() : { copies: [], held: [] });
-      } catch (err) {
-        problems.push(`${folder}: ${messageOf(err)}`);
-      }
-    }
+    const wanted = new Map<StoreFolder, FolderCopies>();
+    if (stopping !== undefined) for (const folder of GROUP_FOLDERS[stopping]) wanted.set(folder, { copies: [], held: [] });
+    else for (const group of STORE_GROUPS) await this.#readGroup(group, wanted, problems);
     const head = await this.#deps.vcs.storeHead(store);
-    const changes = storeFolderChanges(await this.#keptFiles(store, head), wanted, setting.value ? storeReadme() : null);
+    const changes = storeFolderChanges(await this.#keptFiles(store, head), wanted, stopping === undefined ? storeReadme() : null);
     if (changes.folders.length > 0) {
       await this.#ensureStore(store);
-      await this.#deps.vcs.commitBackups(store, changes.files, changes.removed, keepMessage(changes, setting.value));
+      await this.#deps.vcs.commitBackups(store, changes.files, changes.removed, keepMessage(changes, stopping === undefined));
       this.#advance(store, head, await this.#deps.vcs.storeHead(store));
       for (const file of changes.files)
         await writeStoreCopy(store, file.path, file.content).catch((err: unknown) => problems.push(messageOf(err)));
@@ -406,6 +438,21 @@ export class LocalConfig {
     }
     this.#setProblems("folders", problems);
     this.#pushIfDue(store, await this.#deps.vcs.storeHead(store));
+  }
+
+  /** The copies of each folder of `group` into `wanted` while the user allows the group; a folder that cannot be read is left out. */
+  async #readGroup(group: StoreGroup, wanted: Map<StoreFolder, FolderCopies>, problems: string[]): Promise<void> {
+    const setting = this.#setting(group);
+    if (setting.problem !== null || !setting.value) return;
+    for (const folder of GROUP_FOLDERS[group]) {
+      try {
+        const { problems: held = [], ...copies } = await this.#deps.storeFolders[folder]();
+        wanted.set(folder, copies);
+        problems.push(...held.map((problem) => `${folder}: ${problem}`));
+      } catch (err) {
+        problems.push(`${folder}: ${messageOf(err)}`);
+      }
+    }
   }
 
   /** The blob ids of the store's kept files at `head`, listed by git only when the commit is new to the daemon. */
@@ -577,6 +624,12 @@ export class LocalConfig {
     const projectsDir = await this.#deps.repos.projectsDir();
     if (store === trackwallDir(projectsDir, "local")) await ensureTrackwallDir(projectsDir);
     await this.#deps.vcs.ensureBackupRepo(store);
+  }
+
+  /** A group's setting; off, with the problem, while `workspace.yaml` cannot be read. */
+  #setting(group: StoreGroup): { value: boolean; problem: string | null } {
+    const read = group === "settings" ? () => this.#deps.repos.storeSettings() : () => this.#deps.repos.storePlanAndKnowledge();
+    return configOrProblem(read, false);
   }
 
   /** A `workspace.yaml` that cannot be read allows no remote: Settings › Files says what to fix. */

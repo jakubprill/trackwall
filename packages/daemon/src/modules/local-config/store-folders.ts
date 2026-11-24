@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { WORKSPACE_STORE_FOLDERS, type WorkspaceStoreFolder } from "@trackwall/protocol";
+import { STORE_FOLDERS, type StoreFolder } from "@trackwall/protocol";
 import type { FolderCopies } from "../../infra/named-file-folder.ts";
 
 /**
  * The workspace store's copies of the workspace's own folders (§4.13, ADR-298): `knowledge/`, `routines/`, `board/` and
- * `task-templates/` at the store's root, one file per file of the folder, while the user allows it. What a pass changes is
+ * `task-templates/` at the store's root, one file per file of the folder, and `trackwall/` and `copilot/` with the user's
+ * settings (ADR-299), each while the user allows it. What a pass changes is
  * worked out here from the store's last commit, by blob id, so a pass with nothing changed reads no file from git.
  */
 
@@ -20,13 +21,13 @@ export interface StoreEntry {
 export interface StoreFolderChanges {
   files: { path: string; content: Buffer }[];
   removed: string[];
-  /** The folders with a change, in the order of `WORKSPACE_STORE_FOLDERS`. */
-  folders: WorkspaceStoreFolder[];
+  /** The folders with a change, in the order of `STORE_FOLDERS`. */
+  folders: StoreFolder[];
 }
 
 /** The blob ids of the store's files in its folders, and of its front page, by path; anything deeper is not the daemon's. */
 export function keptFiles(entries: readonly StoreEntry[]): Map<string, string> {
-  const folders: readonly string[] = WORKSPACE_STORE_FOLDERS;
+  const folders: readonly string[] = STORE_FOLDERS;
   const kept = new Map<string, string>();
   for (const { path, oid } of entries) {
     const parts = path.split("/");
@@ -42,11 +43,11 @@ export function keptFiles(entries: readonly StoreEntry[]): Map<string, string> {
  */
 export function storeFolderChanges(
   kept: ReadonlyMap<string, string>,
-  wanted: ReadonlyMap<WorkspaceStoreFolder, FolderCopies>,
+  wanted: ReadonlyMap<StoreFolder, FolderCopies>,
   readme: Buffer | null,
 ): StoreFolderChanges {
   const changes: StoreFolderChanges = { files: [], removed: [], folders: [] };
-  for (const folder of WORKSPACE_STORE_FOLDERS) {
+  for (const folder of STORE_FOLDERS) {
     const folderCopies = wanted.get(folder);
     if (folderCopies === undefined) continue;
     const { copies, held } = folderCopies;
@@ -66,7 +67,7 @@ export function storeFolderChanges(
   return changes;
 }
 
-/** `Keep knowledge, board` while the user allows the folders, `Stop keeping knowledge, board` once they do not. */
+/** `Keep knowledge, board` while the user allows the folders, `Stop keeping knowledge, board` once they turn them off. */
 export function keepMessage(changes: StoreFolderChanges, on: boolean): string {
   return `${on ? "Keep" : "Stop keeping"} ${changes.folders.join(", ")}`;
 }
@@ -96,8 +97,11 @@ export function storeReadme(): Buffer {
       "- `routines/`: the routines, only in the version you approved.",
       "- `board/`: the board items, one file each.",
       "- `task-templates/`: your own task templates.",
+      "- `trackwall/`: Trackwall's `workspace.yaml`.",
+      "- `copilot/`: your Copilot CLI `settings.json`, `copilot-instructions.md` and `mcp-config.json`, with secrets masked.",
       "",
-      'The last four are here while "Keep Plan and knowledge in the store" is on in Settings.',
+      'Knowledge, routines, the board and the templates are here while "Keep Plan and knowledge in the store" is on in',
+      'Settings, the last two folders while "Keep Trackwall and Copilot CLI settings in the store" is.',
       "",
     ].join("\n"),
   );

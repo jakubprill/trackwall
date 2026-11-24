@@ -402,6 +402,7 @@ export const WorkspaceKey = z.enum([
   "javaNavigation",
   "localConfigRemote",
   "storePlanAndKnowledge",
+  "storeSettings",
   "supervisor",
   "repoTags",
   "dayStart",
@@ -466,6 +467,11 @@ export const WORKSPACE_KEYS: Record<WorkspaceKey, WorkspaceKeyInfo> = {
   localConfigRemote: { purpose: "The only remote the workspace store is pushed to.", docs: "local-config", settings: "workspace" },
   storePlanAndKnowledge: {
     purpose: "Whether the workspace store also keeps your approved knowledge and routines, the board and your task templates.",
+    docs: "local-config",
+    settings: "workspace",
+  },
+  storeSettings: {
+    purpose: "Whether the workspace store also keeps workspace.yaml and your Copilot CLI settings, with their secrets masked.",
     docs: "local-config",
     settings: "workspace",
   },

@@ -73,6 +73,7 @@ describe("the workspace store in the settings", () => {
     remoteProblem: null,
     push: { kind: "none" },
     keepsPlanAndKnowledge: false,
+    keepsSettings: false,
     problem: null,
   };
   const remote = "https://git.example.com/me/trackwall-local.git";

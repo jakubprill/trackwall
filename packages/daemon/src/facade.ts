@@ -80,6 +80,7 @@ import { JavaNavigation } from "./modules/java-navigation/java-navigation.ts";
 import { JDTLS_JAVA, JDTLS_RELEASE, LOMBOK_RELEASE, type PinnedRelease } from "./modules/java-navigation/pinned-releases.ts";
 import { Knowledge } from "./modules/knowledge/knowledge.ts";
 import { LocalConfig } from "./modules/local-config/local-config.ts";
+import { copilotCopies, workspaceFileCopies } from "./modules/local-config/settings-copies.ts";
 import { Logs } from "./modules/logs/logs.ts";
 import { McpAudit } from "./modules/mcp-audit/mcp-audit.ts";
 import { MergeRequests } from "./modules/merge-requests/merge-requests.ts";
@@ -414,6 +415,8 @@ export function createFacade(o: FacadeOptions): Facade {
       routines: () => routines.storeCopies(),
       board: () => board.storeCopies(),
       "task-templates": () => taskTemplates.storeCopies(),
+      trackwall: () => workspaceFileCopies(workspace.configFile()),
+      copilot: async () => copilotCopies(copilotHome(await o.userEnv())),
     },
     log: o.log,
     pushDir: join(o.home, WORKSPACE_STORE_PUSH_DIR),
