@@ -177,14 +177,6 @@ export function NewSession({
             rows={5}
           />
           <TemplatePlaceholders prompt={prompt} picked={template.picked} />
-          <StackTraceField
-            shown={offersStackTrace(start)}
-            value={stackTrace}
-            open={stackTraceOpen}
-            disabled={pending}
-            onChange={setStackTrace}
-            onOpen={setStackTraceOpen}
-          />
           <FoldedStartOptions
             conn={conn}
             worktree={
@@ -198,6 +190,15 @@ export function NewSession({
             secondAttempt={secondAttemptPill(start, second, providerModels)}
             sandbox={sandboxNote(offers.sandbox, approvals)}
             disabled={pending}
+          />
+          {/* Under the options, so that turning Own worktree on or off never moves the pill under the mouse. */}
+          <StackTraceField
+            shown={offersStackTrace(start)}
+            value={stackTrace}
+            open={stackTraceOpen}
+            disabled={pending}
+            onChange={setStackTrace}
+            onOpen={setStackTraceOpen}
           />
           {firstPart !== null && (
             <ChangeParts
