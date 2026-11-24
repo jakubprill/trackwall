@@ -2,14 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  copilotCopies,
-  MASKED,
-  maskAddress,
-  maskCopilotSettings,
-  maskMcpConfig,
-  maskWorkspaceFile,
-} from "../src/modules/local-config/settings-copies.ts";
+import { MASKED, maskAddress, maskArgs } from "../src/modules/local-config/secret-masking.ts";
+import { copilotCopies, maskCopilotSettings, maskMcpConfig, maskWorkspaceFile } from "../src/modules/local-config/settings-copies.ts";
 
 const json = (value: unknown) => Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
 const parsed = (bytes: Buffer) => JSON.parse(bytes.toString("utf8"));
@@ -144,7 +138,7 @@ describe("the user's settings as the workspace store keeps them", () => {
     const oauth = { mcpServers: { jira: { type: "http", url: "https://mcp.example.com", oauth: { clientSecret: "abc" } } } };
     const otherShape = { servers: { jira: { env: { JIRA_TOKEN: "abc" } } } };
 
-    expect(() => maskMcpConfig(json(oauth))).toThrow("server jira has oauth, which Trackwall does not know");
+    expect(() => maskMcpConfig(json(oauth))).toThrow("server jira has oauth in a form Trackwall does not know");
     expect(() => maskMcpConfig(json(otherShape))).toThrow("has servers, which Trackwall does not know");
     expect(maskMcpConfig(Buffer.from("{}\n")).toString("utf8")).toBe("{}\n");
   });
@@ -165,6 +159,58 @@ describe("the user's settings as the workspace store keeps them", () => {
       model: "gpt-5",
       sandbox: { readonlyPaths: ["~/.gitconfig"] },
       provider: { apiKey: MASKED, useToken: true },
+    });
+  });
+
+  test("the shapes the second review found go in masked: an address after a flag, carrier flags, secret names, prefixed tokens", () => {
+    expect(
+      maskArgs([
+        "--url=https://tok@mcp.example.com/x?k=v",
+        "AUTH_HEADER=xyz",
+        "--access-key",
+        "AKIAEXAMPLEKEY1",
+        "--credentials",
+        "c",
+        "-u",
+        "me:pw",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "ghp_abcdefghijklmnop",
+        "git+https://ghp_x@github.com/me/repo",
+        "ssh://git@git.example.com/me/repo",
+      ]),
+    ).toEqual([
+      `--url=https://mcp.example.com/x?k=${MASKED}`,
+      `AUTH_HEADER=${MASKED}`,
+      "--access-key",
+      MASKED,
+      "--credentials",
+      MASKED,
+      "-u",
+      MASKED,
+      "-e",
+      "GITHUB_PERSONAL_ACCESS_TOKEN",
+      MASKED,
+      "git+https://github.com/me/repo",
+      "ssh://git@git.example.com/me/repo",
+    ]);
+  });
+
+  test("a server whose env, headers or args are not what Copilot CLI reads is held", () => {
+    expect(() => maskMcpConfig(json({ mcpServers: { a: { command: "x", env: "FOO=bar" } } }))).toThrow(
+      "server a has env in a form Trackwall does not know",
+    );
+    expect(() => maskMcpConfig(json({ mcpServers: { a: { command: "x", args: [1, { token: "t" }] } } }))).toThrow("server a has args");
+    expect(() => maskMcpConfig(json({ mcpServers: { a: { toString: "x" } } }))).toThrow("server a has toString");
+  });
+
+  test("settings.json masks everything under a secret key, at any depth, and addresses everywhere", () => {
+    const settings = { apiKeys: ["sk-1"], auth: { bearer: "x", git: false }, proxy: "http://u:p@proxy.example.com:8080" };
+
+    expect(parsed(maskCopilotSettings(json(settings)))).toEqual({
+      apiKeys: [MASKED],
+      auth: { bearer: MASKED, git: false },
+      proxy: "http://proxy.example.com:8080",
     });
   });
 });

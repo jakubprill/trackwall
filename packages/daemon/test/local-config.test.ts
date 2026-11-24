@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { removeFolder } from "../src/infra/remove-folder.ts";
 import { LocalConfig } from "../src/modules/local-config/local-config.ts";
-import { MASKED } from "../src/modules/local-config/settings-copies.ts";
+import { MASKED } from "../src/modules/local-config/secret-masking.ts";
 import { gitProcessesStarted } from "../src/modules/vcs/git.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { finishedClone } from "./support/clone-jobs.ts";
