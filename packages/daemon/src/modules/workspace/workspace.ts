@@ -787,6 +787,15 @@ export class Workspace {
     this.deps.file.setStorePlanAndKnowledge(on);
   }
 
+  /** Whether the workspace store also keeps `workspace.yaml` and the Copilot CLI user files (ADR-299). */
+  storeSettings(): boolean {
+    return this.deps.file.storeSettings();
+  }
+
+  setStoreSettings(on: boolean): void {
+    this.deps.file.setStoreSettings(on);
+  }
+
   setLocalConfigRemote(url: string | null): void {
     this.deps.file.setLocalConfigRemote(url);
   }

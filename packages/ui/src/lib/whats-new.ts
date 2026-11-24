@@ -37,6 +37,12 @@ export interface WhatsNewEntry {
  */
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
+    id: "settings-in-the-store",
+    title: "Settings in the workspace store",
+    text: "Turn on Keep Trackwall and Copilot CLI settings in the store, and workspace.yaml and your Copilot CLI settings get a history in git, with the tokens in mcp-config.json masked.",
+    show: { place: { kind: "settings", category: "workspace" } },
+  },
+  {
     id: "accept-changed-git-hooks",
     title: "Accept changed git hooks",
     text: "When a package install in a sandboxed task changes the repo's git hooks, the error names them, and End task shows them with Accept these settings, so the task can end.",
@@ -65,12 +71,6 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     title: "New on the server",
     text: "Every 15 minutes Trackwall asks each repo's server whether its branch moved, without a fetch, and All repos says so.",
     show: { place: { kind: "view", view: "repos" } },
-  },
-  {
-    id: "close-all-in-sessions",
-    title: "Close all in Sessions",
-    text: "The tasks whose agent says its work is over are counted at the top of the Sessions list, with Close all.",
-    show: { place: { kind: "view", view: "sessions" } },
   },
 ];
 

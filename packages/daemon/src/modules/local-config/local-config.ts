@@ -7,9 +7,10 @@ import {
   type LocalConfigFileState,
   MAX_LOCAL_CONFIG_BYTES,
   type RepoLocalConfig,
+  SETTINGS_STORE_FOLDERS,
+  type StoreFolder,
   WORKSPACE_STORE_FOLDERS,
   type WorkspaceStore,
-  type WorkspaceStoreFolder,
   type WorkspaceStorePush,
   withoutUserInfo,
 } from "@trackwall/protocol";
@@ -33,7 +34,9 @@ import { moveToReposFolder, storePath } from "./store-layout.ts";
  * is committed on top. A file that disappears from a repo stays in the store, which is what makes the backup worth
  * having: a new clone gets it back with "Restore". A file the repo's commits have is not local config and is left alone.
  * While the user allows it, the store also keeps the workspace's knowledge, routines, board and task templates
- * (`store-folders.ts`): compared once a minute, so a board being edited makes one commit, not one per change.
+ * (`store-folders.ts`), and while the user allows that too, `workspace.yaml` and the Copilot CLI user files with their
+ * secrets masked (`settings-copies.ts`, ADR-299): compared once a minute, so a board being edited makes one commit, not
+ * one per change. Only the user turning a group off takes its folders out, never a pass on its own.
  */
 
 /** How often the repos' files are compared: a saved file is in the store within this time plus a commit. */
@@ -56,6 +59,9 @@ interface LocalConfigRepos {
   /** Whether the store also keeps the workspace's folders (`storePlanAndKnowledge`, ADR-298). */
   storePlanAndKnowledge(): boolean;
   setStorePlanAndKnowledge(on: boolean): void;
+  /** Whether the store also keeps `workspace.yaml` and the Copilot CLI user files (`storeSettings`, ADR-299). */
+  storeSettings(): boolean;
+  setStoreSettings(on: boolean): void;
 }
 
 /** What `local-config` needs from `vcs`; wired in the facade. */
@@ -82,16 +88,50 @@ export interface LocalConfigDeps {
   repos: LocalConfigRepos;
   vcs: LocalConfigVcs;
   /**
-   * The copies of each folder the store keeps while the user allows it (ADR-298), from `knowledge`, `routines`, `board`
-   * and `task-templates`; wired in the facade.
+   * The copies of each folder the store keeps while the user allows it: from `knowledge`, `routines`, `board` and
+   * `task-templates` (ADR-298), and of `workspace.yaml` and the Copilot CLI user files (`settings-copies.ts`, ADR-299),
+   * with why a held file was held; wired in the facade.
    */
-  storeFolders: Record<WorkspaceStoreFolder, () => Promise<FolderCopies>>;
+  storeFolders: Record<StoreFolder, () => Promise<FolderCopies>>;
   log: (msg: string) => void;
   /** The bare repo in the state folder the store is pushed from (ADR-127), out of reach of the sessions in the projects folder. */
   pushDir: string;
   /** `PUSH_RETRY_MS` in the daemon; shorter in tests. */
   pushRetryMs?: number;
 }
+
+/** A group of store folders behind a setting of its own in `workspace.yaml`. */
+interface StoreGroupInfo {
+  folders: readonly StoreFolder[];
+  read: (repos: LocalConfigRepos) => boolean;
+  write: (repos: LocalConfigRepos, on: boolean) => void;
+  /**
+   * Whether its files are also written into the store's folder for the user to browse. Not for the settings: their
+   * folder names are those of real configuration folders, so a link an agent swaps in could send a write there, and the
+   * commit already holds them (ADR-299).
+   */
+  browsable: boolean;
+}
+
+const STORE_GROUPS = {
+  planAndKnowledge: {
+    folders: WORKSPACE_STORE_FOLDERS,
+    read: (repos) => repos.storePlanAndKnowledge(),
+    write: (repos, on) => repos.setStorePlanAndKnowledge(on),
+    browsable: true,
+  },
+  settings: {
+    folders: SETTINGS_STORE_FOLDERS,
+    read: (repos) => repos.storeSettings(),
+    write: (repos, on) => repos.setStoreSettings(on),
+    browsable: false,
+  },
+} as const satisfies Record<string, StoreGroupInfo>;
+type StoreGroup = keyof typeof STORE_GROUPS;
+const STORE_GROUP_NAMES = ["planAndKnowledge", "settings"] as const satisfies readonly StoreGroup[];
+
+/** The store paths kept only in its commits, never as files in its folder (`StoreGroupInfo.browsable`). */
+const UNBROWSABLE = SETTINGS_STORE_FOLDERS.map((folder) => `${folder}/`);
 
 /** A repo's local config file that changed since the last comparison, with what was read. */
 interface Changed {
@@ -156,8 +196,8 @@ export class LocalConfig {
   }
 
   /**
-   * One folders pass (ADR-298): the store's folders brought to the workspace's, or emptied while the user does not allow
-   * them; a call during a running one gets that one.
+   * One folders pass (ADR-298): the store's folders of every group the user allows brought to the workspace's; a group
+   * that is off is left as the store has it (ADR-299). A call during a running one gets that one.
    */
   keepFolders(): Promise<void> {
     this.#keeping ??= this.#inTurn(() => this.#keepFolders()).finally(() => {
@@ -174,12 +214,16 @@ export class LocalConfig {
   async store(): Promise<WorkspaceStore> {
     const dir = await this.#storeDir();
     const problems = [this.#problems.backup, this.#problems.folders].filter((p) => p !== null);
-    const keepsPlanAndKnowledge = configOrProblem(() => this.#deps.repos.storePlanAndKnowledge(), false).value;
-    const base = { push: this.#push, keepsPlanAndKnowledge, problem: problems.length === 0 ? null : problems.join("; ") };
+    const keepsPlanAndKnowledge = this.#setting("planAndKnowledge").value;
+    const keepsSettings = this.#setting("settings").value;
+    const base = { push: this.#push, keepsPlanAndKnowledge, keepsSettings, problem: problems.length === 0 ? null : problems.join("; ") };
     const allowed = this.#allowedRemote();
     const pushesTo = allowed === null ? null : withoutUserInfo(allowed);
-    if (dir === null) return { dir, lastBackup: null, pushesTo, remote: null, remoteAllowed: false, remoteProblem: null, ...base };
+    if (dir === null)
+      return { dir, lastBackup: null, pushesTo, remote: null, remoteAllowed: false, remoteProblem: null, settingsInStore: false, ...base };
     const head = await this.#deps.vcs.storeHead(dir);
+    // A store the check refuses shows its problem; whether it holds settings is asked again once it is fixed.
+    const settingsInStore = await this.#settingsInStore(dir, head).catch(() => false);
     const [lastBackup] = head === null ? [] : await this.#deps.vcs.log(dir, 1);
     const remote = await this.#deps.vcs.backupRemote(dir);
     return {
@@ -189,6 +233,7 @@ export class LocalConfig {
       remote: remote === null ? null : withoutUserInfo(remote.url),
       remoteAllowed: remote !== null && remote.url === allowed,
       remoteProblem: remote?.problem ?? null,
+      settingsInStore,
       ...base,
     };
   }
@@ -208,9 +253,43 @@ export class LocalConfig {
   }
 
   /** Has the store keep the workspace's folders, or stop keeping them (ADR-298), at once rather than within a minute. */
-  async keepPlanAndKnowledge(on: boolean): Promise<WorkspaceStore> {
-    this.#deps.repos.setStorePlanAndKnowledge(on);
-    await this.keepFolders();
+  keepPlanAndKnowledge(on: boolean): Promise<WorkspaceStore> {
+    return this.#keep("planAndKnowledge", on);
+  }
+
+  /**
+   * Has the store keep `workspace.yaml` and the Copilot CLI user files, or stop keeping them (ADR-299), at once rather
+   * than within a minute. While the setting is off and the store holds settings anyway (another computer's, or this one's
+   * before its state folder was made afresh), turning it on would commit this computer's over them, so it is refused
+   * unless the user saw that and chose `replace`.
+   */
+  async keepSettings(on: boolean, replace: boolean): Promise<WorkspaceStore> {
+    const store = await this.#storeDir();
+    if (on && !replace && !this.#setting("settings").value && store !== null) {
+      if (await this.#settingsInStore(store, await this.#deps.vcs.storeHead(store)))
+        throw new DomainError(
+          "bad_request",
+          "The workspace store already holds settings from before; look at them before you replace them",
+        );
+    }
+    return this.#keep("settings", on);
+  }
+
+  /**
+   * Turning a group on writes the setting, then brings the store up to date; turning it off takes the folders out first
+   * and writes the setting only once that commit is made, so a failed one leaves the setting on and can be tried again.
+   */
+  async #keep(group: StoreGroup, on: boolean): Promise<WorkspaceStore> {
+    const { write } = STORE_GROUPS[group];
+    if (on) {
+      write(this.#deps.repos, true);
+      await this.keepFolders();
+    } else {
+      await this.#inTurn(async () => {
+        await this.#stopKeeping(group);
+        write(this.#deps.repos, false);
+      });
+    }
     return this.store();
   }
 
@@ -377,35 +456,68 @@ export class LocalConfig {
   }
 
   /**
-   * Brings the store's folders to the workspace's copies, with one commit, then writes them into the store's folder for
-   * the user to browse. A `workspace.yaml` that cannot be read changes nothing: Settings › Files says what to fix, and an
-   * unread setting must not take the folders out. A folder that cannot be read stays as the store has it.
+   * Brings the store's folders of every group the user allows to their copies. A group that is off is not read and keeps
+   * what the store has: only the user turning it off takes it out (`#stopKeeping`), since a state folder made afresh (a new
+   * container, ADR-299) has no setting while its store still holds the last computer's copies. A `workspace.yaml` that
+   * cannot be read changes nothing either: Settings › Files says what to fix. A folder that cannot be read stays as the
+   * store has it.
    */
   async #keepFolders(): Promise<void> {
     const store = await this.#storeDir();
-    const setting = configOrProblem(() => this.#deps.repos.storePlanAndKnowledge(), false);
-    if (store === null || setting.problem !== null) return;
+    if (store === null) return;
     const problems: string[] = [];
-    const wanted = new Map<WorkspaceStoreFolder, FolderCopies>();
-    for (const folder of WORKSPACE_STORE_FOLDERS) {
+    const wanted = new Map<StoreFolder, FolderCopies>();
+    for (const group of STORE_GROUP_NAMES) await this.#readGroup(group, wanted, problems);
+    await this.#commitFolders(store, wanted, true, problems);
+  }
+
+  /** Takes the folders of `group` out of the store with one commit; their history stays. */
+  async #stopKeeping(group: StoreGroup): Promise<void> {
+    const store = await this.#storeDir();
+    if (store === null) return;
+    const wanted = new Map(STORE_GROUPS[group].folders.map((folder) => [folder, { copies: [], held: [] }]));
+    const problems: string[] = [];
+    await this.#commitFolders(store, wanted, false, problems);
+  }
+
+  /**
+   * Commits what brings the store's folders to `wanted`, then writes the browsable copies into the store's folder;
+   * `keeping` names the commit and adds the front page with the first folder.
+   */
+  async #commitFolders(store: string, wanted: ReadonlyMap<StoreFolder, FolderCopies>, keeping: boolean, problems: string[]) {
+    const head = await this.#deps.vcs.storeHead(store);
+    const changes = storeFolderChanges(await this.#keptFiles(store, head), wanted, keeping ? storeReadme() : null);
+    if (changes.folders.length > 0) {
+      await this.#ensureStore(store);
+      await this.#deps.vcs.commitBackups(store, changes.files, changes.removed, keepMessage(changes, keeping));
+      this.#advance(store, head, await this.#deps.vcs.storeHead(store));
+      for (const file of changes.files.filter((f) => browsable(f.path)))
+        await writeStoreCopy(store, file.path, file.content).catch((err: unknown) => problems.push(messageOf(err)));
+      for (const path of changes.removed.filter(browsable))
+        await removeStoreCopy(store, path).catch((err: unknown) => problems.push(messageOf(err)));
+    }
+    this.#setProblems("folders", problems);
+    this.#pushIfDue(store, await this.#deps.vcs.storeHead(store));
+  }
+
+  /** The copies of each folder of `group` into `wanted` while the user allows the group; a folder that cannot be read is left out. */
+  async #readGroup(group: StoreGroup, wanted: Map<StoreFolder, FolderCopies>, problems: string[]): Promise<void> {
+    const setting = this.#setting(group);
+    if (setting.problem !== null || !setting.value) return;
+    for (const folder of STORE_GROUPS[group].folders) {
       try {
-        wanted.set(folder, setting.value ? await this.#deps.storeFolders[folder]() : { copies: [], held: [] });
+        const { problems: held = [], ...copies } = await this.#deps.storeFolders[folder]();
+        wanted.set(folder, copies);
+        problems.push(...held.map((problem) => `${folder}: ${problem}`));
       } catch (err) {
         problems.push(`${folder}: ${messageOf(err)}`);
       }
     }
-    const head = await this.#deps.vcs.storeHead(store);
-    const changes = storeFolderChanges(await this.#keptFiles(store, head), wanted, setting.value ? storeReadme() : null);
-    if (changes.folders.length > 0) {
-      await this.#ensureStore(store);
-      await this.#deps.vcs.commitBackups(store, changes.files, changes.removed, keepMessage(changes, setting.value));
-      this.#advance(store, head, await this.#deps.vcs.storeHead(store));
-      for (const file of changes.files)
-        await writeStoreCopy(store, file.path, file.content).catch((err: unknown) => problems.push(messageOf(err)));
-      for (const path of changes.removed) await removeStoreCopy(store, path).catch((err: unknown) => problems.push(messageOf(err)));
-    }
-    this.#setProblems("folders", problems);
-    this.#pushIfDue(store, await this.#deps.vcs.storeHead(store));
+  }
+
+  /** Whether the store's commit `head` holds any of the settings (ADR-299). */
+  async #settingsInStore(store: string, head: string | null): Promise<boolean> {
+    return [...(await this.#keptFiles(store, head)).keys()].some((path) => !browsable(path));
   }
 
   /** The blob ids of the store's kept files at `head`, listed by git only when the commit is new to the daemon. */
@@ -579,6 +691,11 @@ export class LocalConfig {
     await this.#deps.vcs.ensureBackupRepo(store);
   }
 
+  /** A group's setting; off, with the problem, while `workspace.yaml` cannot be read. */
+  #setting(group: StoreGroup): { value: boolean; problem: string | null } {
+    return configOrProblem(() => STORE_GROUPS[group].read(this.#deps.repos), false);
+  }
+
   /** A `workspace.yaml` that cannot be read allows no remote: Settings › Files says what to fix. */
   #allowedRemote(): string | null {
     return configOrProblem(() => this.#deps.repos.localConfigRemote(), null).value;
@@ -592,6 +709,11 @@ export class LocalConfig {
       throw err;
     }
   }
+}
+
+/** Whether a store path is also written into the store's folder (`StoreGroupInfo.browsable`). */
+function browsable(path: string): boolean {
+  return !UNBROWSABLE.some((prefix) => path.startsWith(prefix));
 }
 
 /** The message of the commit that brings a store from before ADR-298 into its layout. */

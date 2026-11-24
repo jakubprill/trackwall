@@ -49,6 +49,8 @@ export interface FileCopy {
 export interface FolderCopies {
   copies: FileCopy[];
   held: string[];
+  /** Why a held file was held, where the folder says (ADR-299); the store shows it as its problem. */
+  problems?: string[];
 }
 
 export interface FolderProblem {

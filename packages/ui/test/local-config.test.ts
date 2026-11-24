@@ -5,8 +5,9 @@ import {
   canRestore,
   hasLocalConfig,
   localConfigFileStatus,
-  planAndKnowledgeDestination,
   remoteToAllow,
+  settingsToReplace,
+  storeDestination,
   workspaceStoreLines,
 } from "../src/lib/local-config.ts";
 
@@ -73,6 +74,8 @@ describe("the workspace store in the settings", () => {
     remoteProblem: null,
     push: { kind: "none" },
     keepsPlanAndKnowledge: false,
+    keepsSettings: false,
+    settingsInStore: false,
     problem: null,
   };
   const remote = "https://git.example.com/me/trackwall-local.git";
@@ -122,12 +125,16 @@ describe("the workspace store in the settings", () => {
   });
 
   test("turning on Plan and knowledge says where they go: nowhere without a pushed remote, or to the allowed address", () => {
-    expect(planAndKnowledgeDestination(store)).toBe("They stay on this computer: the store is pushed nowhere.");
-    expect(planAndKnowledgeDestination({ ...store, remote, remoteAllowed: false })).toBe(
-      "They stay on this computer: the store is pushed nowhere.",
-    );
-    expect(planAndKnowledgeDestination({ ...store, pushesTo: remote, remote, remoteAllowed: true })).toBe(
+    expect(storeDestination(store)).toBe("They stay on this computer: the store is pushed nowhere.");
+    expect(storeDestination({ ...store, remote, remoteAllowed: false })).toBe("They stay on this computer: the store is pushed nowhere.");
+    expect(storeDestination({ ...store, pushesTo: remote, remote, remoteAllowed: true })).toBe(
       `They go to ${remote} with every push. Keep work knowledge on your company's server, not on a personal account.`,
     );
+  });
+
+  test("ticking the settings says what it replaces only while the store holds settings this computer does not keep", () => {
+    expect(settingsToReplace(store)).toBeNull();
+    expect(settingsToReplace({ ...store, settingsInStore: true })).toContain("replaces them with this computer's");
+    expect(settingsToReplace({ ...store, settingsInStore: true, keepsSettings: true })).toBeNull();
   });
 });

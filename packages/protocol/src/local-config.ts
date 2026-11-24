@@ -72,6 +72,18 @@ export type WorkspaceStorePush = z.infer<typeof WorkspaceStorePush>;
 export const WORKSPACE_STORE_FOLDERS = ["knowledge", "routines", "board", "task-templates"] as const satisfies readonly TrackwallFolder[];
 export type WorkspaceStoreFolder = (typeof WORKSPACE_STORE_FOLDERS)[number];
 
+/**
+ * The folders of the workspace store with the user's own setup while the user allows it (`storeSettings`, ADR-299):
+ * `trackwall/` keeps `workspace.yaml`, `copilot/` the Copilot CLI user files task sessions depend on, each with its
+ * secrets masked. They are not folders of `.trackwall`: their files live in the state folder and Copilot CLI's home.
+ */
+export const SETTINGS_STORE_FOLDERS = ["trackwall", "copilot"] as const;
+export type SettingsStoreFolder = (typeof SETTINGS_STORE_FOLDERS)[number];
+
+/** Every folder the daemon keeps at the store's root besides `repos/`, in the order of a commit message. */
+export const STORE_FOLDERS = [...WORKSPACE_STORE_FOLDERS, ...SETTINGS_STORE_FOLDERS] as const;
+export type StoreFolder = (typeof STORE_FOLDERS)[number];
+
 export const WorkspaceStore = z.object({
   /** `null` while the projects folder is not set. */
   dir: z.string().nullable(),
@@ -97,6 +109,17 @@ export const WorkspaceStore = z.object({
    * `workspace.yaml`, ADR-298); off without the key, and off while the key cannot be read.
    */
   keepsPlanAndKnowledge: z.boolean(),
+  /**
+   * Whether the store also keeps `workspace.yaml` and the Copilot CLI user files, with their secrets masked
+   * (`storeSettings` in `workspace.yaml`, ADR-299); off without the key, and off while the key cannot be read.
+   */
+  keepsSettings: z.boolean(),
+  /**
+   * Whether the store's last commit holds settings (`trackwall/` or `copilot/`, ADR-299). While `keepsSettings` is off,
+   * they come from another computer or from this one before its state folder was made afresh, and turning it on replaces
+   * them, so the user is told first.
+   */
+  settingsInStore: z.boolean(),
   /** Why the last backup did not finish (a file that cannot be read, a git error); `null` when it did. */
   problem: z.string().nullable(),
 });
@@ -142,4 +165,10 @@ export const localConfigApi = {
    * brings the store up to date at once. Only from the UI, never from MCP: it decides what goes to the remote.
    */
   keepPlanAndKnowledge: endpoint("keep-plan-and-knowledge", z.object({ on: z.boolean() }).strict(), WorkspaceStore),
+  /**
+   * Has the store keep `workspace.yaml` and the Copilot CLI user files, or stop keeping them (ADR-299), and brings the
+   * store up to date at once. While it is off and `settingsInStore`, turning it on is refused unless `replace` says the
+   * user saw that the store's settings will be replaced. Only from the UI, never from MCP, like `keepPlanAndKnowledge`.
+   */
+  keepSettings: endpoint("keep-settings", z.object({ on: z.boolean(), replace: z.boolean() }).strict(), WorkspaceStore),
 };

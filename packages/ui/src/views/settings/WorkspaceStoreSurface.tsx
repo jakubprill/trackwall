@@ -1,12 +1,12 @@
-import { localConfigApi, type WorkspaceStore } from "@trackwall/protocol";
-import { useCallback } from "react";
+import { localConfigApi } from "@trackwall/protocol";
+import { type ReactNode, useCallback } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { planAndKnowledgeDestination, remoteToAllow, workspaceStoreLines } from "@/lib/local-config";
+import { remoteToAllow, settingsToReplace, storeDestination, workspaceStoreLines } from "@/lib/local-config";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -23,6 +23,10 @@ export function WorkspaceStoreSurface({ conn }: { conn: Connection }) {
   const allow = useAction((remote: string) => post(conn, localConfigApi.allowRemote, { remote }), store.reload);
   const stop = useAction(() => post(conn, localConfigApi.stopPushing, {}), store.reload);
   const keep = useAction((on: boolean) => post(conn, localConfigApi.keepPlanAndKnowledge, { on }), store.reload);
+  const keepSettings = useAction(
+    (on: boolean) => post(conn, localConfigApi.keepSettings, { on, replace: store.data?.settingsInStore ?? false }),
+    store.reload,
+  );
   return (
     <div className="flex flex-col gap-3 p-4">
       <p className="text-muted-foreground text-sm">
@@ -46,25 +50,55 @@ export function WorkspaceStoreSurface({ conn }: { conn: Connection }) {
         </div>
       )}
       {store.data?.dir && <AllowRemote offer={remoteToAllow(store.data)} pending={allow.pending} error={allow.error} onAllow={allow.run} />}
-      {store.data?.dir && <KeepPlanAndKnowledge store={store.data} pending={keep.pending} error={keep.error} onChange={keep.run} />}
+      {store.data?.dir && (
+        <KeepInStore
+          label="Keep Plan and knowledge in the store"
+          checked={store.data.keepsPlanAndKnowledge}
+          pending={keep.pending}
+          error={keep.error}
+          onChange={keep.run}
+        >
+          The store also keeps the knowledge entries and routines in the version you approved, the board and your own task templates, so
+          their history is in git and a new computer can get them from the remote. Proposals you have not approved stay out.{" "}
+          {storeDestination(store.data)}
+        </KeepInStore>
+      )}
+      {store.data?.dir && (
+        <KeepInStore
+          label="Keep Trackwall and Copilot CLI settings in the store"
+          checked={store.data.keepsSettings}
+          pending={keepSettings.pending}
+          error={keepSettings.error}
+          onChange={keepSettings.run}
+        >
+          The store also keeps Trackwall's workspace.yaml and your Copilot CLI settings.json, copilot-instructions.md and mcp-config.json,
+          so a new container or computer can get them back. Tokens written into mcp-config.json are masked: only references to environment
+          variables go in; copilot-instructions.md goes in as you wrote it. {storeDestination(store.data)} {settingsToReplace(store.data)}
+        </KeepInStore>
+      )}
     </div>
   );
 }
 
 /**
- * Whether the store also keeps the workspace's knowledge, routines, board and task templates (ADR-298). Off until the user
- * turns it on, since the store's remote may have been allowed for a few mise files only.
+ * Whether the store also keeps a group of folders: the workspace's knowledge, routines, board and task templates
+ * (ADR-298), or the user's settings (ADR-299). Off until the user turns it on, since the store's remote may have been
+ * allowed for a few mise files only.
  */
-function KeepPlanAndKnowledge({
-  store,
+function KeepInStore({
+  label,
+  checked,
   pending,
   error,
   onChange,
+  children,
 }: {
-  store: WorkspaceStore;
+  label: string;
+  checked: boolean;
   pending: boolean;
   error: string | undefined;
   onChange: (on: boolean) => void;
+  children: ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2 border-t pt-3">
@@ -72,17 +106,13 @@ function KeepPlanAndKnowledge({
         <input
           type="checkbox"
           className="accent-primary size-4 shrink-0"
-          checked={store.keepsPlanAndKnowledge}
+          checked={checked}
           disabled={pending}
           onChange={(e) => onChange(e.target.checked)}
         />
-        Keep Plan and knowledge in the store
+        {label}
       </label>
-      <p className="text-muted-foreground text-xs">
-        The store also keeps the knowledge entries and routines in the version you approved, the board and your own task templates, so their
-        history is in git and a new computer can get them from the remote. Proposals you have not approved stay out.{" "}
-        {planAndKnowledgeDestination(store)}
-      </p>
+      <p className="text-muted-foreground text-xs">{children}</p>
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   );

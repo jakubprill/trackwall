@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
 import { removeFolder } from "../src/infra/remove-folder.ts";
 import { LocalConfig } from "../src/modules/local-config/local-config.ts";
+import { MASKED } from "../src/modules/local-config/secret-masking.ts";
 import { gitProcessesStarted } from "../src/modules/vcs/git.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
 import { finishedClone } from "./support/clone-jobs.ts";
@@ -15,7 +16,11 @@ import { fakeHostingClis } from "./support/hosting.ts";
  * The workspace store (ADR-86) through the real facade, on a real projects folder and real git; the test runs each
  * backup itself instead of the timer, and waits for the store's push with `settled`.
  */
-async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-")), hostingClis = HOSTING_CLIS) {
+async function setup(
+  projects = mkdtempSync(join(tmpdir(), "trackwall-projects-")),
+  hostingClis = HOSTING_CLIS,
+  copilotHome = mkdtempSync(join(tmpdir(), "trackwall-copilot-")),
+) {
   const logged: string[] = [];
   const facade = createFacade({
     inContainer: false,
@@ -29,7 +34,7 @@ async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"
     sessionHook: () => ({ url: "http://127.0.0.1:9/hooks/unused", headers: {} }),
     sessionMcpServer: (sessionToken) => ({ url: "http://127.0.0.1:9/mcp", headers: { "x-trackwall-session-token": sessionToken } }),
     hostingClis,
-    userEnv: async () => process.env,
+    userEnv: async () => ({ ...process.env, COPILOT_HOME: copilotHome }),
     log: (msg) => logged.push(msg),
   });
   await facade.workspace.setProjectsDir(projects);
@@ -40,7 +45,7 @@ async function setup(projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"
   };
   const storeLog = () => gitIn(store, "log", "--format=%an|%s", "--name-only").trim();
   const storeCommits = () => Number(gitIn(store, "rev-list", "--count", "HEAD").trim());
-  return { projects, store, facade, logged, backUp, storeLog, storeCommits };
+  return { projects, store, facade, logged, backUp, storeLog, storeCommits, copilotHome };
 }
 
 /** For a test that starts dozens of real git processes, which on a Windows runner take longer than the default 5 s. */
@@ -727,7 +732,7 @@ describe("the workspace store", () => {
       const vcs = new Vcs(systemTempFolder, tmpdir());
       const pushDir = join(mkdtempSync(join(tmpdir(), "trackwall-home-")), "local-config-push");
       const none = async () => ({ copies: [], held: [] });
-      const storeFolders = { knowledge: none, routines: none, board: none, "task-templates": none };
+      const storeFolders = { knowledge: none, routines: none, board: none, "task-templates": none, trackwall: none, copilot: none };
       const localConfig = new LocalConfig({ repos: facade.workspace, vcs, storeFolders, log: () => {}, pushDir, pushRetryMs: 0 });
       const backUp = async () => {
         await localConfig.backUp();
@@ -781,6 +786,8 @@ describe("the workspace store", () => {
       remoteProblem: null,
       push: { kind: "none" },
       keepsPlanAndKnowledge: false,
+      keepsSettings: false,
+      settingsInStore: false,
       problem: null,
     });
   });
@@ -959,6 +966,182 @@ describe("knowledge, routines, the board and task templates in the workspace sto
       expect(storeCommits()).toBe(1);
       expect(kept(store)).toContain("knowledge/shop-integration-tests.md");
       expect((await facade.localConfig.store()).keepsPlanAndKnowledge).toBe(false);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+});
+
+describe("workspace.yaml and the Copilot CLI user files in the workspace store (ADR-299)", () => {
+  const TOKEN = "glpat-Zx81secretvalue";
+  const MCP_CONFIG = `${JSON.stringify(
+    {
+      mcpServers: {
+        gitlab: {
+          type: "http",
+          url: "https://mcp.example.com/gitlab",
+          headers: { Authorization: `Bearer ${TOKEN}`, "X-Team": `\${TEAM_ID}` },
+        },
+        jira: { type: "local", command: "jira-mcp", args: ["--token", TOKEN], env: { JIRA_TOKEN: `\${JIRA_TOKEN}` } },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+  const SETTINGS = '{ "sandbox": { "readonlyPaths": ["~/.gitconfig"] } }\n';
+  const INSTRUCTIONS = "Answer in English.\n";
+
+  const kept = (store: string) => gitIn(store, "ls-tree", "-r", "--name-only", "HEAD").trim().split("\n");
+  const inStore = (store: string, path: string) => gitIn(store, "show", `HEAD:${path}`);
+
+  function fillCopilotHome(copilotHome: string) {
+    writeFileSync(join(copilotHome, "settings.json"), SETTINGS);
+    writeFileSync(join(copilotHome, "copilot-instructions.md"), INSTRUCTIONS);
+    writeFileSync(join(copilotHome, "mcp-config.json"), MCP_CONFIG);
+    // Copilot CLI's own state, sign-in included, is not the user's setup and stays out.
+    writeFileSync(join(copilotHome, "config.json"), '{ "logged_in_users": [] }\n');
+  }
+
+  test("off by default: a pass keeps neither workspace.yaml nor the Copilot CLI files", async () => {
+    const { store, facade, copilotHome } = await setup();
+    fillCopilotHome(copilotHome);
+
+    await facade.localConfig.keepFolders();
+
+    expect(existsSync(join(store, ".git"))).toBe(false);
+    expect((await facade.localConfig.store()).keepsSettings).toBe(false);
+  });
+
+  test(
+    "turned on, workspace.yaml and the Copilot CLI user files go in with one commit, and no literal secret is in the store's history",
+    async () => {
+      const { store, facade, storeLog, copilotHome } = await setup();
+      fillCopilotHome(copilotHome);
+
+      const shown = await facade.localConfig.keepSettings(true, false);
+
+      expect(shown.keepsSettings).toBe(true);
+      expect(storeLog()).toBe(
+        [
+          "Trackwall|Keep trackwall, copilot",
+          "",
+          "README.md",
+          "copilot/copilot-instructions.md",
+          "copilot/mcp-config.json",
+          "copilot/settings.json",
+          "trackwall/workspace.yaml",
+        ].join("\n"),
+      );
+      const workspaceFile = readFileSync(facade.workspace.configFile(), "utf8");
+      expect(workspaceFile).toContain("storeSettings: true");
+      expect(inStore(store, "trackwall/workspace.yaml")).toBe(workspaceFile);
+      expect(inStore(store, "copilot/settings.json")).toBe(SETTINGS);
+      const mcp = JSON.parse(inStore(store, "copilot/mcp-config.json"));
+      expect(mcp.mcpServers.gitlab.headers).toEqual({ Authorization: MASKED, "X-Team": `\${TEAM_ID}` });
+      expect(mcp.mcpServers.jira.args).toEqual(["--token", MASKED]);
+      expect(mcp.mcpServers.jira.env).toEqual({ JIRA_TOKEN: `\${JIRA_TOKEN}` });
+      expect(gitIn(store, "log", "-p", "--all")).not.toContain(TOKEN);
+      // Only in the commit: a link swapped in for the store's copilot/ folder must never send a write to the real one.
+      expect(existsSync(join(store, "copilot"))).toBe(false);
+      expect(existsSync(join(store, "trackwall"))).toBe(false);
+      expect(readFileSync(join(copilotHome, "mcp-config.json"), "utf8")).toBe(MCP_CONFIG);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "a state folder made afresh, without the settings, takes nothing out of the store",
+    async () => {
+      const { projects, store, facade, storeCommits, copilotHome } = await setup();
+      fillCopilotHome(copilotHome);
+      await facade.knowledge.write({ name: "build", kind: "how-to", repos: [], text: "Build with mise run build.", evidence: "It built." });
+      await facade.localConfig.keepPlanAndKnowledge(true);
+      await facade.localConfig.keepSettings(true, false);
+      const before = storeCommits();
+
+      // A new container: the home volume, with the state folder and Copilot CLI's home, starts empty.
+      writeFileSync(facade.workspace.configFile(), `projectsDir: ${JSON.stringify(projects)}\n`);
+      for (const file of ["settings.json", "copilot-instructions.md", "mcp-config.json"]) rmSync(join(copilotHome, file));
+      await facade.localConfig.keepFolders();
+
+      expect(storeCommits()).toBe(before);
+      expect(kept(store)).toEqual(
+        expect.arrayContaining(["knowledge/build.md", "trackwall/workspace.yaml", "copilot/mcp-config.json", "copilot/settings.json"]),
+      );
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "with a state folder made afresh, ticking the setting is refused until the user chose to replace the store's settings",
+    async () => {
+      const { projects, store, facade, storeCommits, copilotHome } = await setup();
+      fillCopilotHome(copilotHome);
+      await facade.localConfig.keepSettings(true, false);
+      writeFileSync(facade.workspace.configFile(), `projectsDir: ${JSON.stringify(projects)}\n`);
+
+      expect((await facade.localConfig.store()).settingsInStore).toBe(true);
+      await expect(facade.localConfig.keepSettings(true, false)).rejects.toThrow("already holds settings from before");
+      expect(storeCommits()).toBe(1);
+      expect(readFileSync(facade.workspace.configFile(), "utf8")).not.toContain("storeSettings");
+
+      await facade.localConfig.keepSettings(true, true);
+
+      expect(storeCommits()).toBe(2);
+      expect(inStore(store, "trackwall/workspace.yaml")).toBe(readFileSync(facade.workspace.configFile(), "utf8"));
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "turning it off when the store refuses the commit leaves the setting on, so it can be tried again",
+    async () => {
+      const { store, facade, copilotHome } = await setup();
+      fillCopilotHome(copilotHome);
+      await facade.localConfig.keepSettings(true, false);
+      gitIn(store, "config", "core.sshCommand", "true");
+
+      await expect(facade.localConfig.keepSettings(false, false)).rejects.toThrow("core.sshcommand");
+
+      expect((await facade.localConfig.store()).keepsSettings).toBe(true);
+      expect(kept(store)).toContain("copilot/mcp-config.json");
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "turned off, the two folders leave the store with one commit and Plan and knowledge stay",
+    async () => {
+      const { store, facade, copilotHome } = await setup();
+      fillCopilotHome(copilotHome);
+      await facade.knowledge.write({ name: "build", kind: "how-to", repos: [], text: "Build with mise run build.", evidence: "It built." });
+      await facade.localConfig.keepPlanAndKnowledge(true);
+      await facade.localConfig.keepSettings(true, false);
+
+      const shown = await facade.localConfig.keepSettings(false, false);
+
+      expect(shown.keepsSettings).toBe(false);
+      expect(gitIn(store, "log", "-1", "--format=%s").trim()).toBe("Stop keeping trackwall, copilot");
+      expect(kept(store)).toEqual(["README.md", "knowledge/build.md"]);
+      expect(existsSync(join(store, "copilot"))).toBe(false);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "an mcp-config.json that is not JSON is held: the store keeps its masked version and says why",
+    async () => {
+      const { store, facade, storeCommits, copilotHome } = await setup();
+      fillCopilotHome(copilotHome);
+      await facade.localConfig.keepSettings(true, false);
+      const masked = inStore(store, "copilot/mcp-config.json");
+
+      writeFileSync(join(copilotHome, "mcp-config.json"), `{ "mcpServers": { "gitlab": { "headers": { "Authorization": "${TOKEN}" } }, }`);
+      await facade.localConfig.keepFolders();
+
+      expect(storeCommits()).toBe(1);
+      expect(inStore(store, "copilot/mcp-config.json")).toBe(masked);
+      expect((await facade.localConfig.store()).problem).toContain("mcp-config.json: not valid JSON, so its secrets cannot be masked");
+      expect(gitIn(store, "log", "-p", "--all")).not.toContain(TOKEN);
     },
     REAL_GIT_TIMEOUT,
   );
