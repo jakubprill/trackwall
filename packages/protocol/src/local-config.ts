@@ -114,6 +114,12 @@ export const WorkspaceStore = z.object({
    * (`storeSettings` in `workspace.yaml`, ADR-299); off without the key, and off while the key cannot be read.
    */
   keepsSettings: z.boolean(),
+  /**
+   * Whether the store's last commit holds settings (`trackwall/` or `copilot/`, ADR-299). While `keepsSettings` is off,
+   * they come from another computer or from this one before its state folder was made afresh, and turning it on replaces
+   * them, so the user is told first.
+   */
+  settingsInStore: z.boolean(),
   /** Why the last backup did not finish (a file that cannot be read, a git error); `null` when it did. */
   problem: z.string().nullable(),
 });
@@ -161,7 +167,8 @@ export const localConfigApi = {
   keepPlanAndKnowledge: endpoint("keep-plan-and-knowledge", z.object({ on: z.boolean() }).strict(), WorkspaceStore),
   /**
    * Has the store keep `workspace.yaml` and the Copilot CLI user files, or stop keeping them (ADR-299), and brings the
-   * store up to date at once. Only from the UI, never from MCP, like `keepPlanAndKnowledge`.
+   * store up to date at once. While it is off and `settingsInStore`, turning it on is refused unless `replace` says the
+   * user saw that the store's settings will be replaced. Only from the UI, never from MCP, like `keepPlanAndKnowledge`.
    */
-  keepSettings: endpoint("keep-settings", z.object({ on: z.boolean() }).strict(), WorkspaceStore),
+  keepSettings: endpoint("keep-settings", z.object({ on: z.boolean(), replace: z.boolean() }).strict(), WorkspaceStore),
 };

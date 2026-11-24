@@ -64,9 +64,18 @@ export function workspaceStoreLines(store: WorkspaceStore, now: Date): { backup:
  * Where the knowledge, routines, board and task templates go once the store keeps them (ADR-298): the address the store is
  * pushed to, which the user may have allowed long ago for a few mise files, or nowhere.
  */
-export function planAndKnowledgeDestination(store: WorkspaceStore): string {
+export function storeDestination(store: WorkspaceStore): string {
   if (store.pushesTo === null) return "They stay on this computer: the store is pushed nowhere.";
   return `They go to ${store.pushesTo} with every push. Keep work knowledge on your company's server, not on a personal account.`;
+}
+
+/**
+ * What ticking "Keep Trackwall and Copilot CLI settings in the store" would replace (ADR-299): settings the store holds
+ * while the setting is off come from another computer, or from this one before a new container; `null` when there are none.
+ */
+export function settingsToReplace(store: WorkspaceStore): string | null {
+  if (store.keepsSettings || !store.settingsInStore) return null;
+  return "The store already holds settings from another computer or an earlier container. Ticking this replaces them with this computer's in the next commit; the old ones stay in the store's history. To bring them back first, copy them from the store with git (git show HEAD:trackwall/workspace.yaml).";
 }
 
 /**

@@ -787,6 +787,7 @@ describe("the workspace store", () => {
       push: { kind: "none" },
       keepsPlanAndKnowledge: false,
       keepsSettings: false,
+      settingsInStore: false,
       problem: null,
     });
   });
@@ -1016,7 +1017,7 @@ describe("workspace.yaml and the Copilot CLI user files in the workspace store (
       const { store, facade, storeLog, copilotHome } = await setup();
       fillCopilotHome(copilotHome);
 
-      const shown = await facade.localConfig.keepSettings(true);
+      const shown = await facade.localConfig.keepSettings(true, false);
 
       expect(shown.keepsSettings).toBe(true);
       expect(storeLog()).toBe(
@@ -1039,7 +1040,9 @@ describe("workspace.yaml and the Copilot CLI user files in the workspace store (
       expect(mcp.mcpServers.jira.args).toEqual(["--token", MASKED]);
       expect(mcp.mcpServers.jira.env).toEqual({ JIRA_TOKEN: `\${JIRA_TOKEN}` });
       expect(gitIn(store, "log", "-p", "--all")).not.toContain(TOKEN);
-      expect(readFileSync(join(store, "copilot", "mcp-config.json"), "utf8")).not.toContain(TOKEN);
+      // Only in the commit: a link swapped in for the store's copilot/ folder must never send a write to the real one.
+      expect(existsSync(join(store, "copilot"))).toBe(false);
+      expect(existsSync(join(store, "trackwall"))).toBe(false);
       expect(readFileSync(join(copilotHome, "mcp-config.json"), "utf8")).toBe(MCP_CONFIG);
     },
     REAL_GIT_TIMEOUT,
@@ -1052,7 +1055,7 @@ describe("workspace.yaml and the Copilot CLI user files in the workspace store (
       fillCopilotHome(copilotHome);
       await facade.knowledge.write({ name: "build", kind: "how-to", repos: [], text: "Build with mise run build.", evidence: "It built." });
       await facade.localConfig.keepPlanAndKnowledge(true);
-      await facade.localConfig.keepSettings(true);
+      await facade.localConfig.keepSettings(true, false);
       const before = storeCommits();
 
       // A new container: the home volume, with the state folder and Copilot CLI's home, starts empty.
@@ -1069,15 +1072,52 @@ describe("workspace.yaml and the Copilot CLI user files in the workspace store (
   );
 
   test(
+    "with a state folder made afresh, ticking the setting is refused until the user chose to replace the store's settings",
+    async () => {
+      const { projects, store, facade, storeCommits, copilotHome } = await setup();
+      fillCopilotHome(copilotHome);
+      await facade.localConfig.keepSettings(true, false);
+      writeFileSync(facade.workspace.configFile(), `projectsDir: ${JSON.stringify(projects)}\n`);
+
+      expect((await facade.localConfig.store()).settingsInStore).toBe(true);
+      await expect(facade.localConfig.keepSettings(true, false)).rejects.toThrow("already holds settings from before");
+      expect(storeCommits()).toBe(1);
+      expect(readFileSync(facade.workspace.configFile(), "utf8")).not.toContain("storeSettings");
+
+      await facade.localConfig.keepSettings(true, true);
+
+      expect(storeCommits()).toBe(2);
+      expect(inStore(store, "trackwall/workspace.yaml")).toBe(readFileSync(facade.workspace.configFile(), "utf8"));
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "turning it off when the store refuses the commit leaves the setting on, so it can be tried again",
+    async () => {
+      const { store, facade, copilotHome } = await setup();
+      fillCopilotHome(copilotHome);
+      await facade.localConfig.keepSettings(true, false);
+      gitIn(store, "config", "core.sshCommand", "true");
+
+      await expect(facade.localConfig.keepSettings(false, false)).rejects.toThrow("core.sshcommand");
+
+      expect((await facade.localConfig.store()).keepsSettings).toBe(true);
+      expect(kept(store)).toContain("copilot/mcp-config.json");
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
     "turned off, the two folders leave the store with one commit and Plan and knowledge stay",
     async () => {
       const { store, facade, copilotHome } = await setup();
       fillCopilotHome(copilotHome);
       await facade.knowledge.write({ name: "build", kind: "how-to", repos: [], text: "Build with mise run build.", evidence: "It built." });
       await facade.localConfig.keepPlanAndKnowledge(true);
-      await facade.localConfig.keepSettings(true);
+      await facade.localConfig.keepSettings(true, false);
 
-      const shown = await facade.localConfig.keepSettings(false);
+      const shown = await facade.localConfig.keepSettings(false, false);
 
       expect(shown.keepsSettings).toBe(false);
       expect(gitIn(store, "log", "-1", "--format=%s").trim()).toBe("Stop keeping trackwall, copilot");
@@ -1092,7 +1132,7 @@ describe("workspace.yaml and the Copilot CLI user files in the workspace store (
     async () => {
       const { store, facade, storeCommits, copilotHome } = await setup();
       fillCopilotHome(copilotHome);
-      await facade.localConfig.keepSettings(true);
+      await facade.localConfig.keepSettings(true, false);
       const masked = inStore(store, "copilot/mcp-config.json");
 
       writeFileSync(join(copilotHome, "mcp-config.json"), `{ "mcpServers": { "gitlab": { "headers": { "Authorization": "${TOKEN}" } }, }`);

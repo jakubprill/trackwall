@@ -2,7 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { copilotCopies, MASKED, maskMcpConfig, maskWorkspaceFile } from "../src/modules/local-config/settings-copies.ts";
+import {
+  copilotCopies,
+  MASKED,
+  maskAddress,
+  maskCopilotSettings,
+  maskMcpConfig,
+  maskWorkspaceFile,
+} from "../src/modules/local-config/settings-copies.ts";
 
 const json = (value: unknown) => Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
 const parsed = (bytes: Buffer) => JSON.parse(bytes.toString("utf8"));
@@ -71,7 +78,7 @@ describe("the user's settings as the workspace store keeps them", () => {
       "# my workspace\nprojectsDir: /home/me/Dev\nlocalConfigRemote: https://me:glpat-abc@git.example.com/me/store.git # allowed\n",
     );
 
-    expect(maskWorkspaceFile("workspace.yaml", file).toString("utf8")).toBe(
+    expect(maskWorkspaceFile(file).toString("utf8")).toBe(
       "# my workspace\nprojectsDir: /home/me/Dev\nlocalConfigRemote: https://git.example.com/me/store.git # allowed\n",
     );
   });
@@ -79,7 +86,7 @@ describe("the user's settings as the workspace store keeps them", () => {
   test("workspace.yaml without a token in it is copied byte for byte", () => {
     const file = Buffer.from("projectsDir:   /home/me/Dev\nlocalConfigRemote: ssh://git@git.example.com/me/store.git\n");
 
-    expect(maskWorkspaceFile("workspace.yaml", file)).toBe(file);
+    expect(maskWorkspaceFile(file)).toBe(file);
   });
 
   test("only the user's three Copilot CLI files are copied, and a missing one is simply not there", async () => {
@@ -100,6 +107,64 @@ describe("the user's settings as the workspace store keeps them", () => {
 
     expect(copies.copies).toEqual([]);
     expect(copies.held).toEqual(["mcp-config.json"]);
-    expect(copies.problems[0]).toContain("not valid JSON");
+    expect(copies.problems?.[0]).toContain("not valid JSON");
+  });
+
+  test("a header or variable passed as an argument loses its value, as does a variable written NAME=value", () => {
+    const config = {
+      mcpServers: {
+        remote: { command: "npx", args: ["mcp-remote", "https://mcp.example.com/sse", "--header", "Authorization: Bearer abc"] },
+        docker: {
+          command: "docker",
+          args: ["run", "-e", "GITHUB_TOKEN=ghp_x", "-e", `GITHUB_HOST=\${GITHUB_HOST}`, "API_KEY=def", "image"],
+        },
+        kept: { command: "npx", args: ["mcp-remote", "--header", `Authorization: Bearer \${TOKEN}`] },
+      },
+    };
+
+    const servers = parsed(maskMcpConfig(json(config))).mcpServers;
+
+    expect(servers.remote.args).toEqual(["mcp-remote", "https://mcp.example.com/sse", "--header", MASKED]);
+    expect(servers.docker.args).toEqual(["run", "-e", MASKED, "-e", `GITHUB_HOST=\${GITHUB_HOST}`, `API_KEY=${MASKED}`, "image"]);
+    expect(servers.kept.args).toEqual(["mcp-remote", "--header", `Authorization: Bearer \${TOKEN}`]);
+  });
+
+  test("an address of any scheme loses its user and token, its query values and its fragment, wherever it is", () => {
+    expect(maskAddress("https://mcp.example.com/sse?api_key=abc&team=shop#token=def")).toBe(
+      `https://mcp.example.com/sse?api_key=${MASKED}&team=${MASKED}#${MASKED}`,
+    );
+    expect(maskAddress("postgresql://app:pw@db.example.com/orders")).toBe("postgresql://db.example.com/orders");
+    expect(maskAddress(`https://mcp.example.com/sse?key=\${KEY}`)).toBe(`https://mcp.example.com/sse?key=\${KEY}`);
+    expect(maskAddress("not an address")).toBe("not an address");
+    const config = { mcpServers: { db: { command: "pg-mcp", args: ["postgresql://app:pw@db.example.com/orders"] } } };
+    expect(parsed(maskMcpConfig(json(config))).mcpServers.db.args).toEqual(["postgresql://db.example.com/orders"]);
+  });
+
+  test("a key the masking has no rule for holds the file rather than copying a secret it cannot see", () => {
+    const oauth = { mcpServers: { jira: { type: "http", url: "https://mcp.example.com", oauth: { clientSecret: "abc" } } } };
+    const otherShape = { servers: { jira: { env: { JIRA_TOKEN: "abc" } } } };
+
+    expect(() => maskMcpConfig(json(oauth))).toThrow("server jira has oauth, which Trackwall does not know");
+    expect(() => maskMcpConfig(json(otherShape))).toThrow("has servers, which Trackwall does not know");
+    expect(maskMcpConfig(Buffer.from("{}\n")).toString("utf8")).toBe("{}\n");
+  });
+
+  test("a parse error never quotes the file, since the quote could be a token", () => {
+    expect(() => maskMcpConfig(Buffer.from('{ "mcpServers": { "a": { "env": { "T": "glpat-abc" } }, }'))).toThrow(
+      /^not valid JSON, so its secrets cannot be masked$/,
+    );
+    expect(() =>
+      maskWorkspaceFile(Buffer.from("localConfigRemote: https://me:glpat-abc@git.example.com/x\nlocalConfigRemote: y\n")),
+    ).toThrow(/^not valid YAML at line \d+, so its secrets cannot be masked$/);
+  });
+
+  test("Copilot CLI's settings.json keeps its settings and loses the string value of any key named like a secret", () => {
+    const settings = { model: "gpt-5", sandbox: { readonlyPaths: ["~/.gitconfig"] }, provider: { apiKey: "sk-abc", useToken: true } };
+
+    expect(parsed(maskCopilotSettings(json(settings)))).toEqual({
+      model: "gpt-5",
+      sandbox: { readonlyPaths: ["~/.gitconfig"] },
+      provider: { apiKey: MASKED, useToken: true },
+    });
   });
 });

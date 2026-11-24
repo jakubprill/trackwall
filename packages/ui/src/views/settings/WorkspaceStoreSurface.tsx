@@ -6,7 +6,7 @@ import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
-import { planAndKnowledgeDestination, remoteToAllow, workspaceStoreLines } from "@/lib/local-config";
+import { remoteToAllow, settingsToReplace, storeDestination, workspaceStoreLines } from "@/lib/local-config";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
 
@@ -23,7 +23,10 @@ export function WorkspaceStoreSurface({ conn }: { conn: Connection }) {
   const allow = useAction((remote: string) => post(conn, localConfigApi.allowRemote, { remote }), store.reload);
   const stop = useAction(() => post(conn, localConfigApi.stopPushing, {}), store.reload);
   const keep = useAction((on: boolean) => post(conn, localConfigApi.keepPlanAndKnowledge, { on }), store.reload);
-  const keepSettings = useAction((on: boolean) => post(conn, localConfigApi.keepSettings, { on }), store.reload);
+  const keepSettings = useAction(
+    (on: boolean) => post(conn, localConfigApi.keepSettings, { on, replace: store.data?.settingsInStore ?? false }),
+    store.reload,
+  );
   return (
     <div className="flex flex-col gap-3 p-4">
       <p className="text-muted-foreground text-sm">
@@ -57,7 +60,7 @@ export function WorkspaceStoreSurface({ conn }: { conn: Connection }) {
         >
           The store also keeps the knowledge entries and routines in the version you approved, the board and your own task templates, so
           their history is in git and a new computer can get them from the remote. Proposals you have not approved stay out.{" "}
-          {planAndKnowledgeDestination(store.data)}
+          {storeDestination(store.data)}
         </KeepInStore>
       )}
       {store.data?.dir && (
@@ -70,7 +73,7 @@ export function WorkspaceStoreSurface({ conn }: { conn: Connection }) {
         >
           The store also keeps Trackwall's workspace.yaml and your Copilot CLI settings.json, copilot-instructions.md and mcp-config.json,
           so a new container or computer can get them back. Tokens written into mcp-config.json are masked: only references to environment
-          variables go in. {planAndKnowledgeDestination(store.data)}
+          variables go in; copilot-instructions.md goes in as you wrote it. {storeDestination(store.data)} {settingsToReplace(store.data)}
         </KeepInStore>
       )}
     </div>
