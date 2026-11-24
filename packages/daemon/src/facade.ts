@@ -418,6 +418,7 @@ export function createFacade(o: FacadeOptions): Facade {
       trackwall: () => workspaceFileCopies(workspace.configFile()),
       copilot: async () => copilotCopies(copilotHome(await o.userEnv())),
     },
+    copilotHome: async () => copilotHome(await o.userEnv()),
     log: o.log,
     pushDir: join(o.home, WORKSPACE_STORE_PUSH_DIR),
   });

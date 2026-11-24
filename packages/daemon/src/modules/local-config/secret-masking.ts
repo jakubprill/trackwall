@@ -104,3 +104,50 @@ function maskedFragment(fragment: string | undefined): string {
   if (fragment === undefined) return "";
   return fragment === "" ? "#" : `#${MASKED}`;
 }
+
+/**
+ * `current` when `stored` is it with some values masked, otherwise `stored` (ADR-299). A masked value takes this
+ * computer's only when everything around it is the same, never by place alone: the store can be written by an agent,
+ * which could keep a masked header and change the server's address, so that a restore sends the user's token there.
+ * The caller decides the unit (a server of `mcp-config.json`, a key of `settings.json`); within it, any change leaves
+ * the masked values for the user to fill in.
+ */
+export function unmask(stored: unknown, current: unknown): unknown {
+  return fitsMasked(stored, current) ? current : stored;
+}
+
+/** Whether `current` is `stored` with each masked value, or masked part of a string, filled in; key order aside. */
+export function fitsMasked(stored: unknown, current: unknown): boolean {
+  if (typeof stored === "string") return typeof current === "string" && fitsAround(stored.split(MASKED), current);
+  if (Array.isArray(stored))
+    return Array.isArray(current) && stored.length === current.length && stored.every((item, i) => fitsMasked(item, current[i]));
+  if (typeof stored !== "object" || stored === null) return stored === current;
+  if (typeof current !== "object" || current === null || Array.isArray(current)) return false;
+  const here = new Map(Object.entries(current));
+  const there = Object.entries(stored);
+  return there.length === here.size && there.every(([key, value]) => here.has(key) && fitsMasked(value, here.get(key)));
+}
+
+/**
+ * Whether `text` is `parts` in order with anything between them, as `parts.join(MASKED)` with each mask standing for
+ * any text. Matched left to right with `indexOf`, in linear time: the parts come from the store, which an agent can
+ * write, so they never become a regular expression that could backtrack for ever.
+ */
+function fitsAround(parts: readonly string[], text: string): boolean {
+  if (parts.length === 1) return parts[0] === text;
+  const first = parts[0] ?? "";
+  const last = parts.at(-1) ?? "";
+  if (!text.startsWith(first) || text.length < first.length + last.length) return false;
+  let from = first.length;
+  for (const part of parts.slice(1, -1)) {
+    const at = text.indexOf(part, from);
+    if (at < 0) return false;
+    from = at + part.length;
+  }
+  return text.length - last.length >= from && text.endsWith(last);
+}
+
+/** Whether a text still holds a masked value. */
+export function holdsMasked(text: string): boolean {
+  return text.includes(MASKED);
+}

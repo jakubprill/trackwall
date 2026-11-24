@@ -32,6 +32,8 @@ Turn on "Keep Trackwall and Copilot CLI settings in the store" as well, and the 
 
 A setting that is off only stops new copies. What the store already keeps leaves it only when you untick the setting in "Settings", so a new container, whose `workspace.yaml` starts empty, takes nothing out of the store. When the store already holds settings from another computer or an earlier container, "Settings" says so under the setting: ticking it then replaces them with this computer's, and the old ones stay in the store's history.
 
+To bring them back, for example in a new container, press "Restore settings from the store…" under the setting. "Settings" lists each setting of `workspace.yaml` and each Copilot CLI file that differs from this computer, with its lines before and after. The settings that decide what agents may run or read, where they work, where repos come from or how much they spend, such as the tool rules, the sandbox and the repo hosts, and the Copilot CLI files, are listed apart and start unticked: tick each only after reading what it brings. "Restore ticked settings" writes the ticked ones. Your projects folder, the store's push address and the two "Keep … in the store" settings never come back from the store, and a setting only this computer has stays. Tokens are masked on both sides of the list. Where the store has a masked value and this computer has the same MCP server or setting with its real value, that value is put back; where the server changed, or this computer has none, the setting says values are still masked and you fill them in after the restore.
+
 ## Use it
 
 1. Write your tasks in `mise.local.toml` in the repo root, under `[tasks]` as in `mise.toml`.
@@ -41,6 +43,7 @@ A setting that is off only stops new copies. What the store already keeps leaves
 5. Open "Settings > Workspace" and press "Push to this remote" under the workspace store. Trackwall pushes the next backup there.
 6. To keep your knowledge, routines, board and task templates in the store as well, tick "Keep Plan and knowledge in the store" there.
 7. To keep `workspace.yaml` and your Copilot CLI settings there too, tick "Keep Trackwall and Copilot CLI settings in the store".
+8. On a new computer or in a new container, press "Restore settings from the store…" there before you tick the setting, read what each item changes, tick the ones you want and press "Restore ticked settings".
 
 ## Good to know
 
@@ -52,7 +55,7 @@ A setting that is off only stops new copies. What the store already keeps leaves
 - Masking finds tokens where `mcp-config.json` keeps them: under `env` and `headers`, in arguments such as `--token`, `--header`, `-e`, `-u` or `API_KEY=…`, and in an address's user, password and query; and a token with its issuer's prefix, such as `ghp_` or `glpat-`, anywhere. A token written anywhere else, such as a bare argument, the path of an address or `copilot-instructions.md`, would go in as written: name an environment variable there instead.
 - Copilot CLI's own `config.json`, with your sign-in, never goes in, and neither does the age key mise uses for encrypted values. Keep that key in a password manager: without it the encrypted values in a restored `mise.toml` cannot be read.
 - A Copilot CLI file that is a link is not followed: the store keeps the version it has, and "Settings" says why.
-- Bringing these files back from the store is not built yet. Until it is, copy them back by hand with `git show` in the store before you tick the setting on a new computer.
+- An agent can write in the store, so restoring what decides what agents may run (tool rules, the sandbox, agent secrets, the git program and the other settings listed apart) and the Copilot CLI files waits for your own tick, after you read what each changes.
 - The store gets a `README.md` with the first of these folders, which says what lies where. Trackwall writes it once and never over a `README.md` the store already has.
 - Trackwall pushes the store only to the address you allowed, whatever the store's remote says later. An agent that can write in your projects folder could change that remote; the backups still go only to your address, and "Settings" shows the new remote with "Push to this remote". Press it only if you changed the remote yourself.
 - "Stop pushing" under the store keeps the backups on this computer again. Removing the store's remote with git does not stop the pushes, since Trackwall pushes to the address you chose, not to whatever the store's remote says.

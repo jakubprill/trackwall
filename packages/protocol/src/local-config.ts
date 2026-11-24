@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { WORKTREE_INCLUDE_FILE } from "./agents.ts";
 import { apiEndpoints } from "./api.ts";
+import type { WorkspaceKey } from "./config-files.ts";
 import type { TrackwallFolder } from "./trackwall-dir.ts";
-import { Commit, RepoId } from "./workspace.ts";
+import { Commit, CommitHash, RepoId } from "./workspace.ts";
 
 /**
  * Contract of the `local-config` module (§4.13, ADR-86): the files a repo keeps outside git on purpose, backed up into
@@ -126,6 +127,72 @@ export const WorkspaceStore = z.object({
 export type WorkspaceStore = z.infer<typeof WorkspaceStore>;
 
 /**
+ * Keys of `workspace.yaml` a restore from the store never writes (ADR-299): the store lies in the projects folder, so the
+ * folder is already set when the store is read, the push address is allowed only by "Push to this remote" (ADR-127), and
+ * what the store keeps is turned on only by its own setting, which asks before replacing settings the store holds.
+ */
+export const KEYS_NOT_RESTORED = [
+  "projectsDir",
+  "localConfigRemote",
+  "storePlanAndKnowledge",
+  "storeSettings",
+] as const satisfies readonly WorkspaceKey[];
+
+/**
+ * Keys of `workspace.yaml` that decide what agents may run or read, where they work or push, where repos are cloned from,
+ * or how many runs and tokens they spend (ADR-299). An agent can commit to
+ * the store, so a restore shows them apart and writes each only once the user ticked it.
+ */
+export const TRUST_KEYS = [
+  "worktreesDir",
+  "gitProgram",
+  "toolPermissions",
+  "alwaysAllow",
+  "sandbox",
+  "agentSecrets",
+  "sessionProfile",
+  "supervisor",
+  "javaNavigation",
+  "dayStart",
+  "repoHosts",
+  "taskBranchPrefix",
+  "autoReview",
+  "supervisorModel",
+  "retryModel",
+  "taskTokenBudget",
+] as const satisfies readonly WorkspaceKey[];
+
+/** One thing a restore of the settings from the store would change (ADR-299). */
+export const SettingsRestoreItem = z.object({
+  /** `workspace:<key>`, `copilot:<file>`, or `workspace` for a store's `workspace.yaml` that cannot be read. */
+  id: z.string(),
+  /** What it is, as the user reads it: `repoHosts in workspace.yaml`, `mcp-config.json`. */
+  label: z.string(),
+  /** Whether it decides what agents may run or read (`TRUST_KEYS`, every Copilot CLI file), so it needs its own tick. */
+  trust: z.boolean(),
+  /** The text now: the key as YAML or the whole file, masked as the store keeps it; `null` when there is none. */
+  current: z.string().nullable(),
+  /**
+   * The text after the restore, shown masked as the store keeps it so this computer's tokens never reach the list; the
+   * restore itself writes this computer's values where the store's are masked and all around them is the same.
+   */
+  restored: z.string(),
+  /** Whether the restored text still holds masked values the user fills in afterwards. */
+  stillMasked: z.boolean(),
+  /** Why it cannot be restored (a value this Trackwall does not read, a file that cannot be read); `null` when it can. */
+  problem: z.string().nullable(),
+});
+export type SettingsRestoreItem = z.infer<typeof SettingsRestoreItem>;
+
+export const SettingsRestore = z.object({
+  /** The store's commit the items come from; a restore names it, so a store that moved since is refused. `null` without one. */
+  commit: z.string().nullable(),
+  /** Only what differs from this computer: the keys the store's `workspace.yaml` sets, then the Copilot CLI files. */
+  items: z.array(SettingsRestoreItem),
+});
+export type SettingsRestore = z.infer<typeof SettingsRestore>;
+
+/**
  * An address without the user and token an HTTP or HTTPS address may carry: `https://me:token@host/x` is
  * `https://host/x`. Everything up to the last `@` before the path goes, so a token with an `@` in it does not show
  * either. Any other address stays as it is: the user of `ssh://git@host/x` is no secret.
@@ -171,4 +238,15 @@ export const localConfigApi = {
    * user saw that the store's settings will be replaced. Only from the UI, never from MCP, like `keepPlanAndKnowledge`.
    */
   keepSettings: endpoint("keep-settings", z.object({ on: z.boolean(), replace: z.boolean() }).strict(), WorkspaceStore),
+  /** What restoring the settings from the store's last commit would change on this computer (ADR-299). */
+  settingsRestore: endpoint("settings-restore", z.object({}).strict(), SettingsRestore),
+  /**
+   * Restores the items the user ticked, from `commit`, the commit they looked at; a store that moved since is refused.
+   * Only from the UI, never from MCP: it writes what agents may run.
+   */
+  restoreSettings: endpoint(
+    "restore-settings",
+    z.object({ commit: CommitHash, items: z.array(z.string()).min(1).max(64) }).strict(),
+    SettingsRestore,
+  ),
 };

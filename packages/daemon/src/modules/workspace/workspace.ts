@@ -44,6 +44,7 @@ import {
   type TreeEntry,
   type UnpushedWork,
   type WorkingTreeChanges,
+  type WorkspaceKey,
   type WorkspaceKeysRead,
   type WorkspaceSettings,
 } from "@trackwall/protocol";
@@ -63,7 +64,7 @@ import { suggestedProjectsDir } from "./suggested-projects-dir.ts";
 import { SyncRuns } from "./sync-runs.ts";
 import { alwaysAllowedIn, sameRepo, sessionToolPermissions, supervisorToolPermissions, taskToolPermissions } from "./tool-permissions.ts";
 import { type RepoUnpushedRead, type UnpushedRead, unpushedWork } from "./unpushed-work.ts";
-import type { WorkspaceFile } from "./workspace-file.ts";
+import { WorkspaceFile, workspaceFileValues } from "./workspace-file.ts";
 import { checkWorktreesDir, defaultWorktreesDir } from "./worktrees-dir.ts";
 
 /**
@@ -787,6 +788,40 @@ export class Workspace {
     this.deps.file.setStorePlanAndKnowledge(on);
   }
 
+  /** The keys `workspace.yaml` sets, as plain values (ADR-299). */
+  workspaceValues(): Map<WorkspaceKey, unknown> {
+    return this.deps.file.values();
+  }
+
+  /** The keys of another `workspace.yaml`'s text, such as the store's copy (ADR-299). */
+  workspaceValuesOf(text: string): Map<WorkspaceKey, unknown> {
+    return workspaceFileValues(text);
+  }
+
+  /** Why `value` cannot be `key`'s value; `null` when it can. */
+  workspaceKeyProblem(key: WorkspaceKey, value: unknown): string | null {
+    return WorkspaceFile.problemOf(key, value);
+  }
+
+  /**
+   * Checks one key restored from the store (ADR-299) without writing it: it must read back, and the git program and the
+   * worktrees folder pass the checks of their own setters, since an agent can write the store (a program that is not a
+   * full path or does not run, a folder inside a repo or the store). A restore checks every key before it writes any.
+   */
+  async checkRestoredKey(key: WorkspaceKey, value: unknown): Promise<void> {
+    const problem = WorkspaceFile.problemOf(key, value);
+    if (problem !== null) throw new DomainError("bad_request", `${key}: ${problem}`);
+    if (key === "gitProgram") await this.checkedGitProgram(pathValue(key, value));
+    if (key === "worktreesDir") await this.checkedWorktreesDir(pathValue(key, value));
+  }
+
+  /** Writes one key restored from the store, checked first (`checkRestoredKey`); a folder is written resolved. */
+  async restoreWorkspaceKey(key: WorkspaceKey, value: unknown): Promise<void> {
+    await this.checkRestoredKey(key, value);
+    if (key === "worktreesDir") await this.setWorktreesDir(pathValue(key, value));
+    else this.deps.file.restore(key, value);
+  }
+
   /** Whether the workspace store also keeps `workspace.yaml` and the Copilot CLI user files (ADR-299). */
   storeSettings(): boolean {
     return this.deps.file.storeSettings();
@@ -898,4 +933,10 @@ function cloneDir(fullName: string): string {
   const dir = fullName.split("/").at(-1);
   if (!dir) throw new Error(`full repo name has no final segment: "${fullName}"`);
   return dir;
+}
+
+/** A restored `gitProgram` or `worktreesDir`, which `WorkspaceFile.problemOf` already let through as a path. */
+function pathValue(key: WorkspaceKey, value: unknown): string {
+  if (typeof value !== "string") throw new DomainError("bad_request", `${key}: a path is expected`);
+  return value;
 }

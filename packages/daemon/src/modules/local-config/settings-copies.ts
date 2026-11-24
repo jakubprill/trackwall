@@ -14,10 +14,10 @@ import { isReference, isSecretName, MASKED, maskArgs, maskString } from "./secre
  */
 
 /** The Copilot CLI user files the store keeps, in Copilot CLI's home (`COPILOT_HOME` or `~/.copilot`). */
-const COPILOT_USER_FILES = ["settings.json", "copilot-instructions.md", "mcp-config.json"] as const;
+export const COPILOT_USER_FILES = ["settings.json", "copilot-instructions.md", "mcp-config.json"] as const;
 
 /** A settings file is a few kilobytes; one past this is not the user's setup, and the store keeps what it has. */
-const MAX_SETTINGS_FILE_BYTES = 1024 * 1024;
+export const MAX_SETTINGS_FILE_BYTES = 1024 * 1024;
 
 /** What each key of a server in `mcp-config.json` must hold; any other key, or another type, holds the file. */
 const SERVER_SHAPE = new Map<string, (value: unknown) => boolean>([
@@ -41,8 +41,15 @@ export async function workspaceFileCopies(path: string): Promise<FolderCopies> {
 export async function copilotCopies(copilotHome: string): Promise<FolderCopies> {
   return copies(
     COPILOT_USER_FILES.map((file) => join(copilotHome, file)),
-    (file, bytes) => (file === "mcp-config.json" ? maskMcpConfig(bytes) : file === "settings.json" ? maskCopilotSettings(bytes) : bytes),
+    maskCopilotFile,
   );
+}
+
+/** A Copilot CLI user file as the store keeps it; an error when its secrets cannot be found. */
+export function maskCopilotFile(file: string, bytes: Buffer): Buffer {
+  if (file === "mcp-config.json") return maskMcpConfig(bytes);
+  if (file === "settings.json") return maskCopilotSettings(bytes);
+  return bytes;
 }
 
 async function copies(paths: readonly string[], mask: (file: string, bytes: Buffer) => Buffer): Promise<FolderCopies> {
