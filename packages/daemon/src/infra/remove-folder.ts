@@ -4,7 +4,8 @@ import { rm } from "node:fs/promises";
  * Removes a folder with everything in it. On Windows a file in it can stay held for a moment after the process that
  * used it has exited (git, a build, a binary that just ran, an antivirus scan), and the removal fails with EBUSY, EPERM
  * or ENOTEMPTY, so it is retried with a growing wait. The retry is our own, not `rm`'s `maxRetries`: Bun, which runs
- * the daemon binary, ignores that option (Node honours it).
+ * the daemon binary, ignores that option (Node honours it). A retry that finds the folder gone is done: the failed
+ * attempt removed it after all (seen on macOS, where rm reported ENOTEMPTY while a git process wrote into the folder).
  */
 
 const REMOVE_ATTEMPTS = 10;
@@ -27,6 +28,7 @@ export async function removeFolder(path: string, removal: FolderRemoval = remove
       return;
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code ?? "";
+      if (code === "ENOENT" && attempt > 1) return;
       if (!RETRYABLE.has(code) || attempt >= REMOVE_ATTEMPTS) throw err;
       await new Promise((resolve) => setTimeout(resolve, REMOVE_BACKOFF_MS * attempt));
     }
