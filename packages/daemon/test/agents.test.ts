@@ -94,7 +94,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     await agents.stop(started.id);
   }, 60_000);
 
-  test("a session in a folder Copilot CLI does not trust waits for you with its folder trust dialog, and the answer from outside the terminal starts it", async () => {
+  test("a session in a folder Copilot CLI does not trust waits for you with its folder trust dialog, the answer from outside the terminal starts it, and No ends it as done", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, procs } = makeAgents({ shop: repoDir }, undefined, null, undefined, {
       ...process.env,
@@ -122,7 +122,9 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     window.attachment.input("\u001b");
     const ended = await waitFor(agents, refused.id, (s) => s.run.kind === "exited", "the end after No");
     expect(ended.run).toMatchObject({ kind: "exited", exitCode: 1 });
-    expect(ended.state).toMatchObject({ state: "Done", source: "hook", reason: "hook sessionEnd user_exit" });
+    // Copilot CLI 1.0.115 quits without a hook: "No" is the user's answer, not an error that waits for them (ADR-300).
+    expect(ended.state).toMatchObject({ state: "Done", source: "screen", reason: "screen folder trust refused" });
+    expect(ended.needsAttention).toBe(false);
     window.attachment.detach();
   }, 60_000);
 
@@ -243,6 +245,23 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     expect(window.text()).toContain("Argument: --allow-tool=shell(mvn:*)");
     expect(window.text()).toContain("Argument: --allow-tool=write");
     expect(window.text()).toContain("Argument: --deny-tool=shell(git push)");
+    window.attachment.detach();
+    await agents.stop(started.id);
+  }, 60_000);
+
+  test("a session starts with Trackwall's tools that only read allowed by name, and not those that change something, since Copilot CLI 1.0.115 asks for MCP tools with readOnlyHint (ADR-300)", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs } = makeAgents({ shop: repoDir });
+    cleanups.push(() => procs.stopAll());
+
+    const started = await agents.start("shop");
+    const window = viewer(agents, started.id);
+    await waitFor(agents, started.id, () => window.text().includes("Argument: --allow-tool=trackwall("), "the allowed Trackwall tools");
+
+    expect(window.text()).toContain("Argument: --allow-tool=trackwall(list_repos)");
+    expect(window.text()).toContain("Argument: --allow-tool=trackwall(get_review_comments)");
+    expect(window.text()).not.toContain("Argument: --allow-tool=trackwall(propose_task)");
+    expect(window.text()).not.toContain("Argument: --allow-tool=trackwall(start_service)");
     window.attachment.detach();
     await agents.stop(started.id);
   }, 60_000);

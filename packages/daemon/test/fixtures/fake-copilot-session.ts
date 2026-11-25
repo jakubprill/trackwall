@@ -252,7 +252,7 @@ const startTitle: string = firstTitle;
 /**
  * `FAKE_COPILOT_UNTRUSTED_FOLDER` stands for a folder Copilot CLI does not trust: like Copilot CLI (the contract test of
  * the folder trust dialog) it asks before anything else, with no hook, goes on after "Yes" (`1`, `2` or Enter) and ends
- * with `sessionEnd` and exit code 1 after "No" (Esc).
+ * with exit code 1 and no hook after "No" (Esc), as Copilot CLI 1.0.115 does.
  * The dialog is the real binary's screen (`dialog-folder-trust-120.txt`), its box only.
  */
 let trustPending = process.env.FAKE_COPILOT_UNTRUSTED_FOLDER !== undefined;
@@ -309,11 +309,8 @@ function begin(): void {
 
 /** Keys while the folder trust dialog waits: "Yes" draws the screen anew without the dialog, as Copilot CLI does. */
 function answerTrust(chunk: Buffer): void {
-  // "No (Esc)": Copilot CLI ends as after `/exit`, with its end-of-session hook, but with exit code 1 (the contract test).
-  if (chunk.toString("utf8") === ESCAPE) {
-    replay(real.exit);
-    process.exit(1);
-  }
+  // "No (Esc)": Copilot CLI 1.0.115 ends with exit code 1 and, closing before the first prompt, without `sessionEnd`.
+  if (chunk.toString("utf8") === ESCAPE) process.exit(1);
   // One key per answer, as in Copilot CLI: a paste with an answer key in it answers nothing.
   if (!TRUST_KEYS.has(typedText(chunk))) return;
   trustPending = false;

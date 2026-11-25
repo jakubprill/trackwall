@@ -661,14 +661,17 @@ describe("a session of the real Copilot CLI", () => {
       expect(waiting.state).toMatchObject({ source: "screen", reason: "screen input box before the first prompt" });
       await agents.stop(started.id);
 
-      // "No (Esc)" ends Copilot CLI as `/exit` does, with sessionEnd, though with exit code 1; the fake does the same.
+      // "No (Esc)" ends Copilot CLI with exit code 1 and, since 1.0.115, without sessionEnd: it closes before the first
+      // prompt. The daemon counts the refusal as done (ADR-300); the fake does the same.
       const refused = await agents.start("shop");
       const window = openWindow(refused.id);
       await waitFor(agents, refused.id, (s) => s.dialog !== null, "the folder trust dialog again", SESSION_MS);
       window.attachment.input("\u001b");
       const ended = await waitFor(agents, refused.id, (s) => s.run.kind === "exited", "the end after No", SESSION_MS);
       expect(ended.run).toMatchObject({ kind: "exited", exitCode: 1 });
-      expect(ended.state).toMatchObject({ state: "Done", source: "hook", reason: "hook sessionEnd user_exit" });
+      expect(existsSync(sessionHooksFile(daemon.home, refused.id)) ? hookRecords(daemon.home, refused.id) : []).toEqual([]);
+      expect(ended.state).toMatchObject({ state: "Done", source: "screen", reason: "screen folder trust refused" });
+      expect(ended.needsAttention).toBe(false);
     } finally {
       // Without the file, the next session's start writes the trusted folders again.
       if (config === undefined) rmSync(configFile);

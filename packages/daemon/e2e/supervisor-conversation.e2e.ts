@@ -42,7 +42,8 @@ describe("the supervisor in the conversation view (ADR-107)", () => {
       page.waitForFunction((expected) => document.activeElement?.textContent === expected, label, { timeout: 2000 });
     await focusIs("Allow once");
     await page.keyboard.press("ArrowDown");
-    await focusIs("Always allow");
+    // The next option: on Windows Copilot CLI offers no "Always allow" for a shell command, and the fake neither.
+    await focusIs(process.platform === "win32" ? "Deny" : "Always allow");
     await page.keyboard.press("ArrowUp");
     await focusIs("Allow once");
     await page.evaluate(() => (document.activeElement instanceof HTMLElement ? document.activeElement.blur() : undefined));
