@@ -9,6 +9,7 @@ import type { Connection } from "@/lib/connection";
 import { remoteToAllow, settingsToReplace, storeDestination, workspaceStoreLines } from "@/lib/local-config";
 import { useAction } from "@/lib/use-action";
 import { useRemote } from "@/lib/use-remote";
+import { SettingsRestorePanel } from "./SettingsRestorePanel";
 
 const POLL_MS = 10_000;
 
@@ -76,6 +77,7 @@ export function WorkspaceStoreSurface({ conn }: { conn: Connection }) {
           variables go in; copilot-instructions.md goes in as you wrote it. {storeDestination(store.data)} {settingsToReplace(store.data)}
         </KeepInStore>
       )}
+      {store.data?.settingsInStore && <SettingsRestorePanel conn={conn} />}
     </div>
   );
 }

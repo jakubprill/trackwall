@@ -39,7 +39,7 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
     id: "settings-in-the-store",
     title: "Settings in the workspace store",
-    text: "Turn on Keep Trackwall and Copilot CLI settings in the store, and workspace.yaml and your Copilot CLI settings get a history in git, with the tokens in mcp-config.json masked.",
+    text: "Turn on Keep Trackwall and Copilot CLI settings in the store, and workspace.yaml and your Copilot CLI settings get a history in git, with the tokens in mcp-config.json masked, and a new container gets them back with Restore settings from the store.",
     show: { place: { kind: "settings", category: "workspace" } },
   },
   {

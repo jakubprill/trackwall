@@ -381,6 +381,27 @@ export class WorkspaceFile {
     this.set("repoHosts", hosts);
   }
 
+  /**
+   * The keys this file sets as plain values, as `workspace.yaml` writes them (ADR-299): what a restore from the store
+   * compares with the store's copy. A key the file does not set is not there.
+   */
+  values(): Map<Key, unknown> {
+    return knownKeys(this.config());
+  }
+
+  /** Why `value` cannot be `key`'s value, as reading the file would say; `null` when it can. */
+  static problemOf(key: Key, value: unknown): string | null {
+    const parsed = Keys[key].safeParse(value);
+    return parsed.success ? null : z.prettifyError(parsed.error);
+  }
+
+  /** Writes `value` as it would be read back, refused when reading it would fail; keeps comments and the other keys. */
+  restore(key: Key, value: unknown): void {
+    const problem = WorkspaceFile.problemOf(key, value);
+    if (problem !== null) throw new DomainError("bad_request", `${key}: ${problem}`);
+    this.set(key, value);
+  }
+
   private get<T>(key: Key, schema: z.ZodType<T>): T {
     const parsed = schema.safeParse(this.config()[key] ?? null);
     if (!parsed.success) throw this.invalid(`${key}: ${z.prettifyError(parsed.error)}`);
@@ -460,4 +481,20 @@ function keyLine(doc: Document, lines: LineCounter, key: string): number | null 
 /** `read` guarantees a map or an empty document, which YAML gives as an object or `null`. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The keys of a `workspace.yaml` text (the store's copy, ADR-299) as plain values; an error for a text that is not a
+ * YAML map. Keys this Trackwall does not read, such as the old `repos` list, are left out.
+ */
+export function workspaceFileValues(text: string): Map<Key, unknown> {
+  const doc = parseDocument(text);
+  if (doc.errors.length > 0) throw new Error("the store's workspace.yaml is not valid YAML");
+  if (doc.contents !== null && !isMap(doc.contents)) throw new Error("the store's workspace.yaml is not a map of keys");
+  const config: unknown = doc.toJS();
+  return knownKeys(typeof config === "object" && config !== null ? Object.fromEntries(Object.entries(config)) : {});
+}
+
+function knownKeys(config: Record<string, unknown>): Map<Key, unknown> {
+  return new Map(WorkspaceKey.options.flatMap((key) => (key in config && config[key] !== null ? [[key, config[key]] as const] : [])));
 }

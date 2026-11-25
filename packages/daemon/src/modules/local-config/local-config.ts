@@ -1,4 +1,4 @@
-import { lstat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import {
   type Commit,
@@ -8,18 +8,30 @@ import {
   MAX_LOCAL_CONFIG_BYTES,
   type RepoLocalConfig,
   SETTINGS_STORE_FOLDERS,
+  type SettingsRestore,
   type StoreFolder,
   WORKSPACE_STORE_FOLDERS,
+  type WorkspaceKey,
   type WorkspaceStore,
   type WorkspaceStorePush,
   withoutUserInfo,
 } from "@trackwall/protocol";
+import { writeFileAtomic } from "../../infra/atomic-write.ts";
 import { configOrProblem, DomainError, messageOf } from "../../infra/errors.ts";
 import { fileKey } from "../../infra/file-key.ts";
 import type { FolderCopies } from "../../infra/named-file-folder.ts";
 import { workspaceStoreDir } from "../../infra/old-trackwall-folders.ts";
 import { readRegularFile } from "../../infra/regular-file.ts";
 import { ensureTrackwallDir, trackwallDir } from "../../infra/trackwall-dir.ts";
+import { COPILOT_USER_FILES, MAX_SETTINGS_FILE_BYTES } from "./settings-copies.ts";
+import {
+  type CurrentFile,
+  type PlannedRestore,
+  plannedRestores,
+  STORE_WORKSPACE_FILE,
+  type StoredWorkspace,
+  storeCopilotFile,
+} from "./settings-restore.ts";
 import { removeStoreCopy, writeStoreCopy } from "./store-copies.ts";
 import { keepMessage, keptFiles, storeFolderChanges, storeReadme } from "./store-folders.ts";
 import { moveToReposFolder, storePath } from "./store-layout.ts";
@@ -62,6 +74,12 @@ interface LocalConfigRepos {
   /** Whether the store also keeps `workspace.yaml` and the Copilot CLI user files (`storeSettings`, ADR-299). */
   storeSettings(): boolean;
   setStoreSettings(on: boolean): void;
+  /** The keys `workspace.yaml` sets, and those of another one's text, as plain values (ADR-299). */
+  workspaceValues(): Map<WorkspaceKey, unknown>;
+  workspaceValuesOf(text: string): Map<WorkspaceKey, unknown>;
+  workspaceKeyProblem(key: WorkspaceKey, value: unknown): string | null;
+  checkRestoredKey(key: WorkspaceKey, value: unknown): Promise<void>;
+  restoreWorkspaceKey(key: WorkspaceKey, value: unknown): Promise<void>;
 }
 
 /** What `local-config` needs from `vcs`; wired in the facade. */
@@ -93,6 +111,8 @@ export interface LocalConfigDeps {
    * with why a held file was held; wired in the facade.
    */
   storeFolders: Record<StoreFolder, () => Promise<FolderCopies>>;
+  /** Copilot CLI's home, where a restore writes its user files (ADR-299); wired in the facade. */
+  copilotHome: () => Promise<string>;
   log: (msg: string) => void;
   /** The bare repo in the state folder the store is pushed from (ADR-127), out of reach of the sessions in the projects folder. */
   pushDir: string;
@@ -129,6 +149,15 @@ const STORE_GROUPS = {
 } as const satisfies Record<string, StoreGroupInfo>;
 type StoreGroup = keyof typeof STORE_GROUPS;
 const STORE_GROUP_NAMES = ["planAndKnowledge", "settings"] as const satisfies readonly StoreGroup[];
+
+/** This computer's copy of a Copilot CLI file, or why it cannot be read (a link, too big). */
+async function currentCopilotFile(path: string): Promise<CurrentFile> {
+  try {
+    return { text: (await readRegularFile(path, MAX_SETTINGS_FILE_BYTES))?.toString("utf8") };
+  } catch (err) {
+    return { problem: messageOf(err) };
+  }
+}
 
 /** The store paths kept only in its commits, never as files in its folder (`StoreGroupInfo.browsable`). */
 const UNBROWSABLE = SETTINGS_STORE_FOLDERS.map((folder) => `${folder}/`);
@@ -291,6 +320,90 @@ export class LocalConfig {
       });
     }
     return this.store();
+  }
+
+  /** What restoring the settings from the store's last commit would change on this computer (ADR-299). */
+  async settingsRestore(): Promise<SettingsRestore> {
+    const { commit, planned } = await this.#plannedRestores();
+    return { commit, items: planned.map((p) => p.item) };
+  }
+
+  /**
+   * Writes the items `ids` names, as the store's commit `commit` has them (ADR-299). The user looked at that commit, so a
+   * store that moved since is refused, and so is an item that no longer differs or cannot be restored: they look again.
+   * A key goes through `workspace.yaml`'s own writer, a file is replaced whole; nothing is pushed or committed here, the
+   * next pass keeps what this computer now has.
+   */
+  async restoreSettings(commit: string, ids: readonly string[]): Promise<SettingsRestore> {
+    const now = await this.#plannedRestores();
+    if (now.commit !== commit)
+      throw new DomainError(
+        "bad_request",
+        "The workspace store changed since you looked at it; look at the settings again before you restore them",
+      );
+    const writes = ids.map((id) => {
+      const planned = now.planned.find((p) => p.item.id === id);
+      if (planned === undefined) throw new DomainError("bad_request", `${id} is not something a restore would change now; look again`);
+      if (planned.write === null)
+        throw new DomainError("bad_request", `${planned.item.label}: ${planned.item.problem ?? "cannot be restored"}`);
+      return planned.write;
+    });
+    // Every key is checked before anything is written, so a refused one leaves nothing half restored. A file write that
+    // fails (a full disk) can still leave the files before it written; the next look lists what is left.
+    const keys = writes.flatMap((w) => (w.kind === "key" ? [w] : []));
+    for (const w of keys) await this.#deps.repos.checkRestoredKey(w.key, w.value);
+    const files = writes.flatMap((w) => (w.kind === "file" ? [w] : []));
+    if (files.length > 0) {
+      const home = await this.#deps.copilotHome();
+      await mkdir(home, { recursive: true });
+      // The files may hold this computer's tokens again, so only the user reads them.
+      for (const w of files) writeFileAtomic(join(home, w.file), w.text, 0o600);
+    }
+    for (const w of keys) await this.#deps.repos.restoreWorkspaceKey(w.key, w.value);
+    return this.settingsRestore();
+  }
+
+  /** The restores the store's last commit offers, with that commit; none without a store or a commit. */
+  async #plannedRestores(): Promise<{ commit: string | null; planned: PlannedRestore[] }> {
+    const store = await this.#storeDir();
+    const head = store === null ? null : await this.#deps.vcs.storeHead(store);
+    if (store === null || head === null) return { commit: null, planned: [] };
+    // A commit someone else made comes with a store someone else may have configured, so it is checked before git reads it.
+    await this.#ensureStore(store);
+    const filePaths = COPILOT_USER_FILES.map(storeCopilotFile);
+    const read = await this.#deps.vcs.readFiles(
+      store,
+      head,
+      [STORE_WORKSPACE_FILE, ...filePaths],
+      (filePaths.length + 1) * (MAX_SETTINGS_FILE_BYTES + 128),
+    );
+    const home = await this.#deps.copilotHome();
+    const storedFiles = new Map<string, string>();
+    const currentFiles = new Map<string, CurrentFile>();
+    for (const file of COPILOT_USER_FILES) {
+      const stored = read.get(storeCopilotFile(file));
+      if (stored === undefined) continue;
+      storedFiles.set(file, stored.toString("utf8"));
+      currentFiles.set(file, await currentCopilotFile(join(home, file)));
+    }
+    const planned = plannedRestores({
+      storedWorkspace: this.#storedWorkspace(read.get(STORE_WORKSPACE_FILE)),
+      currentKeys: this.#deps.repos.workspaceValues(),
+      keyProblem: (key, value) => this.#deps.repos.workspaceKeyProblem(key, value),
+      storedFiles,
+      currentFiles,
+    });
+    return { commit: head, planned };
+  }
+
+  /** The keys of the store's `workspace.yaml`, or why they cannot be read: a broken copy does not hide the other items. */
+  #storedWorkspace(bytes: Buffer | undefined): StoredWorkspace {
+    if (bytes === undefined) return null;
+    try {
+      return { keys: this.#deps.repos.workspaceValuesOf(bytes.toString("utf8")) };
+    } catch (err) {
+      return { problem: messageOf(err) };
+    }
   }
 
   /** Pushes the store nowhere from now on; the backups stay on this computer (ADR-127). */

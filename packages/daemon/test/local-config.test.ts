@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFacade, HOSTING_CLIS } from "../src/facade.ts";
@@ -733,7 +733,16 @@ describe("the workspace store", () => {
       const pushDir = join(mkdtempSync(join(tmpdir(), "trackwall-home-")), "local-config-push");
       const none = async () => ({ copies: [], held: [] });
       const storeFolders = { knowledge: none, routines: none, board: none, "task-templates": none, trackwall: none, copilot: none };
-      const localConfig = new LocalConfig({ repos: facade.workspace, vcs, storeFolders, log: () => {}, pushDir, pushRetryMs: 0 });
+      const copilotHome = async () => tmpdir();
+      const localConfig = new LocalConfig({
+        repos: facade.workspace,
+        vcs,
+        storeFolders,
+        copilotHome,
+        log: () => {},
+        pushDir,
+        pushRetryMs: 0,
+      });
       const backUp = async () => {
         await localConfig.backUp();
         await localConfig.settled();
@@ -1142,6 +1151,156 @@ describe("workspace.yaml and the Copilot CLI user files in the workspace store (
       expect(inStore(store, "copilot/mcp-config.json")).toBe(masked);
       expect((await facade.localConfig.store()).problem).toContain("mcp-config.json: not valid JSON, so its secrets cannot be masked");
       expect(gitIn(store, "log", "-p", "--all")).not.toContain(TOKEN);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+});
+
+describe("restoring the settings from the workspace store (ADR-299)", () => {
+  const TOKEN = "glpat-Zx81secretvalue";
+  const MCP_CONFIG = `${JSON.stringify(
+    { mcpServers: { gitlab: { type: "http", url: "https://mcp.example.com/gitlab", headers: { Authorization: `Bearer ${TOKEN}` } } } },
+    null,
+    2,
+  )}\n`;
+  const SETTINGS = '{ "sandbox": { "readonlyPaths": ["~/.gitconfig"] } }\n';
+  const WORKSPACE_KEYS = "repoHosts:\n  - kind: gitlab\n    host: git.example.com\nsandbox:\n  tasks: off\nstoreSettings: true\n";
+
+  /** A computer whose settings are in the store, then a new container: the state folder and Copilot CLI's home start empty. */
+  async function newContainerAfterAnother() {
+    const env = await setup();
+    const { projects, facade, copilotHome } = env;
+    writeFileSync(join(copilotHome, "settings.json"), SETTINGS);
+    writeFileSync(join(copilotHome, "mcp-config.json"), MCP_CONFIG);
+    writeFileSync(facade.workspace.configFile(), `projectsDir: ${JSON.stringify(projects)}\n${WORKSPACE_KEYS}`);
+    await facade.localConfig.keepFolders();
+    writeFileSync(facade.workspace.configFile(), `projectsDir: ${JSON.stringify(projects)}\n`);
+    rmSync(join(copilotHome, "settings.json"));
+    rmSync(join(copilotHome, "mcp-config.json"));
+    return env;
+  }
+
+  test(
+    "a new container sees each key and file the store would bring back, and the ones agents act on marked apart",
+    async () => {
+      const { facade } = await newContainerAfterAnother();
+
+      const offer = await facade.localConfig.settingsRestore();
+
+      expect(offer.items.map((i) => [i.id, i.trust, i.current, i.stillMasked])).toEqual([
+        ["workspace:repoHosts", true, null, false],
+        ["workspace:sandbox", true, null, false],
+        ["copilot:settings.json", true, null, false],
+        ["copilot:mcp-config.json", true, null, true],
+      ]);
+      expect(offer.items[1]?.restored).toBe("sandbox:\n  tasks: off\n");
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "restoring the ticked items writes them, leaves the others, and the masked token is left for the user to fill in",
+    async () => {
+      const { facade, copilotHome } = await newContainerAfterAnother();
+      const offer = await facade.localConfig.settingsRestore();
+      if (offer.commit === null) throw new Error("the store has no commit");
+
+      const after = await facade.localConfig.restoreSettings(offer.commit, ["workspace:repoHosts", "copilot:mcp-config.json"]);
+
+      const workspaceFile = readFileSync(facade.workspace.configFile(), "utf8");
+      expect(workspaceFile).toContain("host: git.example.com");
+      expect(workspaceFile).not.toContain("sandbox");
+      expect(JSON.parse(readFileSync(join(copilotHome, "mcp-config.json"), "utf8")).mcpServers.gitlab.headers).toEqual({
+        Authorization: MASKED,
+      });
+      expect(existsSync(join(copilotHome, "settings.json"))).toBe(false);
+      expect(after.items.map((i) => i.id)).toEqual(["workspace:sandbox", "copilot:settings.json"]);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "where this computer has the same server with its token, the restore puts the token back, readable only by the user",
+    async () => {
+      const { facade, copilotHome } = await newContainerAfterAnother();
+      const here = JSON.parse(MCP_CONFIG);
+      here.mcpServers.old = { command: "old-mcp" };
+      writeFileSync(join(copilotHome, "mcp-config.json"), JSON.stringify(here));
+
+      const offer = await facade.localConfig.settingsRestore();
+      const mcp = offer.items.find((i) => i.id === "copilot:mcp-config.json");
+      if (offer.commit === null) throw new Error("the store has no commit");
+      await facade.localConfig.restoreSettings(offer.commit, ["copilot:mcp-config.json"]);
+
+      expect(mcp?.stillMasked).toBe(false);
+      expect(`${mcp?.current}${mcp?.restored}`).not.toContain(TOKEN);
+      expect(readFileSync(join(copilotHome, "mcp-config.json"), "utf8")).toBe(MCP_CONFIG);
+      if (process.platform !== "win32") expect(statSync(join(copilotHome, "mcp-config.json")).mode & 0o777).toBe(0o600);
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "a git program from the store goes through the same check as Settings, so one that does not run is refused",
+    async () => {
+      const { projects, facade } = await setup();
+      await facade.localConfig.keepSettings(true, false);
+      commitFiles(
+        join(projects, ".trackwall", "local"),
+        { "trackwall/workspace.yaml": `gitProgram: ${JSON.stringify(join(projects, "no-such-git"))}\n` },
+        "An agent's commit",
+      );
+
+      const offer = await facade.localConfig.settingsRestore();
+      if (offer.commit === null) throw new Error("the store has no commit");
+
+      expect(offer.items.find((i) => i.id === "workspace:gitProgram")?.trust).toBe(true);
+      await expect(facade.localConfig.restoreSettings(offer.commit, ["workspace:gitProgram"])).rejects.toThrow(
+        "cannot be used as the git program",
+      );
+      expect(readFileSync(facade.workspace.configFile(), "utf8")).not.toContain("gitProgram");
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "a store that moved since the user looked, or an item that no longer differs, is refused and nothing is written",
+    async () => {
+      const { facade, copilotHome } = await newContainerAfterAnother();
+      const offer = await facade.localConfig.settingsRestore();
+      if (offer.commit === null) throw new Error("the store has no commit");
+      writeFileSync(join(copilotHome, "copilot-instructions.md"), "Answer in English.\n");
+      await facade.localConfig.keepSettings(true, true);
+
+      await expect(facade.localConfig.restoreSettings(offer.commit, ["workspace:repoHosts"])).rejects.toThrow("changed since you looked");
+      const now = await facade.localConfig.settingsRestore();
+      if (now.commit === null) throw new Error("the store has no commit");
+      await expect(facade.localConfig.restoreSettings(now.commit, ["workspace:repoHosts"])).rejects.toThrow(
+        "not something a restore would change",
+      );
+      expect(readFileSync(facade.workspace.configFile(), "utf8")).not.toContain("git.example.com");
+    },
+    REAL_GIT_TIMEOUT,
+  );
+
+  test(
+    "a stored value this Trackwall cannot read is shown with why, and refused",
+    async () => {
+      const { projects, facade } = await setup();
+      writeFileSync(facade.workspace.configFile(), `projectsDir: ${JSON.stringify(projects)}\nrunningTasksWarning: 3\n`);
+      await facade.localConfig.keepSettings(true, false);
+      const store = join(projects, ".trackwall", "local");
+      writeFileSync(facade.workspace.configFile(), `projectsDir: ${JSON.stringify(projects)}\n`);
+      commitFiles(store, { "trackwall/workspace.yaml": "runningTasksWarning: many\n" }, "An agent's commit");
+
+      const offer = await facade.localConfig.settingsRestore();
+      const item = offer.items.find((i) => i.id === "workspace:runningTasksWarning");
+
+      expect(item?.problem).not.toBeNull();
+      if (offer.commit === null) throw new Error("the store has no commit");
+      await expect(facade.localConfig.restoreSettings(offer.commit, ["workspace:runningTasksWarning"])).rejects.toThrow(
+        "runningTasksWarning in workspace.yaml",
+      );
     },
     REAL_GIT_TIMEOUT,
   );

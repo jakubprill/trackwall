@@ -75,7 +75,7 @@ export function storeDestination(store: WorkspaceStore): string {
  */
 export function settingsToReplace(store: WorkspaceStore): string | null {
   if (store.keepsSettings || !store.settingsInStore) return null;
-  return "The store already holds settings from another computer or an earlier container. Ticking this replaces them with this computer's in the next commit; the old ones stay in the store's history. To bring them back first, copy them from the store with git (git show HEAD:trackwall/workspace.yaml).";
+  return "The store already holds settings from another computer or an earlier container. Ticking this replaces them with this computer's in the next commit; the old ones stay in the store's history. To bring them back first, use Restore settings from the store below.";
 }
 
 /**
