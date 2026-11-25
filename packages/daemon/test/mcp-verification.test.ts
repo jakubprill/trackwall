@@ -2,8 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Client } from "@modelcontextprotocol/client";
-import { agentsApi, MiseTaskRunResult, VerifyTaskResult, verificationApi } from "@trackwall/protocol";
+import { agentsApi, GetReviewCommentsResult, MiseTaskRunResult, VerifyTaskResult, verificationApi } from "@trackwall/protocol";
 import { z } from "zod";
+import { vscodeUrl } from "../src/infra/editor-url.ts";
 import { gitIn } from "./support/git-repo.ts";
 import { connectHttpClient, connectSessionClient, toolText } from "./support/mcp-client.ts";
 import { startSessionApi } from "./support/session-api.ts";
@@ -12,6 +13,8 @@ import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 const TOKEN = "v".repeat(43);
 const FAKE_MISE = [process.execPath, join(import.meta.dir, "fixtures", "fake-mise.ts")];
 const REPORT = "target/surefire-reports/TEST-shop.CartTest.xml";
+/** The test class of the failed test, tracked in `shop`, where its stack trace frame leads. */
+const CART_TEST = "src/test/java/shop/CartTest.java";
 /**
  * Fake mise configs (see `fixtures/fake-mise.ts`): in `shop` the mise task `test` logs a Maven error, writes a JUnit
  * report with one failed test and exits with 1; in `warehouse` it passes without a report; `orders` has no `test`.
@@ -22,7 +25,7 @@ const SHOP_MISE = JSON.stringify({
   prints: { test: ["[ERROR] Failures:", "[ERROR]   CartTest.sums:12 expected: <3> but was: <4>"] },
   writes: {
     test: {
-      [REPORT]: `<testsuite name="shop.CartTest"><testcase name="sums" classname="shop.CartTest" time="0.1"><failure message="expected: &lt;3&gt; but was: &lt;4&gt;" type="AssertionFailedError">AssertionFailedError</failure></testcase><testcase name="empty" classname="shop.CartTest" time="0.1"/></testsuite>`,
+      [REPORT]: `<testsuite name="shop.CartTest"><testcase name="sums" classname="shop.CartTest" time="0.1"><failure message="expected: &lt;3&gt; but was: &lt;4&gt;" type="AssertionFailedError">AssertionFailedError: expected: &lt;3&gt; but was: &lt;4&gt;\n\tat org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:151)\n\tat shop.CartTest.sums(CartTest.java:12)</failure></testcase><testcase name="empty" classname="shop.CartTest" time="0.1"/></testsuite>`,
     },
   },
 });
@@ -34,15 +37,18 @@ let daemon: Awaited<ReturnType<typeof startSessionApi>>;
 /** An agent outside Trackwall: only the daemon token, no session token. */
 let outside: Client;
 const clients: Client[] = [];
+/** The addresses the daemon opened on the desktop. */
+const opened: string[] = [];
 
 beforeAll(async () => {
   daemon = await startSessionApi(TOKEN, {
     repos: {
-      shop: { "fake-mise.json": SHOP_MISE },
+      shop: { "fake-mise.json": SHOP_MISE, [CART_TEST]: "class CartTest {}\n" },
       warehouse: { "fake-mise.json": WAREHOUSE_MISE },
       orders: { "fake-mise.json": ORDERS_MISE },
     },
     miseCommand: FAKE_MISE,
+    openUrl: (url) => opened.push(url),
   });
   outside = await connectHttpClient(daemon.api.port, TOKEN);
   clients.push(outside);
@@ -96,6 +102,52 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
       ]);
       // The same result for the task panel.
       expect(await daemon.post(verificationApi.get, { task: task.id })).toEqual(verification);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "the user hands the failed tests to the task's agent, which reads them with get_review_comments, and opens a frame of their trace in the worktree (ADR-302)",
+    async () => {
+      const task = await daemon.facade.agents.createTask("shop", "fix the cart total");
+      const { client, session } = await sessionClient(task.id);
+      const { verification } = VerifyTaskResult.parse((await verify(outside, { repo: "shop", task: task.id })).structuredContent);
+      const [failure] = verification.failures;
+      expect(failure?.lines).toEqual([
+        "AssertionFailedError: expected: <3> but was: <4>",
+        "\tat org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:151)",
+        "\tat shop.CartTest.sums(CartTest.java:12)",
+      ]);
+
+      const { delivery } = await daemon.post(verificationApi.fixTests, { task: task.id, runId: verification.runId, failure: null });
+      expect(["typed", "queued"]).toContain(delivery);
+      const asked = daemon.facade.agents.sessions().sessions.find((s) => s.id === session);
+      expect(asked?.readRequest?.prompt).toContain("The user asks you to fix tests that failed in your task's last verification");
+      const read = GetReviewCommentsResult.parse((await client.callTool({ name: "get_review_comments", arguments: {} })).structuredContent);
+      expect(read.testFix).toEqual({ runId: verification.runId, outdated: false, failures: verification.failures, otherFailures: 0 });
+      // Read once: a second call has nothing.
+      const again = GetReviewCommentsResult.parse(
+        (await client.callTool({ name: "get_review_comments", arguments: {} })).structuredContent,
+      );
+      expect(again.testFix).toBeNull();
+      await expect(daemon.post(verificationApi.fixTests, { task: task.id, runId: "an-older-run", failure: 0 })).rejects.toThrow(
+        `task ${task.id} has a newer verification than run an-older-run`,
+      );
+
+      const frame = failure?.lines[2] ?? "";
+      const file = join(task.worktree, ...CART_TEST.split("/"));
+      expect(await daemon.post(agentsApi.taskFrameFile, { task: task.id, frame, open: false })).toEqual({ path: file, line: 12 });
+      expect(opened).toEqual([]);
+      expect(await daemon.post(agentsApi.taskFrameFile, { task: task.id, frame, open: true })).toEqual({ path: file, line: 12 });
+      expect(opened).toEqual([`${vscodeUrl(file)}:12`]);
+      // A library's frame has no file in the repo, and a path in the line is never taken as one.
+      await expect(daemon.post(agentsApi.taskFrameFile, { task: task.id, frame: failure?.lines[1] ?? "", open: true })).rejects.toThrow(
+        "no file the task's worktree tracks matches this frame",
+      );
+      await expect(
+        daemon.post(agentsApi.taskFrameFile, { task: task.id, frame: `at x.Y.z(${join(task.worktree, "fake-mise.json")}:1)`, open: true }),
+      ).rejects.toThrow("no file the task's worktree tracks matches this frame");
+      expect(opened).toHaveLength(1);
     },
     TIMEOUT,
   );

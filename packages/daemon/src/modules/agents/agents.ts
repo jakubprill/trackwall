@@ -63,6 +63,7 @@ import {
   type TaskUpdate,
   type TaskWorktree,
   type TaskWorktreeSize,
+  type TestFix,
   type ToolPermissions,
   type Verification,
   type WorkingTreeChanges,
@@ -130,7 +131,7 @@ import { TaskFile } from "./task-file.ts";
 import { PLAN_APPROVED_MESSAGE } from "./task-plan.ts";
 import { TaskProposals } from "./task-proposals.ts";
 import { type RefreshVcs, refreshTask } from "./task-refresh.ts";
-import { type PartReview, TaskReviews, type UnreadReview } from "./task-reviews.ts";
+import { isEmpty, type PartReview, TaskReviews, type UnreadReview } from "./task-reviews.ts";
 import { type RoundsVcs, TASK_ROUNDS_FILE, TaskRoundList } from "./task-rounds.ts";
 import { secondInTreeRefusal } from "./task-tree.ts";
 import { AgentTasks, type TaskLaunch, type TaskOptions, type TasksVcs } from "./tasks.ts";
@@ -832,6 +833,14 @@ export class Agents {
   }
 
   /**
+   * The user's request that the task's agent fix failed tests of its last verification (ADR-302), queued like a review:
+   * the task's running session is asked to read it, now or once it waits for input; without one, the session the user resumes is.
+   */
+  askToFixTests(id: string, fix: TestFix): PromptDelivery {
+    return this.#queueForAgent(id, () => this.#reviews.fixTests(id, fix));
+  }
+
+  /**
    * The merge request threads the user handed to the task's agent (ADR-256), queued like a review: the task's running
    * session is asked to read them, now or once it waits for input; without one, the session the user resumes is.
    */
@@ -869,6 +878,7 @@ export class Agents {
     return readRequestPrompt({
       reviewComments: tasks.reduce((unread, task) => unread + this.#reviews.unread(task), 0),
       pipelineFix: tasks.some((task) => this.#reviews.pipelineFixUnread(task)),
+      testFix: tasks.some((task) => this.#reviews.testFixUnread(task)),
       mergeRequestThreads: tasks.some((task) => this.#reviews.threadsUnread(task)),
       handoffMoved: session.task !== null && this.#handoffs.waiting(session.task),
       roundUndone: tasks.some((task) => this.#rounds.undoneUntold(task)),
@@ -883,14 +893,14 @@ export class Agents {
     return task === null ? [] : this.#tasks.worksOn(task);
   }
 
-  /** The unread review comments, pipeline fix and merge request comments of session `caller`'s own task (`get_review_comments`), which now count as read. */
+  /** The unread review comments, pipeline fix, test fix and merge request comments of session `caller`'s own task (`get_review_comments`), which now count as read. */
   takeReviewComments(caller: string | null): UnreadReview & { otherParts: PartReview[] } {
     const own = this.#ownTask(caller, "has review comments").task;
     // The one session of a change reads the reviews of the other parts it works on with its own (ADR-265).
     const otherParts = this.#worksOn(own)
       .filter((task) => task !== own)
       .map((task) => ({ task, repo: this.#tasks.task(task).repo, ...this.#reviews.take(task) }))
-      .filter((part) => part.comments.length > 0 || part.pipelineFix !== null || part.mergeRequestComments !== null);
+      .filter((part) => !isEmpty(part));
     return { ...this.#reviews.take(own), otherParts };
   }
 

@@ -56,7 +56,7 @@ The agent sees the same projects folder you see in Trackwall, through the tools 
 | `list_knowledge` | Read the [workspace knowledge](/features/knowledge) you approved, for example about a repo the change reaches. |
 | `propose_knowledge` | Propose a fact about your repos, or a correction; it reaches later sessions only after you approve it. |
 | `propose_folder_action` | Propose removing a repo from the projects folder; nothing happens until you approve it, see the [supervisor](/features/supervisor). |
-| `get_review_comments` | The comments you sent on lines of a task's changes, for that task's agent; see [Agent tasks](/features/tasks). |
+| `get_review_comments` | The comments you sent on lines of a task's changes, and the failed pipeline or tests you asked it to fix, for that task's agent; see [Agent tasks](/features/tasks). |
 | `send_message`, `get_messages` | A message from the session that proposed a task to that task's agent, and the agent reading it; see [Main session and task proposals](/features/main-session). |
 | `ask_proposer` | A question from a task's agent to the session that proposed the task, which answers with `send_message`; a task you started yourself asks you instead, unless you handed it to the supervisor. |
 | `copy_to_clipboard` | Text you asked the agent to copy. It waits in the session's panel and reaches your clipboard only when you click "Copy" there. |

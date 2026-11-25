@@ -316,6 +316,7 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
         comments: [],
         mergeRequestComments: null,
         pipelineFix: { pipeline: "https://gitlab.example.com/shop/shop/-/pipelines/50", commit: sha, logs: [job], otherJobs: [] },
+        testFix: null,
       });
       expect(agents.takeReviewComments(session?.id ?? "").pipelineFix).toBeNull();
 
@@ -401,6 +402,7 @@ describe.skipIf(process.versions.bun === undefined)("following a task's merge re
         otherParts: [],
         comments: [],
         pipelineFix: null,
+        testFix: null,
         mergeRequestComments: { mergeRequest: seen.mergeRequest, threads: seen.threads.slice(0, 1) },
       });
 

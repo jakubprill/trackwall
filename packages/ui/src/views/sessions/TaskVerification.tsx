@@ -1,13 +1,15 @@
-import { type LogError, miseTaskLogSource, type TestFailure, VERIFY_MISE_TASK, type Verification } from "@trackwall/protocol";
-import { ScrollText, ShieldCheck, Square } from "lucide-react";
+import { type LogError, miseTaskLogSource, VERIFY_MISE_TASK, type Verification } from "@trackwall/protocol";
+import { ScrollText, ShieldCheck, Square, Wrench } from "lucide-react";
 import { useState } from "react";
 import { MiseTaskLog } from "@/components/MiseTaskLog";
 import { StatusLabel } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
+import { useFailedTests } from "@/lib/use-failed-tests";
 import type { TaskVerificationState } from "@/lib/use-task-verification";
-import { failedTestName, testCountsLabel, verificationDuration, verificationLabel } from "@/lib/verification";
+import { testCountsLabel, verificationDuration, verificationLabel } from "@/lib/verification";
+import { VerificationFailedTests } from "./VerificationFailedTests";
 
 /** Lines of one log error in the section: the exception and its first frames; the whole error is in the log. */
 const ERROR_LINES_SHOWN = 4;
@@ -15,7 +17,8 @@ const ERROR_LINES_SHOWN = 4;
 /**
  * The verification of a task (ADR-64): the Verify button in the task panel's header runs the repo's mise task `test`
  * in the worktree, and the section below the summary shows the verdict, the test counts and the first failed tests
- * and log errors, the same result the agent gets from `verify_task`.
+ * and log errors, the same result the agent gets from `verify_task`; the failed tests open to their stack trace and go
+ * back to the agent with "Fix" (ADR-302).
  */
 
 export function VerifyButton({ state, disabled }: { state: TaskVerificationState; disabled: boolean }) {
@@ -56,14 +59,16 @@ export function TaskVerification({ conn, state }: { conn: Connection; state: Tas
           </Button>
         )}
       </div>
-      <VerificationDetails verification={verification} />
+      <VerificationDetails conn={conn} verification={verification} />
       {showLog && <MiseTaskLog conn={conn} source={miseTaskLogSource(verification.repo, verification.task, verification.miseTask)} />}
     </section>
   );
 }
 
-function VerificationDetails({ verification }: { verification: Verification }) {
+function VerificationDetails({ conn, verification }: { conn: Connection; verification: Verification }) {
   const { tests, message, failures, errors, lastLines } = verification;
+  const actions = useFailedTests(conn, verification);
+  const fixable = verification.state === "failed" && failures.length > 0;
   // The end of the output says why only when neither a test nor a log error does (e.g. mise could not start the task).
   const showLastLines = verification.state === "failed" && failures.length === 0 && errors.length === 0 && lastLines.length > 0;
   return (
@@ -73,16 +78,26 @@ function VerificationDetails({ verification }: { verification: Verification }) {
           The worktree's files changed after this run started, so this verdict is about earlier changes. Verify again.
         </p>
       )}
-      {tests && tests.reports > 0 && <p className="text-sm">{testCountsLabel(tests.totals)}</p>}
+      {(tests?.reports ?? 0) > 0 || fixable ? (
+        <div className="flex items-center gap-3">
+          <p className="flex-1 text-sm">{tests && tests.reports > 0 && testCountsLabel(tests.totals)}</p>
+          {fixable && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => actions.fix(null)}
+              disabled={actions.fixing}
+              title="ask the task's agent to fix the failed tests below"
+            >
+              <Wrench /> Fix failed tests
+            </Button>
+          )}
+        </div>
+      ) : null}
+      {actions.sent && <p className="text-muted-foreground text-xs">{actions.sent}</p>}
+      {actions.error && <p className="text-destructive text-xs">{actions.error}</p>}
       {message && <p className="text-muted-foreground text-xs">{message}</p>}
-      {failures.length > 0 && (
-        <ul aria-label="Failed tests" className="flex flex-col gap-1">
-          {failures.map((failure, i) => (
-            // Repeated test cases are kept on purpose (`test.each`, retries), so names alone are not unique.
-            <FailedTest key={`${failure.report}:${failure.className}:${failure.name}:${i}`} failure={failure} />
-          ))}
-        </ul>
-      )}
+      {failures.length > 0 && <VerificationFailedTests failures={failures} actions={actions} />}
       {errors.length > 0 && (
         <ul aria-label="Errors from the log" className="flex flex-col gap-1">
           {errors.map((error) => (
@@ -92,15 +107,6 @@ function VerificationDetails({ verification }: { verification: Verification }) {
       )}
       {showLastLines && <pre className="text-muted-foreground max-h-32 overflow-auto font-mono text-xs">{lastLines.join("\n")}</pre>}
     </>
-  );
-}
-
-function FailedTest({ failure }: { failure: TestFailure }) {
-  return (
-    <li className="flex flex-col">
-      <span className="text-destructive font-mono text-xs">{failedTestName(failure)}</span>
-      {failure.message && <span className="text-muted-foreground line-clamp-2 font-mono text-xs">{failure.message}</span>}
-    </li>
   );
 }
 

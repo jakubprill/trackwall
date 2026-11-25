@@ -184,7 +184,7 @@ describe.skipIf(process.versions.bun === undefined)("a change in one session (AD
     const review = GetReviewCommentsResult.parse((await client.callTool({ name: "get_review_comments", arguments: {} })).structuredContent);
     expect(review.comments).toEqual([]);
     expect(review.otherParts).toEqual([
-      { task: orders.id, repo: "orders-api", comments: [comment], pipelineFix: null, mergeRequestComments: null },
+      { task: orders.id, repo: "orders-api", comments: [comment], pipelineFix: null, testFix: null, mergeRequestComments: null },
     ]);
 
     // The lead part cannot go while its session works on the other part.

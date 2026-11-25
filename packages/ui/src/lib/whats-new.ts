@@ -37,6 +37,12 @@ export interface WhatsNewEntry {
  */
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
+    id: "failed-tests-open",
+    title: "Failed tests open to their stack trace",
+    text: "Click a failed test in a task's Verification to see what it expected, what it got and where in your code it failed, open that line in VS Code, and hand the test to the agent with Fix this.",
+    show: { place: { kind: "view", view: "sessions" } },
+  },
+  {
     id: "settings-in-the-store",
     title: "Settings in the workspace store",
     text: "Turn on Keep Trackwall and Copilot CLI settings in the store, and workspace.yaml and your Copilot CLI settings get a history in git, with the tokens in mcp-config.json masked, and a new container gets them back with Restore settings from the store.",
@@ -65,12 +71,6 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     title: "Tips",
     text: "A tip explains a feature where you meet it for the first time, such as Own worktree in the New session form.",
     show: { place: { kind: "new-session" }, tip: "own-worktree" },
-  },
-  {
-    id: "new-on-the-server",
-    title: "New on the server",
-    text: "Every 15 minutes Trackwall asks each repo's server whether its branch moved, without a fetch, and All repos says so.",
-    show: { place: { kind: "view", view: "repos" } },
   },
 ];
 

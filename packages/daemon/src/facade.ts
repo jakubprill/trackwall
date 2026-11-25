@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import { arch, availableParallelism, homedir, platform, release, totalmem } from "node:os";
 import { join } from "node:path";
 import {
@@ -18,6 +19,7 @@ import {
   type Task,
   type TaskChangedEndpoints,
   type TaskEvidence,
+  type TaskFrameFile,
   type TaskOutcome,
   type TerminalPlace,
 } from "@trackwall/protocol";
@@ -28,6 +30,7 @@ import { readRestarts } from "./infra/daemon-restarts.ts";
 import { downloadVerified } from "./infra/download.ts";
 import { vscodeUrl } from "./infra/editor-url.ts";
 import { configOrProblem, DomainError, messageOf } from "./infra/errors.ts";
+import { isInside } from "./infra/path-inside.ts";
 import { runProgram } from "./infra/run-program.ts";
 import { STATE_BACKUPS_DIR, type StateFiles } from "./infra/state-backup.ts";
 import { extractTarGz } from "./infra/tar.ts";
@@ -51,7 +54,7 @@ import { resolveCopilot } from "./modules/agents/copilot-command.ts";
 import { LAST_SUPERVISOR_FORMAT } from "./modules/agents/last-supervisor.ts";
 import { RESUMABLE_SESSIONS_FORMAT } from "./modules/agents/resumable-sessions.ts";
 import { withMiseVars } from "./modules/agents/session-env.ts";
-import { STACK_TRACE_LIST_MAX_BYTES, STACK_TRACE_SOURCE_GLOBS } from "./modules/agents/stack-trace-frames.ts";
+import { frameFile, STACK_TRACE_LIST_MAX_BYTES, STACK_TRACE_SOURCE_GLOBS } from "./modules/agents/stack-trace-frames.ts";
 import { promptWithStackTrace } from "./modules/agents/stack-trace-prompt.ts";
 import { isTaskBranchUnder, taskWorktree } from "./modules/agents/task-branch.ts";
 import { TASKS_FORMAT } from "./modules/agents/task-file.ts";
@@ -205,6 +208,11 @@ export interface Facade {
    * tracked files from `vcs` in the repo root from `workspace`, and the rule to reproduce the error in a test first.
    */
   createTask: (request: CreateTaskRequest) => Promise<Task>;
+  /**
+   * The file of a failed test's stack trace frame (ADR-302), opened in VS Code at its line with `open`: the task's
+   * worktree from `agents`, its tracked Java files from `vcs`, and only a file found there, never a path the frame names.
+   */
+  taskFrameFile: (task: string, frame: string, open: boolean) => Promise<TaskFrameFile>;
   /**
    * The Spring configuration of a repo root or a task's worktree in one profile's view (ADR-153), for `get_app_config`:
    * the place from `workspace` or `agents`, the environment of a run there from `mise`, its masking from `logs`, the files and the view from `cards`.
@@ -796,6 +804,24 @@ export function createFacade(o: FacadeOptions): Facade {
       // A message in a trace may carry a secret (a password in a JDBC URL), which must not reach the task session.
       const masked = logs.masker(run.env, run.secretValues)(stackTrace);
       return agents.createTask(repo, promptWithStackTrace(prompt, masked, tracked), options, handoffFrom);
+    },
+    taskFrameFile: async (task, frame, open) => {
+      const { worktree } = agents.task(task);
+      const tracked = await vcs.trackedFiles(worktree, STACK_TRACE_SOURCE_GLOBS, STACK_TRACE_LIST_MAX_BYTES);
+      const found = frameFile(frame, tracked.paths);
+      if (found === undefined) throw new DomainError("not_found", "no file the task's worktree tracks matches this frame");
+      const file = join(worktree, ...found.path.split("/"));
+      // A tracked file the agent deleted is not there to open.
+      const real = await realpath(file).catch(() => {
+        throw new DomainError("not_found", `${found.path} is not in the task's worktree any more`);
+      });
+      // A tracked link could point out of the worktree; the editor would open where it leads.
+      if (!isInside(await realpath(worktree), real))
+        throw new DomainError("bad_request", "the frame's file leads outside the task's worktree");
+      // A frame can name line 0 (generated code); the file then opens at its top.
+      const line = found.line !== null && found.line > 0 ? found.line : null;
+      if (open) openEditor(file, line ?? undefined);
+      return { path: file, line };
     },
     appConfig: async ({ repo, task, profile, key }) => {
       const dir = task === null ? await workspace.repoPath(repo) : agents.taskOfRepo(task, repo).worktree;

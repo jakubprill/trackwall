@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TaskId } from "./agents.ts";
+import { PromptDelivery, TaskId } from "./agents.ts";
 import { apiEndpoints } from "./api.ts";
 import { LogError } from "./logs.ts";
 import { MiseTaskName } from "./mise.ts";
@@ -78,6 +78,23 @@ export const Verification = z.object({
 });
 export type Verification = z.infer<typeof Verification>;
 
+/**
+ * A test fix (ADR-302): the user's request to a task's agent to fix failed tests of the task's last verification, with
+ * those tests as the verification read them from the JUnit reports. The agent reads it with `get_review_comments`, like
+ * the user's review (ADR-62) and a pipeline fix (ADR-197).
+ */
+export const TestFix = z.object({
+  /** The run of the verification the tests failed in (`Verification.runId`). */
+  runId: z.string(),
+  /** The verification ran on an earlier version of the changes (ADR-209), so some of these may pass by now. */
+  outdated: z.boolean(),
+  /** The failed tests to fix: the one the user picked, or every one the verification kept. */
+  failures: z.array(TestFailure).min(1).max(VERIFICATION_MAX_FAILURES),
+  /** Failed tests of the verification beyond `failures`: past `VERIFICATION_MAX_FAILURES`, or not picked. */
+  otherFailures: z.number().int().nonnegative(),
+});
+export type TestFix = z.infer<typeof TestFix>;
+
 const TaskRequest = z.object({ task: TaskId }).strict();
 
 const endpoint = apiEndpoints("verification");
@@ -92,4 +109,22 @@ export const verificationApi = {
   get: endpoint("get", TaskRequest, Verification.nullable()),
   /** Stops the running verification's mise task like a stop in the task panel; the verification ends `cancelled`. */
   cancel: endpoint("cancel", TaskRequest, Verification.nullable()),
+  /**
+   * Asks the task's agent to fix failed tests of its last verification (ADR-302): `failure` the index of one test in
+   * `Verification.failures`, or `null` for all of them; queued as a test fix for `get_review_comments`. `not_found` when
+   * the task's last verification is not run `runId` any more, `bad_request` when it has no failed test to fix.
+   */
+  fixTests: endpoint(
+    "fix-tests",
+    TaskRequest.extend({
+      runId: z.string().min(1).max(200),
+      failure: z
+        .number()
+        .int()
+        .nonnegative()
+        .max(VERIFICATION_MAX_FAILURES - 1)
+        .nullable(),
+    }),
+    z.object({ delivery: PromptDelivery }),
+  ),
 };
