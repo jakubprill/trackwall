@@ -88,8 +88,6 @@ export function toolPermissionArgs(permissions: ToolPermissions): string[] {
  * without asking; 1.0.115 asks for it unless a rule allows it. A `--deny-tool` of the user's still refuses one, since
  * Copilot CLI's denials win over its allowances.
  */
-export function trackwallReadToolArgs(): string[] {
-  return Object.values(mcpTools)
-    .filter((tool) => tool.readOnly)
-    .map((tool) => `--allow-tool=${MCP_SERVER_NAME}(${tool.name})`);
-}
+export const TRACKWALL_READ_TOOL_ARGS: readonly string[] = Object.values(mcpTools)
+  .filter((tool) => tool.readOnly)
+  .map((tool) => `--allow-tool=${MCP_SERVER_NAME}(${tool.name})`);

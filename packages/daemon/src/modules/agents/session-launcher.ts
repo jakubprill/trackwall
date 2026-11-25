@@ -17,7 +17,7 @@ import { DomainError, messageOf, SpawnFailure } from "../../infra/errors.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
 import { AcpSession } from "./acp-session.ts";
 import type { AgentSession } from "./agent-session.ts";
-import { resolveCopilot, toolPermissionArgs, trackwallReadToolArgs } from "./copilot-command.ts";
+import { resolveCopilot, TRACKWALL_READ_TOOL_ARGS, toolPermissionArgs } from "./copilot-command.ts";
 import { COPILOT_HOOK_EVENTS, type CopilotHookEvent } from "./copilot-hook-record.ts";
 import { type LspServer, writeCopilotPlugin } from "./copilot-plugin.ts";
 import { CopilotUsageLog } from "./copilot-usage-log.ts";
@@ -326,7 +326,7 @@ export class SessionLauncher {
     const startModel = modelOfArgs([...copilot.args, ...mise.args, ...model, ...launchArgs]);
     await this.setWireApi(`session ${id}`, env, startModel);
     const dir = sessionDir(this.#deps.home, id);
-    const mcp = ["--additional-mcp-config", `@${join(dir, MCP_CONFIG_FILE)}`, ...trackwallReadToolArgs()];
+    const mcp = ["--additional-mcp-config", `@${join(dir, MCP_CONFIG_FILE)}`, ...TRACKWALL_READ_TOOL_ARGS];
     const args = [...mcp, ...toolPermissionArgs(permissions), ...mise.args, ...model];
     return {
       program: copilot.program,
