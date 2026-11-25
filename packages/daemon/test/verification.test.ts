@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LogError, LogErrorsQuery, MiseTarget, RunState, TestFailure, TestResults, Verification } from "@trackwall/protocol";
+import type { LogError, LogErrorsQuery, MiseTarget, RunState, TestFailure, TestFix, TestResults, Verification } from "@trackwall/protocol";
 import { DomainError } from "../src/infra/errors.ts";
 import { Verifications } from "../src/modules/verification/verifications.ts";
 import { waitUntil } from "../src/platform/process-group.ts";
@@ -103,6 +103,8 @@ function setup({
   const readSince: (string | undefined)[] = [];
   const errorRequests: LogErrorsQuery[] = [];
   const verdicts: Verification[] = [];
+  /** The test fixes handed to the task's agent. */
+  const fixes: { task: string; fix: TestFix }[] = [];
   const mise = {
     start: async (target: MiseTarget, miseTask: string) => {
       calls.push(`start ${target.repo}/${target.task}/${miseTask}`);
@@ -133,6 +135,10 @@ function setup({
         return task;
       },
       findTask: (id) => tasks.get(id),
+      askToFixTests: (id, fix) => {
+        fixes.push({ task: id, fix });
+        return "typed";
+      },
       taskFingerprint: async () => {
         worktree.reads++;
         // A test that sets `read` holds the read until it settles.
@@ -167,7 +173,7 @@ function setup({
     // The verdict is computed after the end, in the background.
     expect(await waitUntil(() => verifications.get(TASK)?.state !== "running", 2000)).toBe(true);
   };
-  return { verifications, mise, tasks, worktree, calls, readSince, errorRequests, verdicts, end, file };
+  return { verifications, mise, tasks, worktree, calls, readSince, errorRequests, verdicts, fixes, end, file };
 }
 
 describe("verification of a task", () => {
@@ -372,6 +378,69 @@ describe("verification of a task", () => {
     expect(verifications.get(TASK)?.message).toBe(
       "1 test failed in the test reports, although mise task test exited with code 0; 2 test reports could not be read, so failed tests may be missing",
     );
+  });
+});
+
+describe("a test fix (ADR-302)", () => {
+  const CART_TOTAL: TestFailure = { ...CART_SUM, name: "totals", message: "expected: <10.00> but was: <9.99>" };
+
+  test("hands every failed test the verification kept to the task's agent, with how many others failed", async () => {
+    const { verifications, fixes, end } = setup({
+      reports: { ...results([CART_SUM, CART_TOTAL]), totals: { ...results([]).totals, failures: 7 } },
+    });
+    await verifications.start(TASK);
+    await end(1);
+
+    expect(verifications.fixTests(TASK, "run-1", null)).toEqual({ delivery: "typed" });
+    expect(fixes).toEqual([{ task: TASK, fix: { runId: "run-1", outdated: false, failures: [CART_SUM, CART_TOTAL], otherFailures: 5 } }]);
+  });
+
+  test("hands one failed test, picked by its place in the list, and counts the rest as others", async () => {
+    const { verifications, fixes, end } = setup({ reports: results([CART_SUM, CART_TOTAL]) });
+    await verifications.start(TASK);
+    await end(1);
+
+    verifications.fixTests(TASK, "run-1", 1);
+    expect(fixes).toEqual([{ task: TASK, fix: { runId: "run-1", outdated: false, failures: [CART_TOTAL], otherFailures: 1 } }]);
+  });
+
+  test("an outdated verification hands its tests over marked outdated", async () => {
+    const { verifications, worktree, fixes, end } = setup({ reports: results([CART_SUM]) });
+    await verifications.start(TASK);
+    await end(1);
+    worktree.fingerprint = "files-2";
+    await verifications.checkOutdated();
+
+    verifications.fixTests(TASK, "run-1", null);
+    expect(fixes.map(({ fix }) => fix.outdated)).toEqual([true]);
+  });
+
+  test("is refused when the user saw another run than the task's last verification", async () => {
+    const { verifications, fixes, end } = setup({ reports: results([CART_SUM]) });
+    await verifications.start(TASK);
+    await end(1);
+
+    expect(() => verifications.fixTests(TASK, "run-0", null)).toThrow(
+      new DomainError("not_found", `task ${TASK} has a newer verification than run run-0; look at its failed tests first`),
+    );
+    expect(fixes).toEqual([]);
+  });
+
+  test("is refused for a passed verification and for a test the verification did not keep", async () => {
+    const failed = setup({ reports: results([CART_SUM]) });
+    await failed.verifications.start(TASK);
+    await failed.end(1);
+    expect(() => failed.verifications.fixTests(TASK, "run-1", 1)).toThrow(
+      new DomainError("bad_request", `the last verification of task ${TASK} kept only 1 failed test`),
+    );
+
+    const passed = setup({ reports: results([]) });
+    await passed.verifications.start(TASK);
+    await passed.end(0);
+    expect(() => passed.verifications.fixTests(TASK, "run-1", null)).toThrow(
+      new DomainError("bad_request", `the last verification of task ${TASK} has no failed test to fix`),
+    );
+    expect([...failed.fixes, ...passed.fixes]).toEqual([]);
   });
 });
 

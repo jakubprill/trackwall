@@ -5,7 +5,9 @@ import {
   type LogErrors,
   type LogErrorsQuery,
   type MiseTarget,
+  type PromptDelivery,
   type RunState,
+  type TestFix,
   type TestResults,
   VERIFICATION_MAX_ERRORS,
   VERIFICATION_MAX_FAILURES,
@@ -16,6 +18,7 @@ import { z } from "zod";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { FollowedStateFile, stateFormat } from "../../infra/state-file.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
+import { testFixOf } from "./test-fix.ts";
 
 /**
  * The `verification` module (§4, §4.10, ADR-64): the verification of a task, one answer to "do the task's changes
@@ -49,9 +52,14 @@ export const VERIFICATIONS_FORMAT = stateFormat(StoredVerifications);
 /** Why a verification the previous daemon left running has no verdict: its run ended with that daemon. */
 const STOPPED_WITH_DAEMON = "Trackwall stopped during the run, so it has no verdict; verify again";
 
-/** What the module needs from `agents`: a task's repo, whether the task still exists, and what its worktree holds. */
+/**
+ * What the module needs from `agents`: a task's repo, whether the task still exists, what its worktree holds, and the
+ * queue that hands a test fix to the task's agent.
+ */
 interface VerificationTasks {
   task(id: string): { repo: string };
+  /** Queues the user's test fix for the task's agent (ADR-302), like a review. */
+  askToFixTests(id: string, fix: TestFix): PromptDelivery;
   findTask(id: string): { repo: string } | undefined;
   /** One hash of what the task's worktree holds beyond its base (ADR-209). */
   taskFingerprint(id: string): Promise<string>;
@@ -253,6 +261,19 @@ export class Verifications {
     if (verification?.runId !== runId)
       throw new DomainError("not_found", `task ${task} has no verification of run ${runId}; call without runId to verify again`);
     return verification;
+  }
+
+  /**
+   * The user's request to the task's agent to fix failed tests of its last verification (ADR-302): `failure` one test
+   * by its index in the verification's failures, `null` all of them. `not_found` when run `runId` is no longer the
+   * task's last verification, so the user is not sending tests they did not see.
+   */
+  fixTests(task: string, runId: string, failure: number | null): { delivery: PromptDelivery } {
+    const verification = this.get(task);
+    if (verification?.runId !== runId)
+      throw new DomainError("not_found", `task ${task} has a newer verification than run ${runId}; look at its failed tests first`);
+    const fix = testFixOf(verification, failure);
+    return { delivery: this.#deps.tasks.askToFixTests(task, fix) };
   }
 
   /** Stops the running verification's mise task; it then ends `cancelled`. A finished one is returned as it is. */

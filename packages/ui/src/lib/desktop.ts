@@ -41,6 +41,11 @@ export function editorLinkFor(place: Pick<DaemonInfo, "desktop" | "container" | 
   return undefined;
 }
 
+/** Whether VS Code opens from here at all: on the daemon's desktop, or inside its container (ADR-120, ADR-121). */
+export function opensEditor(place: Pick<DaemonInfo, "desktop" | "container" | "devContainerFolder">): boolean {
+  return place.desktop || place.devContainerFolder !== null || place.container !== null;
+}
+
 export function useEditorLink(path: string): string | undefined {
   return editorLinkFor(useContext(DaemonPlaceContext), path);
 }

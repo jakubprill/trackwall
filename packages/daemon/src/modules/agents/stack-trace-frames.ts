@@ -1,4 +1,4 @@
-import type { JavaException, JavaFrame } from "./java-stack-trace.ts";
+import { type JavaException, type JavaFrame, parseJavaStackTrace } from "./java-stack-trace.ts";
 
 /**
  * The frames of a stack trace found among a repo's tracked files (ADR-222): a frame's package and file name give the end
@@ -43,6 +43,16 @@ export function repoFrames(exceptions: readonly JavaException[], tracked: readon
     }
   }
   return out;
+}
+
+/**
+ * The tracked file of one frame line (`at shop.Cart.total(Cart.java:42)`) with the frame's line, for opening a failed
+ * test's frame (ADR-302): the first file it may be in; `undefined` when the line is no frame or no tracked file matches.
+ */
+export function frameFile(text: string, tracked: readonly string[]): { path: string; line: number | null } | undefined {
+  const [found] = repoFrames(parseJavaStackTrace(text), tracked);
+  const path = found?.paths[0];
+  return found && path !== undefined ? { path, line: found.frame.line } : undefined;
 }
 
 function filesByName(tracked: readonly string[]): Map<string, string[]> {

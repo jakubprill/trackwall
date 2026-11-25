@@ -235,6 +235,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
   route(verificationApi.start, (f, b) => f.verifications.start(b.task)),
   route(verificationApi.get, (f, b) => f.verifications.get(b.task)),
   route(verificationApi.cancel, (f, b) => f.verifications.cancel(b.task)),
+  route(verificationApi.fixTests, (f, b) => f.verifications.fixTests(b.task, b.runId, b.failure)),
   route(reproductionApi.start, (f, b) => f.reproductionChecks.start(b.task)),
   route(reproductionApi.get, (f, b) => f.reproductionChecks.get(b.task)),
   route(reproductionApi.cancel, (f, b) => f.reproductionChecks.cancel(b.task)),
@@ -301,6 +302,7 @@ export const postRoutes: ReadonlyMap<string, PostHandler> = new Map([
     f.agents.openTaskEditor(b.task);
     return null;
   }),
+  route(agentsApi.taskFrameFile, (f, b) => f.taskFrameFile(b.task, b.frame, b.open)),
   route(agentsApi.openConversationFile, (f, b) => {
     f.agents.openConversationFile(b.session, b.path, b.line);
     return null;

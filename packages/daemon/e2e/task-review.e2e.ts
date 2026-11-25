@@ -11,7 +11,7 @@ const SHOP_MISE = JSON.stringify({
   exits: { test: 1 },
   writes: {
     test: {
-      "target/surefire-reports/TEST-shop.CartTest.xml": `<testsuite name="shop.CartTest"><testcase name="sums" classname="shop.CartTest" time="0.1"><failure message="expected: &lt;3&gt; but was: &lt;4&gt;" type="AssertionFailedError">AssertionFailedError</failure></testcase></testsuite>`,
+      "target/surefire-reports/TEST-shop.CartTest.xml": `<testsuite name="shop.CartTest"><testcase name="sums" classname="shop.CartTest" time="0.1"><failure message="expected: &lt;3&gt; but was: &lt;4&gt;" type="AssertionFailedError">AssertionFailedError: expected: &lt;3&gt; but was: &lt;4&gt;\n\tat org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:151)\n\tat shop.CartTest.sums(CartTest.java:12)</failure></testcase></testsuite>`,
     },
   },
 });
@@ -42,7 +42,14 @@ describe("an agent task, verified and reviewed", () => {
     await page.getByRole("button", { name: "Details" }).click();
     const verification = page.getByRole("region", { name: "Verification" });
     await verification.getByText("1 test · 1 failed").waitFor();
-    await verification.getByRole("list", { name: "Failed tests" }).getByText("sums").waitFor();
+    // A failed test opens to the values its assertion compared and its stack trace, whose own frame is a link (ADR-302).
+    await verification
+      .getByRole("list", { name: "Failed tests" })
+      .getByRole("button", { name: /CartTest › sums/ })
+      .click();
+    await verification.getByText("expected", { exact: true }).waitFor();
+    await verification.getByRole("button", { name: "at shop.CartTest.sums(CartTest.java:12)" }).waitFor();
+    expect(await verification.getByText("at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:151)").count()).toBe(1);
 
     // The agent's work: a commit on the task's branch in its worktree.
     const task = daemon.facade.agents.sessions().tasks.find((t) => t.prompt === PROMPT);
@@ -75,5 +82,11 @@ describe("an agent task, verified and reviewed", () => {
     expect(read.comments).toEqual([
       { path: "README.md", side: "new", line: 3, code: "Run it with `mise run dev`.", text: "Say which port it listens on." },
     ]);
+
+    // "Fix failed tests" hands the verification's failed tests to the agent the same way (ADR-302).
+    await page.getByRole("button", { name: "Fix failed tests" }).click();
+    await verification.getByText(/^Sent: the agent (is reading|gets) the failed tests/).waitFor();
+    const fix = GetReviewCommentsResult.parse((await agent.callTool({ name: "get_review_comments", arguments: {} })).structuredContent);
+    expect(fix.testFix?.failures.map((f) => f.name)).toEqual(["sums"]);
   }, 90_000);
 });
