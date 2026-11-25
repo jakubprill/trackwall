@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { mcpTools } from "@trackwall/protocol";
 import { Agents } from "../src/modules/agents/agents.ts";
 import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
@@ -256,12 +257,10 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
 
     const started = await agents.start("shop");
     const window = viewer(agents, started.id);
-    await waitFor(agents, started.id, () => window.text().includes("Argument: --allow-tool=trackwall("), "the allowed Trackwall tools");
+    await waitFor(agents, started.id, () => window.text().includes("Trackwall tools allowed"), "the allowed Trackwall tools");
 
-    expect(window.text()).toContain("Argument: --allow-tool=trackwall(list_repos)");
-    expect(window.text()).toContain("Argument: --allow-tool=trackwall(get_review_comments)");
-    expect(window.text()).not.toContain("Argument: --allow-tool=trackwall(propose_task)");
-    expect(window.text()).not.toContain("Argument: --allow-tool=trackwall(start_service)");
+    const readTools = Object.values(mcpTools).filter((tool) => tool.readOnly).length;
+    expect(window.text()).toContain(`Trackwall tools allowed: ${readTools} of ${readTools} that read; that change: none`);
     window.attachment.detach();
     await agents.stop(started.id);
   }, 60_000);

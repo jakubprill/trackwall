@@ -24,7 +24,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
+import { MCP_SERVER_NAME, mcpTools, TESTED_COPILOT_CLI_VERSION } from "@trackwall/protocol";
 import { z } from "zod";
 import { ESCAPE } from "../../src/modules/agents/copilot-keys.ts";
 import { stripAnsi } from "../../src/modules/logs/stream-lines.ts";
@@ -117,6 +117,22 @@ if (process.argv.includes("--acp")) {
   const fire = process.argv.includes("--plugin-dir") ? pluginHooks(process.argv, "s1") : () => [];
   serveAcp({ mcpServers, instructionFiles, args: taskArgs, allowAllTools, fire });
   await new Promise<never>(() => {});
+}
+
+/** An `--allow-tool` of one of Trackwall's own tools (ADR-300). */
+const TRACKWALL_TOOL = new RegExp(`^--allow-tool=${MCP_SERVER_NAME}\\((\\w+)\\)$`);
+
+/**
+ * Trackwall's own tools the session may run without asking, in one line rather than one per tool, so the welcome stays
+ * on a small terminal's screen: how many of those that only read, and by name any that change something.
+ */
+function allowedTrackwallTools(): string {
+  const allowed = new Set(taskArgs.map((a) => TRACKWALL_TOOL.exec(a)?.[1]).filter((name) => name !== undefined));
+  const tools = Object.values(mcpTools);
+  const reading = tools.filter((t) => t.readOnly && allowed.has(t.name)).length;
+  const changing = tools.filter((t) => !t.readOnly && allowed.has(t.name)).map((t) => t.name);
+  const total = tools.filter((t) => t.readOnly).length;
+  return `Trackwall tools allowed: ${reading} of ${total} that read; that change: ${changing.join(", ") || "none"}`;
 }
 
 /** The session id from `--session-id=` or `--resume=`, under which the fake keeps the session's conversation. */
@@ -293,7 +309,8 @@ function begin(): void {
   process.stdout.write(`Instructions: ${instructionFiles.join(", ")}\r\n`);
   process.stdout.write(`LSP: ${lspServers.join(", ")}\r\n`);
   process.stdout.write(`Directory:\r\n${shortLines(process.cwd())}\r\n`);
-  for (const arg of taskArgs) process.stdout.write(`Argument: ${arg}\r\n`);
+  for (const arg of taskArgs.filter((a) => !TRACKWALL_TOOL.test(a))) process.stdout.write(`Argument: ${arg}\r\n`);
+  process.stdout.write(`${allowedTrackwallTools()}\r\n`);
   for (const name of shownEnv) process.stdout.write(`Env ${name}=${toolEnv(name)}\r\n`);
   // Copilot CLI sets the conversation's model at every start and resume (`copilot-session.contract.ts`).
   if (initialPrompt !== undefined || resumes) recordModelChange(sessionId);
