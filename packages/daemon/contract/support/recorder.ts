@@ -6,7 +6,8 @@
  * reference of a CI system is taken from its log that way.
  */
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { homedir } from "node:os";
+import { dirname, sep } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { copilotCliVersion } from "../../scripts/copilot-cli.ts";
 import { readAgentDialog } from "../../src/modules/agents/copilot-dialog.ts";
@@ -35,7 +36,10 @@ export function startRecorder(daemon: { home: string; projects: string; copilot:
   const seen: Partial<CopilotReference> = { copilotVersion: copilotCliVersion(), platform: process.platform };
   const differences: string[] = [];
   // Copilot CLI names directories by their real path (macOS: /private/var/… for /var/…), and on Windows by the long one.
-  const paths = [...new Set([daemon.projects, daemon.home].flatMap((p) => [p, realpathSync.native(p)]))];
+  // A path in the home folder Copilot CLI writes from `~` (on CI, where the contract folders lie under the home, ADR-300).
+  const real = [daemon.projects, daemon.home].flatMap((p) => [p, realpathSync.native(p)]);
+  const home = homedir();
+  const paths = [...new Set([...real, ...real.filter((p) => p.startsWith(home + sep)).map((p) => `~${p.slice(home.length)}`)])];
   const clean = (text: string) => anonymize(text, paths);
 
   function hooks(records: readonly CopilotHookRecord[]): ReferenceHook[] {

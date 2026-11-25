@@ -90,8 +90,8 @@ export function reference(): CopilotReference {
   return found;
 }
 
-/** A path shortened by Copilot CLI: anything, `...` between separators, and the last part. */
-const SHORTENED_PATH = /(?:[A-Za-z]:)?[\\/][^\s()]*?[\\/]\.{3}[\\/]([^\s()\\/]+)/g;
+/** A path shortened by Copilot CLI: a drive or `~` for the home folder, anything, `...` between separators, and the last part. */
+const SHORTENED_PATH = /(?:[A-Za-z]:|~)?[\\/][^\s()]*?[\\/]\.{3}[\\/]([^\s()\\/]+)/g;
 
 /** The right border of a box line: the outer `│`, after the inner box's `│` when there is one. */
 const BOX_RIGHT = /\s*│(?: │)?$/;
