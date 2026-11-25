@@ -42,6 +42,20 @@ describe("removing a folder", () => {
     expect(attempts).toEqual(["C:\\worktrees\\shop-fix", "C:\\worktrees\\shop-fix", "C:\\worktrees\\shop-fix", "C:\\worktrees\\shop-fix"]);
   });
 
+  test("a folder the failed attempt removed after all is gone, not an error, when the next attempt finds nothing", async () => {
+    // Seen on macOS: rm reported ENOTEMPTY while a git process wrote into the folder, and the folder was gone by the retry.
+    const failures = ["ENOTEMPTY", "ENOENT"];
+    let attempts = 0;
+
+    await removeFolder("/projects/added", async () => {
+      attempts++;
+      const code = failures.shift();
+      if (code !== undefined) throw errno(code);
+    });
+
+    expect(attempts).toBe(2);
+  });
+
   test("any other error is thrown at once", async () => {
     let attempts = 0;
 
