@@ -89,11 +89,18 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor in the conve
       title: "Make a file",
       detail: [`$ ${FAKE_ACP_COMMAND}`],
       question: "Do you want to allow this?",
-      options: [
-        { key: "1", label: "Allow once" },
-        { key: "2", label: "Always allow" },
-        { key: "3", label: "Deny" },
-      ],
+      // Copilot CLI 1.0.115 offers no "Always allow" for a PowerShell command, as the fake does on Windows.
+      options:
+        process.platform === "win32"
+          ? [
+              { key: "1", label: "Allow once" },
+              { key: "2", label: "Deny" },
+            ]
+          : [
+              { key: "1", label: "Allow once" },
+              { key: "2", label: "Always allow" },
+              { key: "3", label: "Deny" },
+            ],
     });
     const dialog = asking.dialog?.id ?? "";
     await daemon.post(agentsApi.answerDialog, { session: supervisor.id, dialog, answer: "1" });
@@ -216,7 +223,12 @@ describe.skipIf(process.versions.bun === undefined)("the supervisor in the conve
 
     await daemon.post(agentsApi.say, { session: supervisor.id, text: "first" });
     const first = await inState(daemon, supervisor.id, "Approval");
-    await daemon.post(agentsApi.answerDialog, { session: supervisor.id, dialog: first.dialog?.id ?? "", answer: "3" });
+    const deny = first.dialog?.kind === "approval" ? first.dialog.options.find((o) => o.label === "Deny") : undefined;
+    await daemon.post(agentsApi.answerDialog, {
+      session: supervisor.id,
+      dialog: first.dialog?.id ?? "",
+      answer: deny?.key ?? "no Deny option",
+    });
     await inState(daemon, supervisor.id, "Input");
     await until(() => view.entries().some((e) => e.kind === "tool" && e.status === "failed"), "the refused tool");
     expect(view.entries().find((e) => e.kind === "tool")).toMatchObject({ detail: ["The user rejected this tool call."] });

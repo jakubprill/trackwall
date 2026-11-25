@@ -128,7 +128,9 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
 
     expect(asking.dialog).toMatchObject({ kind: "approval", question: "Do you want to allow this?" });
     expect(asking.dialog?.kind === "approval" && asking.dialog.detail.join("\n")).toMatch(/^\$ (touch|New-Item) made-by-acp\.txt$/m);
-    expect(asking.dialog?.kind === "approval" && asking.dialog.options.map((o) => o.label)).toEqual(["Allow once", "Always allow", "Deny"]);
+    // Since Copilot CLI 1.0.115 "Always allow" only where a session-wide approval is possible, which a PowerShell command is not.
+    const options = process.platform === "win32" ? ["Allow once", "Deny"] : ["Allow once", "Always allow", "Deny"];
+    expect(asking.dialog?.kind === "approval" && asking.dialog.options.map((o) => o.label)).toEqual(options);
     agents.answerDialog(supervisor.id, asking.dialog?.id ?? "", "1");
     const done = await inState(supervisor.id, "Input");
 
@@ -301,7 +303,8 @@ describe("the supervisor in the conversation view with the real Copilot CLI", ()
     model.reply((request) => shellCall(request, { bash: "touch refused.txt", powershell: "New-Item refused.txt" }));
     agents.say(supervisor.id, "make the refused file");
     const refusing = await inState(supervisor.id, "Approval");
-    agents.answerDialog(supervisor.id, refusing.dialog?.id ?? "", "3");
+    const deny = refusing.dialog?.kind === "approval" ? refusing.dialog.options.find((o) => o.label === "Deny") : undefined;
+    agents.answerDialog(supervisor.id, refusing.dialog?.id ?? "", deny?.key ?? "no Deny option");
     await inState(supervisor.id, "Input");
 
     expect(existsSync(join(daemon.projects, "refused.txt"))).toBe(false);

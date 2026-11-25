@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, extname, isAbsolute, join } from "node:path";
-import type { TaskApprovals, ToolPermissions } from "@trackwall/protocol";
+import { MCP_SERVER_NAME, mcpTools, type TaskApprovals, type ToolPermissions } from "@trackwall/protocol";
 import { envKey } from "../../infra/env-key.ts";
 
 /**
@@ -81,3 +81,13 @@ export function approvalArgs(approvals: TaskApprovals): string[] {
 export function toolPermissionArgs(permissions: ToolPermissions): string[] {
   return [...permissions.allow.map((p) => `--allow-tool=${p}`), ...permissions.deny.map((p) => `--deny-tool=${p}`)];
 }
+
+/**
+ * Trackwall's own tools that only read run without an approval request (ADR-300): one `--allow-tool` each, by name, so
+ * a tool that writes or runs repo code still asks. Copilot CLI up to 1.0.114 ran an MCP tool with `readOnlyHint`
+ * without asking; 1.0.115 asks for it unless a rule allows it. A `--deny-tool` of the user's still refuses one, since
+ * Copilot CLI's denials win over its allowances.
+ */
+export const TRACKWALL_READ_TOOL_ARGS: readonly string[] = Object.values(mcpTools)
+  .filter((tool) => tool.readOnly)
+  .map((tool) => `--allow-tool=${MCP_SERVER_NAME}(${tool.name})`);

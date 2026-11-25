@@ -58,12 +58,15 @@ describe("paths in a reference", () => {
     expect(anonymize("Run command: touch /tmp/trackwall-projects-x1/shop/a.txt", ["/tmp/trackwall-projects-x1"])).toBe(
       "Run command: touch /projects/shop/a.txt",
     );
+    expect(anonymize("in this repo (~/trackwall-projects-x1/shop)", ["~/trackwall-projects-x1"])).toBe("in this repo (/projects/shop)");
   });
 
   test("shortened by Copilot CLI to fit the screen are replaced by the projects folder and the last part", () => {
     expect(anonymize("in this repo (/private/var/folders/x1/.../shop)", [])).toBe("in this repo (/projects/shop)");
     expect(anonymize(String.raw`in this repo (C:\Users\RUNNER~1\...\shop)`, [])).toBe("in this repo (/projects/shop)");
     expect(anonymize("│ repo (/tmp/.../shop)    │", [])).toBe("│ repo (/projects/shop)   │");
+    // In the home folder Copilot CLI writes the path from `~`, as on a CI runner whose contract folders lie there.
+    expect(anonymize("in this repo (~/work/trackwall/.../shop)", [])).toBe("in this repo (/projects/shop)");
   });
 });
 

@@ -5,7 +5,7 @@ import { answersDialog, type SessionKey, stateFromKey } from "./copilot-keys.ts"
 import { stateFromOsc, windowTitleFromOsc } from "./copilot-osc.ts";
 import { stateFromPromptBox } from "./copilot-prompt-box.ts";
 import { CopilotScreen } from "./copilot-screen.ts";
-import { startDialogOnScreen } from "./copilot-start-dialog.ts";
+import { FOLDER_TRUST_DIALOG, startDialogOnScreen } from "./copilot-start-dialog.ts";
 import { OscParser } from "./osc-parser.ts";
 import { type StateSignal, TaskStateTracker, type TaskStateTrackerOptions } from "./task-state-tracker.ts";
 
@@ -54,6 +54,19 @@ const BACKGROUND_AGENTS_ENDED: StateSignal = {
   source: "log",
   confidence: "medium",
   reason: "log no background agent runs",
+};
+
+/**
+ * Esc on the folder trust dialog ended the session (ADR-300): Copilot CLI 1.0.115 quits with exit code 1 and, since it
+ * closes before the first prompt, without the `sessionEnd` hook it sent up to 1.0.114. The user said "No", which is
+ * no error.
+ */
+const FOLDER_TRUST_REFUSED: StateSignal = {
+  state: "Done",
+  source: "screen",
+  confidence: "high",
+  reason: "screen folder trust refused",
+  endsSession: true,
 };
 
 /**
@@ -135,6 +148,8 @@ export class CopilotSessionState {
   #screenPhase: "start" | "keyed" | "dialog" | "answered" | "done" = "start";
   /** The heading of the dialog shown before the first hook that waits (`dialog`) or was answered last (`answered`). */
   #startDialog: string | undefined;
+  /** Esc answered the folder trust dialog, which ends Copilot CLI unless a hook or the input box says otherwise. */
+  #folderTrustRefused = false;
   /**
    * The main agent ended its turn while background agents run (ADR-254): until its next hook the removed progress bar
    * (OSC 9;4;0) does not end `Working`.
@@ -316,6 +331,7 @@ export class CopilotSessionState {
     const signal = stateFromKey(key, current);
     // A key before the screen was read may have answered a dialog: one not redrawn yet must not ask again.
     if (this.#screenPhase === "start") this.#screenPhase = "keyed";
+    if (this.#screenPhase === "dialog" && this.#startDialog === FOLDER_TRUST_DIALOG) this.#folderTrustRefused = key === "escape";
     if (!signal) return [stale].filter((c) => c !== undefined);
     // Ctrl+C stops the background agents too ("ctrl+c stop agents"), and no turn of the main agent follows.
     this.#waitingForBackgroundAgents = false;
@@ -342,6 +358,8 @@ export class CopilotSessionState {
   }
 
   exit(code: number): TaskStateChange[] {
-    return [this.#tick(), this.#tracker.exit(code)].filter((c) => c !== undefined);
+    // Nothing came after the refusal (the first hook or the input box would have ended the screen's say).
+    const refused = this.#folderTrustRefused && this.#screenPhase === "answered" ? this.#tracker.signal(FOLDER_TRUST_REFUSED) : undefined;
+    return [this.#tick(), refused, this.#tracker.exit(code)].filter((c) => c !== undefined);
   }
 }

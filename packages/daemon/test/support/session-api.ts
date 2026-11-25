@@ -55,6 +55,8 @@ export interface SessionApiOptions {
   proxyPort?: number;
   /** `true` for a daemon in a container (`FacadeOptions.inContainer`); `false` by default. */
   inContainer?: boolean;
+  /** The folder the state directory and projects folder are made in; the system's temporary folder by default. */
+  dirsParent?: string;
 }
 
 interface CopilotUnderTest {
@@ -73,7 +75,9 @@ export const ONE_REPO: SessionApiOptions = { repos: { shop: { "README.md": "# sh
  * `hasListedTools` tells whether the MCP server has answered a session's `tools/list`.
  */
 export async function startSessionApi(token: string, options: SessionApiOptions = ONE_REPO) {
-  const { home, projects } = options.restartOf ?? newDirs(options.repos, options.sandboxTasks === undefined ? "off" : options.sandboxTasks);
+  const { home, projects } =
+    options.restartOf ??
+    newDirs(options.repos, options.sandboxTasks === undefined ? "off" : options.sandboxTasks, options.dirsParent ?? tmpdir());
   const copilot = options.copilot ?? FAKE_COPILOT;
   const desktop = options.desktop ?? true;
   const openers = desktopOpeners(desktop, { openUrl: options.openUrl ?? (() => {}), openFolder: () => {} });
@@ -156,10 +160,14 @@ export async function startSessionApi(token: string, options: SessionApiOptions 
 }
 
 /** A projects folder with `repos` and a state directory whose workspace points to it. */
-function newDirs(repos: SessionApiOptions["repos"], sandboxTasks: SandboxSettings["tasks"] | null): { home: string; projects: string } {
-  const projects = mkdtempSync(join(tmpdir(), "trackwall-projects-"));
+function newDirs(
+  repos: SessionApiOptions["repos"],
+  sandboxTasks: SandboxSettings["tasks"] | null,
+  parent: string,
+): { home: string; projects: string } {
+  const projects = mkdtempSync(join(parent, "trackwall-projects-"));
   for (const [name, files] of Object.entries(repos)) makeRepo(files, name, projects);
-  const home = mkdtempSync(join(tmpdir(), "trackwall-home-"));
+  const home = mkdtempSync(join(parent, "trackwall-home-"));
   const sandbox = sandboxTasks === null ? "" : `sandbox:\n  tasks: ${sandboxTasks}\n`;
   writeFileSync(join(home, "workspace.yaml"), `projectsDir: ${JSON.stringify(projects)}\n${sandbox}`);
   return { home, projects };

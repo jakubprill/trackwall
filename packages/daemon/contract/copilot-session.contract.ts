@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   agentsApi,
@@ -359,7 +359,9 @@ describe("a session of the real Copilot CLI", () => {
     "a shell command's don't ask again names it with its subcommand, and allowed it runs without asking also on a path outside the folder (ADR-249)",
     async () => {
       const { agents } = daemon.facade;
-      const outside = join(dirname(daemon.projects), `always-allowed-${Date.now()}.txt`);
+      // In the system's temporary folder, which Copilot CLI lets a session reach; a path outside both it and the
+      // session's folder gets "Allow path access" also for an allowed command (1.0.114 and 1.0.115, ADR-300).
+      const outside = join(tmpdir(), `always-allowed-${Date.now()}.txt`);
       const { id } = await startSession();
       // `git commit` asks, and Copilot CLI names it with its subcommand, so allowing it allows no `git push`.
       model.reply((request) => shellCall(request, { bash: "git commit --allow-empty -m empty", powershell: "" }));
@@ -393,7 +395,8 @@ describe("a session of the real Copilot CLI", () => {
   test.skipIf(process.platform === "win32")(
     "an allowed git log writes a file outside the folder through --output without asking, which is why Always allow takes only some git subcommands (ADR-249)",
     async () => {
-      const outside = join(dirname(daemon.projects), `git-log-output-${Date.now()}.txt`);
+      // In the system's temporary folder, as above.
+      const outside = join(tmpdir(), `git-log-output-${Date.now()}.txt`);
       // A pattern covers every option after it: `--output=<path>` writes any file, and Copilot CLI checks no path of an
       // allowed command. Always allow therefore never remembers `git log` (`alwaysAllowable`); a hand-written rule can.
       expect(alwaysAllowable("shell(git log)")).toBe(false);
@@ -661,14 +664,17 @@ describe("a session of the real Copilot CLI", () => {
       expect(waiting.state).toMatchObject({ source: "screen", reason: "screen input box before the first prompt" });
       await agents.stop(started.id);
 
-      // "No (Esc)" ends Copilot CLI as `/exit` does, with sessionEnd, though with exit code 1; the fake does the same.
+      // "No (Esc)" ends Copilot CLI with exit code 1 and, since 1.0.115, without sessionEnd: it closes before the first
+      // prompt. The daemon counts the refusal as done (ADR-300); the fake does the same.
       const refused = await agents.start("shop");
       const window = openWindow(refused.id);
       await waitFor(agents, refused.id, (s) => s.dialog !== null, "the folder trust dialog again", SESSION_MS);
       window.attachment.input("\u001b");
       const ended = await waitFor(agents, refused.id, (s) => s.run.kind === "exited", "the end after No", SESSION_MS);
       expect(ended.run).toMatchObject({ kind: "exited", exitCode: 1 });
-      expect(ended.state).toMatchObject({ state: "Done", source: "hook", reason: "hook sessionEnd user_exit" });
+      expect(existsSync(sessionHooksFile(daemon.home, refused.id)) ? hookRecords(daemon.home, refused.id) : []).toEqual([]);
+      expect(ended.state).toMatchObject({ state: "Done", source: "screen", reason: "screen folder trust refused" });
+      expect(ended.needsAttention).toBe(false);
     } finally {
       // Without the file, the next session's start writes the trusted folders again.
       if (config === undefined) rmSync(configFile);
@@ -1524,7 +1530,7 @@ describe("the supervisor's situation with the real Copilot CLI (ADR-148)", () =>
 });
 
 describe("the day start with the real Copilot CLI", () => {
-  test("the day start's first message reaches the new supervisor's model as its first prompt, next to the user's own MCP servers, and it reads the day report without an approval request", async () => {
+  test("the day start's first message reaches the new supervisor's model as its first prompt, next to the user's own MCP servers, and it reads the day report without an approval request, while the user's own tool asks", async () => {
     const { agents, dayStart } = daemon.facade;
     // One of the user's own MCP servers in their Copilot CLI config: Trackwall's server is added to it, not instead of it.
     const userConfig = join(daemon.home, "copilot-home", "mcp-config.json");
@@ -1545,6 +1551,12 @@ describe("the day start with the real Copilot CLI", () => {
       expect(run).toMatchObject({ error: null, step: "supervisor" });
       const supervisor = run?.supervisor;
       if (!supervisor) throw new Error("the day start started no supervisor");
+      // Since Copilot CLI 1.0.115 a read-only tool of the user's own server asks like any other (ADR-300); Trackwall
+      // allows only its own read-only tools, so the user's asks and the day report does not.
+      const asking = await waitFor(agents, supervisor, (s) => s.dialog?.kind === "approval", "the user's tool's approval", SESSION_MS);
+      if (asking.dialog?.kind !== "approval") throw new Error("no approval dialog");
+      expect(asking.dialog.title).toBe(USER_MCP_TOOL);
+      agents.answerDialog(supervisor, asking.dialog.id, "1");
       await endOfTurn(supervisor);
 
       const [first, second, third] = model.requests().slice(-3);
@@ -1556,7 +1568,7 @@ describe("the day start with the real Copilot CLI", () => {
       expect(first?.tools).toContain(`${USER_MCP_SERVER}-${USER_MCP_TOOL}`);
       expect(second?.toolResults.join("\n")).toContain('"quietRepos":1');
       expect(third?.toolResults.join("\n")).toContain(USER_MCP_ISSUES);
-      expect(hookRecords(daemon.home, supervisor).map((r) => r.event)).not.toContain("notification");
+      expect(hookRecords(daemon.home, supervisor).filter((r) => r.event === "notification")).toHaveLength(1);
       await agents.stop(supervisor);
     } finally {
       rmSync(userConfig, { force: true });

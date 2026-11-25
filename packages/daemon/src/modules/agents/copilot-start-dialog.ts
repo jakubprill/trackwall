@@ -9,8 +9,10 @@ import type { StateSignal } from "./task-state-tracker.ts";
  * - Folder trust: Copilot CLI 1.0.103 asks before any hook, in a session and its resume alike, when the folder is not
  *   in `trustedFolders` of its `config.json` (the doctor's check, ADR-101): "Confirm folder trust", with the folder,
  *   "Do you trust the files in this folder?" and the options "Yes", "Yes, and remember this folder for future sessions"
- *   and "No (Esc)". The screen of the real binary is the fixture `test/fixtures/copilot/dialog-folder-trust-120.txt`;
- *   the contract tests check the reading on the pinned version.
+ *   and "No (Esc)". "No" ends Copilot CLI with exit code 1, up to 1.0.114 after a `sessionEnd` hook and since 1.0.115
+ *   without any hook, so the session counts as done by the key (`CopilotSessionState.exit`, ADR-300). The screen of
+ *   the real binary is the fixture `test/fixtures/copilot/dialog-folder-trust-120.txt`; the contract tests check the
+ *   reading on the pinned version.
  * - The sandbox's certificate authority (ADR-181): Copilot CLI 1.0.107 started with `--sandbox` on macOS (and on a
  *   Windows account that can elevate) offers to install the certificate authority of its credential proxy into the
  *   system's trust store, or an updated one when its credential hosts changed: "Install the proxy certificate authority?"
@@ -24,9 +26,12 @@ import type { StateSignal } from "./task-state-tracker.ts";
  * version sends none.
  */
 
+/** The folder trust dialog's heading; "No (Esc)" there ends Copilot CLI. */
+export const FOLDER_TRUST_DIALOG = "Confirm folder trust";
+
 /** Each dialog by its heading, with the reason of the state it gives. */
 const START_DIALOGS: ReadonlyMap<string, string> = new Map([
-  ["Confirm folder trust", "screen folder trust dialog"],
+  [FOLDER_TRUST_DIALOG, "screen folder trust dialog"],
   ["Install the proxy certificate authority?", "screen sandbox certificate authority dialog"],
   ["Update the proxy certificate authority?", "screen sandbox certificate authority dialog"],
 ]);
