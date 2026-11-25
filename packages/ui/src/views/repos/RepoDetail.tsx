@@ -1,5 +1,5 @@
 import { type Repo, type RepoOverview, type RunningMiseTask, type SessionList, workspaceApi } from "@trackwall/protocol";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, Trash2 } from "lucide-react";
 import { type ReactNode, Suspense, useCallback, useContext, useState } from "react";
 import { EditorButton } from "@/components/EditorButton";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
@@ -16,7 +16,8 @@ import { DaemonPlaceContext, IN_CONTAINER_NOTE, NO_DESKTOP_NOTE } from "@/lib/de
 import { TRUNCATED_NOTE } from "@/lib/format";
 import { showInHostFolder } from "@/lib/host-folder";
 import { FILE_MANAGER } from "@/lib/platform";
-import { type RepoActivityTarget, repoActivity } from "@/lib/repo-activity";
+import { type RepoActivityItem, type RepoActivityTarget, repoActivity } from "@/lib/repo-activity";
+import { removalBlockers } from "@/lib/repo-removal";
 import { REPO_TABS, type RepoTab } from "@/lib/repo-tabs";
 import type { SessionSelection } from "@/lib/session-entries";
 import { workInRepoFolder } from "@/lib/upstream-pull";
@@ -30,6 +31,7 @@ import { RepoChanges } from "./RepoChanges.tsx";
 import { RepoCommits } from "./RepoCommits.tsx";
 import { RepoFiles } from "./RepoFiles.tsx";
 import { RepoMiseTasks } from "./RepoMiseTasks.tsx";
+import { RepoRemoval } from "./RepoRemoval.tsx";
 import { RepoStats } from "./RepoStats.tsx";
 
 export function RepoDetail({
@@ -41,6 +43,7 @@ export function RepoDetail({
   sessions,
   runningLive,
   onOpenInSessions,
+  onRemoved,
 }: {
   conn: Connection;
   repo: Repo;
@@ -55,6 +58,8 @@ export function RepoDetail({
   /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   onOpenInSessions: (selection: SessionSelection) => void;
+  /** The repo's folder moved out of the projects folder (ADR-300), to `movedTo`. */
+  onRemoved: (movedTo: string) => void;
 }) {
   const [tab, setTab] = useState(initialTab);
   const running = useRunningMiseTasks(conn, runningLive).data ?? [];
@@ -71,15 +76,14 @@ export function RepoDetail({
 
   return (
     <div className="flex flex-col gap-4 p-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col gap-1">
-          <span className="hud-label">Repo</span>
-          <h1 className="text-xl font-semibold tracking-tight">{repo.id}</h1>
-          <p className="text-muted-foreground font-mono text-xs break-all">{repo.path}</p>
-          {repo.remote && <p className="text-muted-foreground font-mono text-xs break-all">{repo.remote}</p>}
-        </div>
-        <RepoActions conn={conn} repo={repo} projectsDir={projectsDir} />
-      </header>
+      <RepoHeader
+        conn={conn}
+        repo={repo}
+        projectsDir={projectsDir}
+        blockers={removalBlockers(repo.id, sessions, running)}
+        onOpen={openActivity}
+        onRemoved={onRemoved}
+      />
       {status.kind === "loading" && <Loading />}
       {status.kind === "unavailable" && (
         <p className="text-destructive text-sm whitespace-pre-wrap">The repo is unavailable: {status.message}</p>
@@ -123,6 +127,48 @@ export function RepoDetail({
   );
 }
 
+/** The repo's name, paths and actions, and under them the removal panel once "Remove…" opens it (ADR-300). */
+function RepoHeader({
+  conn,
+  repo,
+  projectsDir,
+  blockers,
+  onOpen,
+  onRemoved,
+}: {
+  conn: Connection;
+  repo: Repo;
+  projectsDir: string | null | undefined;
+  blockers: readonly RepoActivityItem[];
+  onOpen: (target: RepoActivityTarget) => void;
+  onRemoved: (movedTo: string) => void;
+}) {
+  const [removing, setRemoving] = useState(false);
+  return (
+    <>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="hud-label">Repo</span>
+          <h1 className="text-xl font-semibold tracking-tight">{repo.id}</h1>
+          <p className="text-muted-foreground font-mono text-xs break-all">{repo.path}</p>
+          {repo.remote && <p className="text-muted-foreground font-mono text-xs break-all">{repo.remote}</p>}
+        </div>
+        <RepoActions conn={conn} repo={repo} projectsDir={projectsDir} onRemove={() => setRemoving(true)} />
+      </header>
+      {removing && (
+        <RepoRemoval
+          conn={conn}
+          repo={repo}
+          blockers={blockers}
+          onOpen={onOpen}
+          onRemoved={onRemoved}
+          onCancel={() => setRemoving(false)}
+        />
+      )}
+    </>
+  );
+}
+
 function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; children: (data: RepoOverview) => ReactNode }) {
   if (remote.error) return <ErrorWithRetry message={remote.error} onRetry={remote.reload} />;
   if (!remote.data) return <Loading />;
@@ -133,8 +179,20 @@ function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; chil
  * Opens the repo in VS Code or in the system's folder app (ADR-51); the daemon does it, so it works in the browser too,
  * except when the daemon has no desktop (ADR-120). In a container the page opens VS Code in it (ADR-121), and the
  * desktop app shows the folder through the projects folder on this computer, when the user has set it (ADR-131).
+ * "Remove…" comes last and only opens the removal panel (ADR-300).
  */
-function RepoActions({ conn, repo, projectsDir }: { conn: Connection; repo: Repo; projectsDir: string | null | undefined }) {
+function RepoActions({
+  conn,
+  repo,
+  projectsDir,
+  onRemove,
+}: {
+  conn: Connection;
+  repo: Repo;
+  projectsDir: string | null | undefined;
+  /** Opens the removal panel (ADR-300); one click removes nothing. */
+  onRemove: () => void;
+}) {
   const [error, setError] = useState<string>();
   const { desktop, container } = useContext(DaemonPlaceContext);
   const hostFolder = useHostFolder(projectsDir, repo.path);
@@ -161,6 +219,9 @@ function RepoActions({ conn, repo, projectsDir }: { conn: Connection; repo: Repo
           onOpen={() => open(workspaceApi.openEditor)}
           disabled={repo.status.kind !== "ok"}
         />
+        <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={onRemove}>
+          <Trash2 /> Remove…
+        </Button>
       </div>
       {!showFolder && <p className="text-muted-foreground text-right text-xs">{container ? IN_CONTAINER_NOTE : NO_DESKTOP_NOTE}</p>}
       {error && <p className="text-destructive text-xs">{error}</p>}

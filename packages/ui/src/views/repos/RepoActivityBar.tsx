@@ -12,19 +12,23 @@ export function RepoActivityBar({ items, onOpen }: { items: readonly RepoActivit
       {items.length === 0 ? (
         <span className="text-muted-foreground text-xs">no sessions, tasks or running mise tasks</span>
       ) : (
-        items.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => onOpen(item.open)}
-            title={`${item.name}: ${item.status.label}`}
-            className="surface hover:border-primary flex max-w-96 min-w-0 items-center gap-2 px-2.5 py-1 text-xs"
-          >
-            <span className="min-w-0 truncate">{item.name}</span>
-            <StatusLabel {...item.status} />
-          </button>
-        ))
+        items.map((item) => <RepoActivityButton key={item.key} item={item} onOpen={onOpen} />)
       )}
     </section>
+  );
+}
+
+/** One item of the repo's work, a button to where it is; also in the removal panel's list of work to end first. */
+export function RepoActivityButton({ item, onOpen }: { item: RepoActivityItem; onOpen: (target: RepoActivityTarget) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(item.open)}
+      title={`${item.name}: ${item.status.label}`}
+      className="surface hover:border-primary flex max-w-96 min-w-0 items-center gap-2 px-2.5 py-1 text-xs"
+    >
+      <span className="min-w-0 truncate">{item.name}</span>
+      <StatusLabel {...item.status} />
+    </button>
   );
 }

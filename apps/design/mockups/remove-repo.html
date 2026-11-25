@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Remove a repo</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: stacked frames of a repo in the Repos view, each a scaled-down app window, with the removal panel under the header. */
+:root {
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --muted-fg: var(--muted-foreground);
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+  --danger-bg: color-mix(in oklch, var(--destructive) 10%, transparent);
+  --danger-line: color-mix(in oklch, var(--destructive) 40%, transparent);
+  --warning-bg: color-mix(in oklch, var(--warning) 10%, transparent);
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); margin: 0; }
+main { max-width: 1140px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0; }
+p { margin: 0; line-height: 1.5; max-width: 75ch; color: var(--muted-fg); }
+.intro, .frame-block { display: flex; flex-direction: column; gap: 10px; }
+.frame-wrap { overflow-x: auto; }
+.window { width: 1100px; height: 640px; border: 1px solid var(--border); border-radius: 6px; display: flex; background: var(--bg); overflow: hidden; font-size: 13px; }
+.rail { width: 44px; border-right: 1px solid var(--border); }
+.list { width: 220px; border-right: 1px solid var(--border); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.hud { font-family: var(--mono); font-size: 10px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-fg); }
+.row { padding: 6px 8px; border-radius: 4px; display: flex; flex-direction: column; gap: 2px; }
+.row.sel { outline: 1px solid var(--primary); background: var(--accent); }
+.row small { font-family: var(--mono); font-size: 11px; color: var(--muted-fg); }
+.detail { flex: 1; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.head .who { display: flex; flex-direction: column; gap: 4px; }
+.head .name { font-size: 19px; font-weight: 600; }
+.mono { font-family: var(--mono); font-size: 11px; color: var(--muted-fg); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 460px; }
+.btn { border: 1px solid var(--border); border-radius: var(--radius); padding: 5px 11px; color: var(--fg); background: transparent; font: inherit; white-space: nowrap; }
+.btn.danger { color: var(--destructive); border-color: var(--danger-line); }
+.btn.solid-danger { background: var(--destructive); color: var(--primary-foreground); border-color: transparent; }
+.btn.off { opacity: 0.45; }
+.btn.hl { outline: 2px dashed var(--warning); outline-offset: 3px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tile { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
+.tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--border); padding-bottom: 6px; color: var(--muted-fg); }
+.tabs .on { color: var(--fg); border-bottom: 2px solid var(--primary); padding-bottom: 4px; }
+.panel { border: 1px solid var(--danger-line); background: var(--danger-bg); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.panel b { font-weight: 600; }
+.panel ul { margin: 0; padding-left: 18px; line-height: 1.6; }
+.panel .muted { color: var(--muted-fg); }
+.field { display: flex; gap: 8px; align-items: center; }
+.input { flex: 1; max-width: 340px; border: 1px solid var(--input); border-radius: var(--radius); padding: 5px 9px; font-family: var(--mono); font-size: 12px; background: var(--bg); }
+.input.empty { color: var(--muted-fg); }
+.blocker { border: 1px solid color-mix(in oklch, var(--warning) 35%, transparent); background: var(--warning-bg); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.blocker li { color: var(--fg); }
+.link { color: var(--primary); }
+.check { display: flex; gap: 8px; align-items: flex-start; }
+.box { width: 14px; height: 14px; border: 1px solid var(--input); border-radius: 3px; margin-top: 2px; flex: none; display: grid; place-items: center; font-size: 11px; }
+.box.on { background: var(--destructive); border-color: transparent; color: var(--primary-foreground); }
+.ghost { opacity: 0.35; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 3px 9px; font-size: 12px; display: inline-flex; gap: 8px; }
+</style>
+<main>
+  <div class="intro">
+    <h1>Remove a repo</h1>
+    <p>A repo added to Trackwall (cloned or found in the projects folder) can be removed from the repo's own header, not only through the supervisor. Removing moves the folder out of the projects folder into <code>.trackwall/removed</code>, as the supervisor's removal does; nothing is deleted. The user confirms by typing the repo's name, and the removal waits while anything of Trackwall works in the repo.</p>
+  </div>
+
+  <section class="frame-block">
+    <h2>1. The header gets “Remove…”</h2>
+    <p>The button sits last in the header, in the destructive colour, and only opens the panel below; nothing happens on one click.</p>
+    <div class="frame-wrap"><div class="window">
+      <div class="rail"></div>
+      <div class="list">
+        <span class="hud">Repos // 20</span>
+        <div class="row"><span>notifications</span><small>main · clean</small></div>
+        <div class="row sel"><span>orders-api</span><small>main · 1 changed</small></div>
+        <div class="row"><span>payments</span><small>main · 2 to pull</small></div>
+      </div>
+      <div class="detail">
+        <div class="head">
+          <div class="who"><span class="hud">Repo</span><span class="name">orders-api</span><span class="mono">~/Projects/orders-api</span><span class="mono">git.example.com/shop/orders-api</span></div>
+          <div class="actions"><span class="btn">Show in the file manager</span><span class="btn">Open in VS Code</span><span class="btn danger hl">Remove…</span></div>
+        </div>
+        <div class="tiles">
+          <div class="tile"><span class="hud">Branch</span><span class="mono">main</span></div>
+          <div class="tile"><span class="hud">Upstream</span><span class="mono">↑0 ↓0 origin/main</span></div>
+          <div class="tile"><span class="hud">Working tree</span><span>1 changed, 1 new</span></div>
+          <div class="tile"><span class="hud">Latest commit</span><span>Start orders-api</span></div>
+        </div>
+        <div class="tabs"><span class="on">Card</span><span>Files</span><span>Commits</span><span>Changes</span><span>mise tasks</span><span>Shell</span><span>README</span></div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="frame-block">
+    <h2>2. Nothing runs in the repo: type its name to remove it</h2>
+    <p>The panel says where the folder goes and that nothing is deleted, names what the repo still holds that is not on the server, and enables “Remove repo” only when the typed text equals the repo's name.</p>
+    <div class="frame-wrap"><div class="window">
+      <div class="rail"></div>
+      <div class="list">
+        <span class="hud">Repos // 20</span>
+        <div class="row"><span>notifications</span><small>main · clean</small></div>
+        <div class="row sel"><span>orders-api</span><small>main · 1 changed</small></div>
+        <div class="row"><span>payments</span><small>main · 2 to pull</small></div>
+      </div>
+      <div class="detail">
+        <div class="head">
+          <div class="who"><span class="hud">Repo</span><span class="name">orders-api</span><span class="mono">~/Projects/orders-api</span></div>
+          <div class="actions"><span class="btn">Show in the file manager</span><span class="btn">Open in VS Code</span><span class="btn danger">Remove…</span></div>
+        </div>
+        <div class="panel">
+          <b>Remove orders-api from Trackwall?</b>
+          <span>The folder moves into <span class="mono">.trackwall/removed</span> in the projects folder and leaves every list of Trackwall. Nothing is deleted: move the folder back to bring the repo back.</span>
+          <span class="muted">It takes along what is not on the server: 1 changed file, 1 new file, 2 commits not pushed.</span>
+          <span>To confirm, type <b class="mono" style="color:var(--fg)">orders-api</b></span>
+          <div class="field"><span class="input">orders-api</span><span class="btn solid-danger">Remove repo</span><span class="btn">Cancel</span></div>
+        </div>
+        <div class="tiles ghost">
+          <div class="tile"><span class="hud">Branch</span><span class="mono">main</span></div>
+          <div class="tile"><span class="hud">Upstream</span><span class="mono">↑2 ↓0 origin/main</span></div>
+          <div class="tile"><span class="hud">Working tree</span><span>1 changed, 1 new</span></div>
+          <div class="tile"><span class="hud">Latest commit</span><span>Start orders-api</span></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="frame-block">
+    <h2>3. Something still works in the repo: the removal waits</h2>
+    <p>A session in the repo, an agent task (its worktree and branch belong to the repo) or a running mise task blocks it, as for the supervisor's removal; a service or terminal the daemon names when the user presses the button. The panel lists each as in “In this repo”, a button to where it is; the field and the button stay off until the list is empty. Trackwall never ends a task for the user here: a task's branch may hold work not pushed anywhere.</p>
+    <div class="frame-wrap"><div class="window">
+      <div class="rail"></div>
+      <div class="list">
+        <span class="hud">Repos // 20</span>
+        <div class="row"><span>notifications</span><small>main · clean</small></div>
+        <div class="row sel"><span>orders-api</span><small>main · 1 changed</small></div>
+        <div class="row"><span>payments</span><small>main · 2 to pull</small></div>
+      </div>
+      <div class="detail">
+        <div class="head">
+          <div class="who"><span class="hud">Repo</span><span class="name">orders-api</span><span class="mono">~/Projects/orders-api</span></div>
+          <div class="actions"><span class="btn">Show in the file manager</span><span class="btn">Open in VS Code</span><span class="btn danger">Remove…</span></div>
+        </div>
+        <div class="panel">
+          <b>Remove orders-api from Trackwall?</b>
+          <span>The folder moves into <span class="mono">.trackwall/removed</span> in the projects folder. Nothing is deleted.</span>
+          <div class="blocker">
+            <b style="color:var(--warning)">First end what works in this repo</b>
+            <div class="chips"><span class="chip">Retry a failed payment <span style="color:var(--warning)">● Needs you: approval</span></span><span class="chip">dev <span style="color:var(--success)">● running</span></span></div>
+            <span class="muted" style="font-size:12px">A task's branch may hold work not pushed anywhere, so end it in Sessions yourself.</span>
+          </div>
+          <span class="muted">To confirm, type <b class="mono">orders-api</b></span>
+          <div class="field"><span class="input empty off">orders-api</span><span class="btn solid-danger off">Remove repo</span><span class="btn">Cancel</span></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="frame-block">
+    <h2>4. Variant not recommended: also delete from disk</h2>
+    <p>A box that deletes the folder for good instead of moving it. It loses unpushed commits, stashes and files outside git, and on Windows a file held open can leave half a folder behind. Recommended: leave deleting to the user, who sees the removed folder in the file manager.</p>
+    <div class="frame-wrap"><div class="window">
+      <div class="rail"></div>
+      <div class="list">
+        <span class="hud">Repos // 20</span>
+        <div class="row sel"><span>orders-api</span><small>main · 1 changed</small></div>
+      </div>
+      <div class="detail">
+        <div class="head">
+          <div class="who"><span class="hud">Repo</span><span class="name">orders-api</span><span class="mono">~/Projects/orders-api</span></div>
+          <div class="actions"><span class="btn danger">Remove…</span></div>
+        </div>
+        <div class="panel">
+          <b>Remove orders-api from Trackwall?</b>
+          <div class="check"><span class="box on">✓</span><span><b>Also delete the folder from disk.</b> <span class="muted">This cannot be undone: 2 commits not pushed, 1 changed and 1 new file are lost.</span></span></div>
+          <span>To confirm, type <b class="mono">orders-api</b></span>
+          <div class="field"><span class="input">orders-api</span><span class="btn solid-danger">Delete for good</span><span class="btn">Cancel</span></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+</main>
+</body>
+</html>

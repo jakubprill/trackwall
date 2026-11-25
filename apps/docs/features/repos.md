@@ -13,7 +13,7 @@ Browse, clone and sync every git repo in your projects folder from one list.
 ## What you get
 
 - "All repos": the repos that need a look in one table, each with what runs in it and its next step, and the clean ones folded into one line; every 15 minutes it learns of new commits on your repos' servers, without fetching them.
-- Every repo of your projects folder in one list, with its branch, its uncommitted changes and the commits it has to pull, and the repos you starred at the top.
+- Every repo of your projects folder in one list, with its branch, its uncommitted changes and the commits it has to pull, the repos you starred at the top, and "Remove…" to take one off the list, after you type its name, without deleting anything.
 - "Sync all": every repo fetched, and every default branch moved forward where that is safe; "Pull" does the same for the branch you have checked out.
 - The card, files, commits, uncommitted changes (file by file, with the diff) and README of each repo, and what is going on in it, without leaving Trackwall, and VS Code one click away.
 - A search across your GitLab and GitHub hosts that clones the repo you pick in one click.
@@ -44,6 +44,8 @@ When changed files are in the way, the tile also offers "Put aside and pull…".
 
 The "+" button above the list searches the GitLab and GitHub hosts you added in "Settings > Repo hosts" and clones the repo you pick into the projects folder. The search matches the repo's name, group and description. On GitLab, "My projects" covers the projects you are a member of, also through a group, and "All I can see" adds every project you can open, such as other teams' internal ones. You can narrow the list to one topic, one language (`Java`, `TypeScript`) or the repos you starred on the host, and each repo shows its topics. GitLab gives the results 100 at a time, most recently changed first; "Show more" adds the next 100. While you type, the results you see stay in place, dimmed, until the new ones arrive. If the [local config backup](/features/local-config) has files for that repo, such as `mise.local.toml`, they are put back before the clone shows as done.
 
+To take a repo off the list, open it and press "Remove…" in its header. Nothing happens yet: a panel says where the folder goes and what it takes along that is not on the server, such as changed files or commits you have not pushed. Type the repo's name exactly, as on GitHub, and press "Remove repo". The folder moves into `.trackwall/removed` in your projects folder, the repo leaves every list of Trackwall, and "Repos" says where the folder went. Nothing is deleted: move the folder back into the projects folder and the repo is back, with its files, branches and stashes; delete it from `.trackwall/removed` yourself when you are sure. While a session runs in the repo, it has a task, or a mise task, service or terminal runs in it, the panel lists that work with a button to each, and the removal waits until you have ended it. Trackwall never ends a task for you here, because its branch may hold work you have not pushed.
+
 ## Use it
 
 1. Open "Settings" and choose your projects folder with "Choose…", or drop the folder onto the Trackwall window. When your home folder has a `Dev`, `Projects`, `Code` or `source\repos` folder, Settings offers it with "Use this folder".
@@ -52,6 +54,7 @@ The "+" button above the list searches the GitLab and GitHub hosts you added in 
 4. In a row with commits to pull, or new on the server, press "Pull"; in any other row, press its next step.
 5. Select a repo in the list to open it, and star the repos you open most, so they stay at the top.
 6. To clone, press "+", search for the repo (or pick a topic or language) and press "Clone" next to it.
+7. To remove a repo, open it, press "Remove…", type its name and press "Remove repo".
 
 ## Good to know
 
@@ -64,6 +67,7 @@ The "+" button above the list searches the GitLab and GitHub hosts you added in 
 - A commit, checkout, pull or new branch, made in Trackwall or anywhere else, shows in the list within a couple of seconds, and so does a repo cloned into the folder. The count of uncommitted files refreshes about every 30 seconds.
 - Dropping a folder on the window: a listed repo opens in "Repos"; a folder full of repos, or a repo from somewhere else, is offered as the new projects folder.
 - "Show in Explorer" ("Show in Finder" on macOS) in the repo header opens the repo folder.
+- On Windows, a repo whose folder another program holds open, such as an editor, a terminal or a build, cannot be moved; close that program and press "Remove repo" again. A repo removed under a name already in `.trackwall/removed` gets a numbered folder, such as `orders-api-2`. You can also ask the [supervisor](/features/supervisor) to remove a repo, which you then approve.
 - In a README, links to websites open in your browser; links to files in the repo and images show only as text. A `.txt`, `.rst` or `.adoc` README stays plain text.
 - The projects folder, the hosts and the check for new commits are saved in `~/.trackwall/workspace.yaml` (`projectsDir`, `repoHosts` and `serverCheck`), where you can also edit them by hand.
 - If starting git is slow on your machine (security software checks every program start), you can point "Git program" in "Settings > Workspace" at another git, for example [MinGit](https://github.com/git-for-windows/git/releases) unpacked into a folder your antivirus skips. Trackwall then reads your repos with that git right away; fetch, push and clone keep using git from `PATH`. Clear the field to go back. A path typed into `workspace.yaml` by hand (`gitProgram`) is used once you open Settings or restart Trackwall.

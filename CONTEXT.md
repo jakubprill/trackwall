@@ -551,8 +551,8 @@ _Avoid_: order, request, application
 A change to the projects folder itself that no task can make, because a task works inside one repo's worktree. A session proposes it from a closed list, it waits for the user like a task proposal, and the daemon carries it out on approval (ADR-83). Today the only one is a repo removal.
 _Avoid_: command, operation
 
-**Repo removal** (`TaskProposal.kind: "remove_repo"`, the `approve-repo-removal` action, `TrackwallFolder` `removed`):
-The folder action that takes a repo out of the projects folder: "Remove repo" moves its folder into `.trackwall/removed` in the projects folder, where the user can move it back or delete it, once no session, task or process runs in it (ADR-83).
+**Repo removal** (`TaskProposal.kind: "remove_repo"`, the `approve-repo-removal` and `remove-repo` actions, `TrackwallFolder` `removed`):
+The folder action that takes a repo out of the projects folder: "Remove repo" moves its folder into `.trackwall/removed` in the projects folder, where the user can move it back or delete it, once no session, task or process runs in it (ADR-83). A session proposes it, or the user starts it with "Remove…" in the repo's header and confirms it by typing the repo's name (ADR-300).
 _Avoid_: delete repo, archive
 
 **Rejection reason** (`reason` of `reject-proposal`, `rejectionReason` of `wait_for_session`):

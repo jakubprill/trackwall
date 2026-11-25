@@ -18,6 +18,9 @@ export interface RepoActivityItem {
   open: RepoActivityTarget;
 }
 
+/** The start of a proposal's key, so a caller can tell proposals from the work in the repo. */
+export const PROPOSAL_ITEM_KEY = "proposal:";
+
 export type RepoActivityTarget = { view: "sessions"; selection: NonNullable<SessionSelection> } | { view: "mise" };
 
 /**
@@ -47,7 +50,7 @@ function proposals(repo: string, list: SessionList): RepoActivityItem[] {
   return list.proposals
     .filter((p) => proposalRepos(p).includes(repo))
     .map((p) => ({
-      key: `proposal:${p.id}`,
+      key: `${PROPOSAL_ITEM_KEY}${p.id}`,
       name: p.title,
       status: PROPOSAL_STATUS,
       open: { view: "sessions", selection: { kind: "proposal", id: p.id } },
