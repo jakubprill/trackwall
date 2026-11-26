@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { parseXml } from "../src/infra/xml.ts";
 import { parseJunitReport } from "../src/modules/test-results/junit-report.ts";
-import { trimStack } from "../src/modules/test-results/test-reports.ts";
+import { trimStack } from "../src/modules/test-results/report-failure.ts";
 
 describe("a JUnit XML report", () => {
   test("a Surefire report gives counts from its test cases and each failure with its type, message and stack", () => {

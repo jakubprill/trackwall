@@ -504,19 +504,21 @@ describe("the tabs of a task's panel (ADR-137)", () => {
       "Terminal",
       "Shell",
       "Changes",
+      "Tests",
       "Rounds",
       "Impact",
       "MCP calls",
     ]);
     expect(taskTabs({ view: "conversation" }, false)[0]).toEqual({ id: "session", label: "Chat" });
-    expect(taskTabs(undefined, false).map((t) => t.label)).toEqual(["Shell", "Changes", "Rounds", "Impact", "MCP calls"]);
+    expect(taskTabs(undefined, false).map((t) => t.label)).toEqual(["Shell", "Changes", "Tests", "Rounds", "Impact", "MCP calls"]);
   });
 
-  test("a task with another attempt at it listed gets a Compare tab after its changes (ADR-252)", () => {
+  test("a task with another attempt at it listed gets a Compare tab after its changes and tests (ADR-252)", () => {
     expect(taskTabs({ view: "terminal" }, true).map((t) => t.label)).toEqual([
       "Terminal",
       "Shell",
       "Changes",
+      "Tests",
       "Compare",
       "Rounds",
       "Impact",

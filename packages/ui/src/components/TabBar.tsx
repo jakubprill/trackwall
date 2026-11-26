@@ -17,7 +17,8 @@ export function TabBar<Id extends string>({
   active,
   onSelect,
 }: {
-  tabs: readonly { id: Id; label: string }[];
+  /** `count` is a red number after the label, for what waits in the tab (the failed tests of a task, ADR-304); none at 0. */
+  tabs: readonly { id: Id; label: string; count?: number }[];
   active: Id;
   onSelect: (id: Id) => void;
 }) {
@@ -40,6 +41,7 @@ export function TabBar<Id extends string>({
           role="tab"
           aria-selected={active === t.id}
           onClick={() => onSelect(t.id)}
+          aria-label={t.count ? `${t.label} (${t.count})` : undefined}
           className={cn(
             "-mb-px border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors",
             active === t.id
@@ -48,6 +50,11 @@ export function TabBar<Id extends string>({
           )}
         >
           {t.label}
+          {t.count !== undefined && t.count > 0 && (
+            <span aria-hidden className="bg-destructive text-foreground ml-1.5 rounded-full px-1.5 font-mono text-xs font-medium">
+              {t.count}
+            </span>
+          )}
         </button>
       ))}
     </div>

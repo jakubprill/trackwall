@@ -38,6 +38,12 @@ export interface WhatsNewEntry {
  */
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
+    id: "tests-tab",
+    title: "A Tests tab in every task",
+    text: "The Tests tab of a task lists the tests that failed in its worktree's test reports, without pages and without the passed ones, each with its stack trace and Fix this; All shows the rest.",
+    show: { place: { kind: "view", view: "sessions" } },
+  },
+  {
     id: "remove-a-repo",
     title: "Remove a repo",
     text: "Remove… in a repo's header takes the repo off the list once you type its name: its folder moves into .trackwall/removed, and nothing is deleted.",
@@ -60,12 +66,6 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     title: "Accept changed git hooks",
     text: "When a package install in a sandboxed task changes the repo's git hooks, the error names them, and End task shows them with Accept these settings, so the task can end.",
     show: { place: { kind: "view", view: "sessions" } },
-  },
-  {
-    id: "plan-and-knowledge-in-the-store",
-    title: "Plan and knowledge in the workspace store",
-    text: "Turn on Keep Plan and knowledge in the store, and the approved knowledge, routines, board and your task templates get a history in git and go with the store's pushes.",
-    show: { place: { kind: "settings", category: "workspace" } },
   },
   {
     id: "tips",

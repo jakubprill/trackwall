@@ -14,7 +14,7 @@ const ids = (entries: ReturnType<typeof whatsNewEntries>) => entries?.map((entry
 describe("What's new (ADR-296)", () => {
   test("after an update, a computer that never dismissed it lists every entry, newest first", () => {
     expect(ids(whatsNewEntries(null, false))).toEqual(WHATS_NEW.map((entry) => entry.id));
-    expect(ids(whatsNewEntries(null, false))?.[0]).toBe("remove-a-repo");
+    expect(ids(whatsNewEntries(null, false))?.[0]).toBe("tests-tab");
   });
 
   test("a computer that dismissed What's new lists only the entries a later update added", () => {

@@ -89,6 +89,7 @@ describe("the reproduction test's target in the reports (ADR-227)", () => {
         kind: "passed",
         type: null,
         message: null,
+        timeSeconds: null,
       },
       {
         suite: "com.example.shop.OrderServiceTest",
@@ -97,6 +98,7 @@ describe("the reproduction test's target in the reports (ADR-227)", () => {
         kind: "skipped",
         type: null,
         message: null,
+        timeSeconds: null,
       },
       {
         suite: "com.example.shop.OrderServiceTest",
@@ -105,6 +107,7 @@ describe("the reproduction test's target in the reports (ADR-227)", () => {
         kind: "error",
         type: "java.lang.NullPointerException",
         message: "order",
+        timeSeconds: null,
       },
     ]);
   });

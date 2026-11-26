@@ -9,19 +9,14 @@ import { deliveryMessage } from "./review-drafts.ts";
 import { useAction } from "./use-action.ts";
 
 /**
- * The actions on the failed tests of a task's verification (ADR-302): "Fix" hands one or all of them to the task's agent,
- * and a frame of a test's stack trace opens its file in VS Code at its line, where the daemon runs it, or in its container
- * through this page (ADR-121).
+ * The actions on the failed tests of a task (ADR-302, ADR-304): "Fix" hands one or all of them to the task's agent,
+ * and a frame of a test's stack trace opens its file in VS Code at its line, where the daemon runs it, or in its
+ * container through this page (ADR-121).
  */
-export function useFailedTests(conn: Connection, verification: Verification) {
+
+/** Opening a frame of a failed test's trace in the task's worktree. */
+export function useTraceFrames(conn: Connection, task: string) {
   const place = useContext(DaemonPlaceContext);
-  const { task, runId } = verification;
-  // A note about the run it was sent for: the next verification has not been sent.
-  const [sent, setSent] = useState<{ runId: string; text: string }>();
-  const fix = useAction(
-    (failure: number | null) => post(conn, verificationApi.fixTests, { task, runId, failure }),
-    ({ delivery }) => setSent({ runId, text: deliveryMessage(delivery, "the failed tests") }),
-  );
   const openFrame = useAction(
     async (frame: string) => {
       const file = await post(conn, agentsApi.taskFrameFile, { task, frame, open: place.desktop });
@@ -35,14 +30,32 @@ export function useFailedTests(conn: Connection, verification: Verification) {
     () => {},
   );
   return {
-    fix: fix.run,
-    fixing: fix.pending,
-    sent: sent?.runId === runId ? sent.text : undefined,
     openFrame: openFrame.run,
     opening: openFrame.pending,
     /** VS Code opens somewhere: on the daemon's desktop, or in its container through this page. */
     canOpen: opensEditor(place),
-    error: fix.error ?? openFrame.error,
+    error: openFrame.error,
+  };
+}
+
+export type TraceFrames = ReturnType<typeof useTraceFrames>;
+
+/** The failed tests of a task's verification: "Fix" sends one by its index in the verification, or all of them. */
+export function useFailedTests(conn: Connection, verification: Verification) {
+  const { task, runId } = verification;
+  const frames = useTraceFrames(conn, task);
+  // A note about the run it was sent for: the next verification has not been sent.
+  const [sent, setSent] = useState<{ runId: string; text: string }>();
+  const fix = useAction(
+    (failure: number | null) => post(conn, verificationApi.fixTests, { task, runId, failure }),
+    ({ delivery }) => setSent({ runId, text: deliveryMessage(delivery, "the failed tests") }),
+  );
+  return {
+    ...frames,
+    fix: fix.run,
+    fixing: fix.pending,
+    sent: sent?.runId === runId ? sent.text : undefined,
+    error: fix.error ?? frames.error,
   };
 }
 

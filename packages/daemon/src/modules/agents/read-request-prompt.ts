@@ -10,7 +10,7 @@ import { MCP_SERVER_NAME, mcpTools } from "@trackwall/protocol";
 const SERVER = `(the ${MCP_SERVER_NAME} MCP server)`;
 const REVIEW = `The user sent a review of your changes in Trackwall: call ${mcpTools.getReviewComments.name} ${SERVER} and address every comment.`;
 const PIPELINE_FIX = `The user asks you to fix the failed pipeline of your merge request: call ${mcpTools.getReviewComments.name} ${SERVER} for the end of the failed jobs' logs.`;
-const TEST_FIX = `The user asks you to fix tests that failed in your task's last verification: call ${mcpTools.getReviewComments.name} ${SERVER} for the failed tests.`;
+const TEST_FIX = `The user asks you to fix tests that failed in your task's worktree: call ${mcpTools.getReviewComments.name} ${SERVER} for the failed tests.`;
 const MERGE_REQUEST_THREADS = `The user hands you unresolved comments from the reviewers of your merge request: call ${mcpTools.getReviewComments.name} ${SERVER} and address every thread.`;
 const MESSAGES = `The session that proposed your task, or the supervisor the user handed it to, sent you a message in Trackwall: call ${mcpTools.getMessages.name} ${SERVER} and follow it as an update of your task.`;
 const HANDOFF = `The task that handed you your work has new commits in Trackwall: call ${mcpTools.getHandoff.name} ${SERVER} and check whether they change what you build on.`;
