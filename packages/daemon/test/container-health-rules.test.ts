@@ -63,8 +63,19 @@ describe("the control group's files", () => {
 
   test("the container starts when its first process did, after the boot time", () => {
     const procOne = "1 (my (odd) init) S 0 1 1 0 -1 4194560 2315 499 0 2 3 35 0 0 20 0 14 0 12345 37687296 1359";
-    expect(containerStart(procOne, "cpu 1 2 3\nbtime 1795028514\nprocesses 9\n")).toEqual(new Date((1795028514 + 123.45) * 1000));
-    expect(containerStart(procOne, "cpu 1 2 3\n")).toBeNull();
+    const later = new Date("2030-01-01T00:00:00Z");
+    expect(containerStart(procOne, "cpu 1 2 3\nbtime 1795028514\nprocesses 9\n", later)).toEqual(new Date((1795028514 + 123.45) * 1000));
+    expect(containerStart(procOne, "cpu 1 2 3\n", later)).toBeNull();
+  });
+
+  test("after the host slept, the container's start is no later than the daemon's, though the boot time moved by the night", () => {
+    // Rancher Desktop with WSL (#589): the container and the daemon started at 06:23 and 06:24, the laptop slept about
+    // 15 hours, and on waking `btime` reads 14 h 51 min later, so process 1 seems to have started at 21:15.
+    const containerStarted = Date.parse("2026-11-24T06:23:00Z") / 1000;
+    const daemonStartedAt = new Date("2026-11-24T06:24:00Z");
+    const procOne = "1 (sh) S 0 1 1 0 -1 4194560 2315 499 0 2 3 35 0 0 20 0 1 0 5000 37687296 1359";
+    const bootAfterTheNight = containerStarted - 50 + (14 * 60 + 51) * 60;
+    expect(containerStart(procOne, `btime ${bootAfterTheNight}\n`, daemonStartedAt)).toEqual(daemonStartedAt);
   });
 });
 

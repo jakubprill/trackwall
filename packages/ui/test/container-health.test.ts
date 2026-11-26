@@ -29,7 +29,7 @@ describe("the container's health panel", () => {
     expect(healthTiles(HEALTH)).toEqual([
       { label: "Memory", value: "3.0 GB of 4.0 GB", share: 0.75, note: "limit of the container, 3.5 GB at most today" },
       { label: "Processors", value: "25% of 2 processors", share: 0.25, note: "limit of the container; held back in 10% of the time" },
-      { label: "Processes", value: "57 of 4096", share: 57 / 4096, note: "limit of the container" },
+      { label: "Processes", value: "57 of 4096", share: 57 / 4096, note: "threads included; limit of the container" },
       { label: "Disk", value: "40.0 GB free", share: 0.6, note: "of 100.0 GB, shared with Docker's other containers and images" },
     ]);
   });
@@ -41,6 +41,11 @@ describe("the container's health panel", () => {
       { label: "Processors", value: "measuring…", share: null, note: "no limit; the machine has 8 processors" },
       { label: "Processes", value: "not available here", share: null, note: "" },
     ]);
+  });
+
+  test("the processes tile says that its count holds threads too, as the container's limit counts them (#589)", () => {
+    const unlimited = { ...HEALTH, processes: { used: 757, limit: null } };
+    expect(healthTiles(unlimited)[2]).toEqual({ label: "Processes", value: "757", share: null, note: "threads included; no limit" });
   });
 
   test("the day's kills and restarts are listed newest first", () => {

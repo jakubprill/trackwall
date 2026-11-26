@@ -49,14 +49,17 @@ function cpuTile({ cpu, machine }: ContainerHealth): HealthTile {
   return { label: "Processors", value, share: cpu.used, note };
 }
 
+/** The control group counts every thread as a process (`pids.current`), as its limit does, so the note says so. */
 function processesTile({ processes }: ContainerHealth): HealthTile {
   if (processes === null) return { label: "Processes", value: NOT_HERE, share: null, note: "" };
-  if (processes.limit === null) return { label: "Processes", value: String(processes.used), share: null, note: "no limit" };
+  if (processes.limit === null) {
+    return { label: "Processes", value: String(processes.used), share: null, note: "threads included; no limit" };
+  }
   return {
     label: "Processes",
     value: `${processes.used} of ${processes.limit}`,
     share: processes.used / processes.limit,
-    note: "limit of the container",
+    note: "threads included; limit of the container",
   };
 }
 

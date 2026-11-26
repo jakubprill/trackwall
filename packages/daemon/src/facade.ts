@@ -684,13 +684,14 @@ export function createFacade(o: FacadeOptions): Facade {
     now: () => new Date(),
     log: o.log,
   });
+  const daemonStartedAt = new Date();
   const containerHealth = new ContainerHealth({
     inContainer: o.inContainer,
     stateDir: o.home,
     controlGroupRoot: o.controlGroupRoot ?? CONTROL_GROUP_ROOT,
     machine: () => ({ memoryBytes: totalmem(), processors: availableParallelism() }),
-    daemonStartedAt: new Date(),
-    containerStartedAt: () => readContainerStart(),
+    daemonStartedAt,
+    containerStartedAt: () => readContainerStart(daemonStartedAt),
     restarts: (since) => readRestarts(o.home, since),
     diskSpace: async () => {
       const folder = await workspace.projectsDir().catch(() => null);
