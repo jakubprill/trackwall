@@ -47,4 +47,6 @@ Agents read the same state with the `get_container_health` tool of the [MCP serv
 - Only in a dev container. On your own computer the panel says there is nothing to show.
 - Memory, processors and processes need cgroup v2, which current Docker, Rancher Desktop and Colima use. Without it the panel shows only the disk and the daemon's restarts.
 - The disk is the disk of Docker's virtual machine, shared with other containers and images; `docker system prune` frees space on it.
+- The processes tile counts threads too, because the container's limit on processes counts them, so it reads far more than `ps` lists.
+- After your computer sleeps, the time the container started can read later than it was: Docker's virtual machine on Windows or macOS does not count the time asleep. It never reads later than Trackwall's own start.
 - The readings stay in the container, in `container-health` of Trackwall's state folder, a day at a time.
