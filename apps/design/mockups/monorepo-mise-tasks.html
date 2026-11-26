@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>mise tasks of packages</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+/* Layout: frames of the "mise tasks" tab of a repo in the Repos view, before and after package configs are read. */
+:root {
+  --bg: var(--background);
+  --fg: var(--foreground);
+  --muted-fg: var(--muted-foreground);
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+  --warning-bg: color-mix(in oklch, var(--warning) 10%, transparent);
+  --warning-line: color-mix(in oklch, var(--warning) 40%, transparent);
+  --new-line: color-mix(in oklch, var(--primary) 55%, transparent);
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); padding-block: 24px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); margin: 0; }
+main { max-width: 1140px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+h1 { font-size: 22px; margin: 0; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0; }
+p { margin: 0; line-height: 1.5; max-width: 75ch; color: var(--muted-fg); }
+.intro, .frame-block { display: flex; flex-direction: column; gap: 10px; }
+.frame-wrap { overflow-x: auto; }
+.window { width: 1100px; border: 1px solid var(--border); border-radius: 6px; display: flex; background: var(--bg); overflow: hidden; font-size: 13px; }
+.rail { width: 44px; border-right: 1px solid var(--border); }
+.list { width: 220px; border-right: 1px solid var(--border); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.hud { font-family: var(--mono); font-size: 10px; letter-spacing: var(--tracking-hud); text-transform: uppercase; color: var(--muted-fg); }
+.row { padding: 6px 8px; border-radius: 4px; display: flex; flex-direction: column; gap: 2px; }
+.row.sel { outline: 1px solid var(--primary); background: var(--accent); }
+.row small { font-family: var(--mono); font-size: 11px; color: var(--muted-fg); }
+.detail { flex: 1; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.name { font-size: 19px; font-weight: 600; }
+.mono { font-family: var(--mono); font-size: 11px; color: var(--muted-fg); }
+.tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--border); padding-bottom: 6px; color: var(--muted-fg); }
+.tabs .on { color: var(--fg); border-bottom: 2px solid var(--primary); padding-bottom: 4px; }
+.surface { border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.surface.new { outline: 2px dashed var(--new-line); outline-offset: 3px; }
+.surface-head { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 12px; border-bottom: 1px solid var(--border); gap: 12px; }
+.surface-head .path { font-family: var(--mono); font-size: 12px; color: var(--fg); }
+ul { list-style: none; margin: 0; padding: 0; }
+li { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--border); }
+li:first-child { border-top: none; }
+.task { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.task code { color: var(--primary); font-family: var(--mono); font-size: 12px; }
+.task span { color: var(--muted-fg); font-size: 12px; }
+.badge { font-size: 11px; border-radius: 999px; padding: 1px 8px; background: var(--secondary); color: var(--secondary-foreground); margin-left: 8px; }
+.state { font-size: 12px; color: var(--muted-fg); }
+.state.ok { color: var(--success); }
+.btn { border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 10px; color: var(--fg); background: transparent; font: inherit; font-size: 12px; white-space: nowrap; }
+.btn.ghost { border-color: transparent; color: var(--muted-fg); }
+.note { border: 1px solid var(--warning-line); background: var(--warning-bg); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.note b { font-weight: 600; }
+.missing { border: 1px dashed var(--border); border-radius: var(--radius); padding: 10px 12px; color: var(--muted-fg); }
+pre { margin: 0; font-family: var(--mono); font-size: 12px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; white-space: pre-wrap; color: var(--fg); }
+</style>
+<main>
+  <div class="intro">
+    <h1>mise tasks of packages</h1>
+    <p>A monorepo often keeps a <code>mise.toml</code> in a package folder, such as <code>packages/client/mise.toml</code>, next to the one in the repo root. mise run from the repo root does not read it, and its own notation for package tasks (<code>//packages/client:test</code>) needs mise's experimental mode. Trackwall finds the mise config files of packages below the repo root, lists their tasks under their folder, and runs each in its folder (<code>mise -C packages/client run test</code>), which needs no experimental mode.</p>
+  </div>
+
+  <section class="frame-block">
+    <h2>1. Today: the package's tasks are missing</h2>
+    <p>The tab lists only the repo root's tasks. <code>test-integration</code> from <code>packages/client/mise.toml</code> is nowhere, and an agent that asks for the list does not get it either, so it moves the task into the root config as a workaround.</p>
+    <div class="frame-wrap"><div class="window">
+      <div class="rail"></div>
+      <div class="list">
+        <span class="hud">Repos // 12</span>
+        <div class="row"><span>catalog</span><small>main · clean</small></div>
+        <div class="row sel"><span>web-shop</span><small>main · clean</small></div>
+        <div class="row"><span>payments</span><small>main · 2 to pull</small></div>
+      </div>
+      <div class="detail">
+        <span class="name">web-shop</span>
+        <div class="tabs"><span>Card</span><span>Files</span><span>Commits</span><span>Changes</span><span class="on">mise tasks</span><span>Shell</span></div>
+        <div class="surface">
+          <div class="surface-head"><span class="hud">mise tasks</span><span class="mono">3</span></div>
+          <ul>
+            <li><div class="task"><code>setup<span class="badge">repo</span></code><span>pnpm install --frozen-lockfile</span></div><span class="state">not run</span><span class="btn ghost">Log</span><span class="btn">▶ Run</span></li>
+            <li><div class="task"><code>build<span class="badge">repo</span></code><span>Build every package</span></div><span class="state">not run</span><span class="btn ghost">Log</span><span class="btn">▶ Run</span></li>
+            <li><div class="task"><code>test<span class="badge">repo</span></code><span>Unit tests of every package</span></div><span class="state">not run</span><span class="btn ghost">Log</span><span class="btn">▶ Run</span></li>
+          </ul>
+        </div>
+        <div class="missing">packages/client/mise.toml: test-integration, dev-mock (not shown)</div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="frame-block">
+    <h2>2. Recommended: one box per package, under the repo root's</h2>
+    <p>The repo root's tasks stay first, as today. Each package folder with its own mise config gets its own box, named by its path, with only the tasks that config defines (the root's tasks mise also shows there are not repeated). Run starts the task in the package folder, so it gets the package's <code>[env]</code> and tools. Folders are searched up to four levels deep, skipping <code>node_modules</code>, build output and hidden folders.</p>
+    <div class="frame-wrap"><div class="window">
+      <div class="rail"></div>
+      <div class="list">
+        <span class="hud">Repos // 12</span>
+        <div class="row"><span>catalog</span><small>main · clean</small></div>
+        <div class="row sel"><span>web-shop</span><small>main · clean</small></div>
+        <div class="row"><span>payments</span><small>main · 2 to pull</small></div>
+      </div>
+      <div class="detail">
+        <span class="name">web-shop</span>
+        <div class="tabs"><span>Card</span><span>Files</span><span>Commits</span><span>Changes</span><span class="on">mise tasks</span><span>Shell</span></div>
+        <div class="surface">
+          <div class="surface-head"><span class="hud">mise tasks</span><span class="mono">3</span></div>
+          <ul>
+            <li><div class="task"><code>setup<span class="badge">repo</span></code><span>pnpm install --frozen-lockfile</span></div><span class="state">not run</span><span class="btn ghost">Log</span><span class="btn">▶ Run</span></li>
+            <li><div class="task"><code>build<span class="badge">repo</span></code><span>Build every package</span></div><span class="state">not run</span><span class="btn ghost">Log</span><span class="btn">▶ Run</span></li>
+            <li><div class="task"><code>test<span class="badge">repo</span></code><span>Unit tests of every package</span></div><span class="state">not run</span><span class="btn ghost">Log</span><span class="btn">▶ Run</span></li>
+          </ul>
+        </div>
+        <div class="surface new">
+          <div class="surface-head"><span class="path">packages/client</span><span class="mono">2</span></div>
+          <ul>
+            <li><div class="task"><code>test-integration<span class="badge">repo</span></code><span>Integration tests against the mock server</span></div><span class="state ok">● exited 0 · 2 min ago</span><span class="btn ghost">Log</span><span class="btn">▶ Run</span></li>
+            <li><div class="task"><code>dev-mock<span class="badge">repo</span></code><span>Mock server from the OpenAPI spec</span></div><span class="state ok">● running</span><span class="btn ghost">Log</span><span class="btn">■ Stop</span></li>
+          </ul>
+        </div>
+        <div class="surface new">
+          <div class="surface-head"><span class="path">packages/admin</span><span class="mono">1</span></div>
+          <ul>
+            <li><div class="task"><code>e2e<span class="badge">local</span></code><span>Playwright tests of the admin panel</span></div><span class="state">not run</span><span class="btn ghost">Log</span><span class="btn">▶ Run</span></li>
+          </ul>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="frame-block">
+    <h2>3. A package's config mise does not trust yet</h2>
+    <p>mise trusts each config file on its own, so a package's config added after the repo was trusted is refused. Its box says so and offers the same trust as the repo root's; the repo's other tasks stay usable. Trusting the repo root also trusts the package configs found at that moment.</p>
+    <div class="frame-wrap"><div class="window">
+      <div class="rail"></div>
+      <div class="list">
+        <span class="hud">Repos // 12</span>
+        <div class="row sel"><span>web-shop</span><small>main · clean</small></div>
+      </div>
+      <div class="detail">
+        <span class="name">web-shop</span>
+        <div class="tabs"><span>Card</span><span>Files</span><span>Commits</span><span>Changes</span><span class="on">mise tasks</span><span>Shell</span></div>
+        <div class="surface">
+          <div class="surface-head"><span class="hud">mise tasks</span><span class="mono">3</span></div>
+          <ul>
+            <li><div class="task"><code>build<span class="badge">repo</span></code><span>Build every package</span></div><span class="state">not run</span><span class="btn ghost">Log</span><span class="btn">▶ Run</span></li>
+          </ul>
+        </div>
+        <div class="surface new">
+          <div class="surface-head"><span class="path">packages/client</span><span class="mono">–</span></div>
+          <div class="note">
+            <span><b>mise does not trust this package's config</b>, so it will not list its tasks. Trust it only if you know the repo: a mise config can run programs.</span>
+            <span class="mono">Config files in packages/client/mise.toml are not trusted.</span>
+            <span class="btn">⛨ Trust the mise config (mise trust)</span>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section class="frame-block">
+    <h2>4. What an agent sees</h2>
+    <p>The agent's list of mise tasks names a package's task by its folder in mise's own notation, and runs it by that name; Trackwall turns it into a run in the folder, also in a task's worktree. A task's worktree runs package tasks only while their configs are the ones the user trusted, as for the root config today.</p>
+    <pre>mise tasks of web-shop:
+  setup                               pnpm install --frozen-lockfile
+  build                               Build every package
+  test                                Unit tests of every package
+  //packages/client:test-integration  Integration tests against the mock server
+  //packages/client:dev-mock          Mock server from the OpenAPI spec  (running)
+  //packages/admin:e2e                Playwright tests of the admin panel
+
+run_mise_task { repo: "web-shop", miseTask: "//packages/client:test-integration" }
+  → mise -C packages/client run test-integration</pre>
+  </section>
+</main>
+</body>
+</html>

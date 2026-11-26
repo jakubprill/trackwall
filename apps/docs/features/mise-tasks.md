@@ -17,6 +17,7 @@ Run, stop and follow the mise tasks of any repo, with live logs and the errors p
 - A live log of each task, with errors and warnings highlighted, and secrets kept out of it.
 - A clean stop: a stopped task takes everything it started with it.
 - Arguments for a run, such as one test class for `test`, and the mise tasks agents run, in the same place, where you can watch and stop them.
+- The tasks of a monorepo's packages, each run in its own folder, next to the repo's own.
 
 ## How it works
 
@@ -29,6 +30,14 @@ A task that declares arguments (a `usage` in its mise config) gets a field next 
 Values of environment variables with secret-looking names (`*_TOKEN`, `*_PASSWORD`, `*_SECRET` and similar) are replaced with `***` before they reach the log.
 
 mise asks you to trust a repo's configuration before it runs its tasks. When it has not been trusted yet, the tab offers a button for it. Only a trusted repo's tasks can also be run by agents through the [MCP server](/features/mcp); those runs show in the same tab, with their log, and you can stop them here. An agent in Trackwall that was turned away because the configuration was not trusted hears when you trust it, and runs its task again. A task's agent runs its mise tasks in the task's worktree instead, so they test its changes; those runs show in the task's panel in "Sessions" (see [Agent tasks](/features/tasks)).
+
+### Packages of a monorepo
+
+A monorepo can keep a `mise.toml` in a package folder, such as `packages/client/mise.toml`, next to the one in the repo root. mise run from the repo root does not read it, so Trackwall looks for such folders itself and shows each in its own box under the repo's tasks, named by its folder, with only the tasks that folder's config defines. "Run" starts a task in the package folder, so it gets the package's environment and tools, as `mise run` there would. mise's experimental monorepo mode is not needed.
+
+Trackwall looks up to four folders deep and skips hidden folders, `node_modules`, build output (`target`, `build`, `dist`, `out`, `bin`, `obj`) and `vendor`. mise trusts each package's config on its own: trusting the repo trusts the packages found at that moment, and a package added later shows the same trust button in its box, while the rest of the repo's tasks keep working.
+
+Agents see a package's task as `//packages/client:test`, mise's own name for it, and run it by that name, also in a task's worktree. There the packages' mise files are part of the config you trust for the task, so an agent cannot change a package's tasks unseen.
 
 ### Convention tasks
 
@@ -54,5 +63,6 @@ If mise ever refuses the file as untrusted, every repo's tab says so and offers 
 - On macOS the `PATH` from your login shell is enough.
 - The full log of every task is kept in `~/.trackwall/logs/mise-task/<repo>/<task>.jsonl`, at most 10 MB plus one previous file. Characters other than lowercase letters, digits, `_` and `-` in the name are written as `%XX`: the task `build:ui` is `build%3Aui.jsonl`. A run in a task's worktree is kept in `~/.trackwall/logs/task-mise-task/<task>/<mise task>.jsonl`.
 - Task worktrees get the convention tasks while they sit inside the projects folder, which is where Trackwall puts them by default.
+- A package's task is kept in the log under its full name: `//packages/client:test` is `%2F%2Fpackages%2Fclient%3Atest.jsonl`.
 - A repo with a mise task called `dev` also gets a [Services](/features/services) panel at the top of this tab.
 - Tasks only for your computer go in `mise.local.toml`, or in a `mise.toml` you keep out of git; above the tasks the tab shows their [backup](/features/local-config). The repo list marks such repos with the `local-mise` tag.

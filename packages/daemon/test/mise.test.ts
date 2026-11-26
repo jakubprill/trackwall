@@ -104,6 +104,7 @@ describe("mise", () => {
         { name: "dev", description: "development server", source: null, origin: null, usage: null, run: null },
         { name: "build:ui", description: "", source: null, origin: null, usage: null, run: null },
       ],
+      packages: [],
     });
   });
 
@@ -172,7 +173,11 @@ describe("mise", () => {
     expect(before.kind !== "ok" && before.message).toContain("are not trusted");
     expect(before.kind !== "ok" && before.message).not.toContain("WARN");
 
-    expect(await mise.trust("web")).toEqual({ kind: "ok", tasks: [{ ...DEV, source: null, origin: null, usage: null, run: null }] });
+    expect(await mise.trust("web")).toEqual({
+      kind: "ok",
+      tasks: [{ ...DEV, source: null, origin: null, usage: null, run: null }],
+      packages: [],
+    });
     expect(JSON.parse(readFileSync(join(repoDir, "fake-mise.json"), "utf8")).untrusted).toBe(false);
   });
 
@@ -226,7 +231,7 @@ describe("mise", () => {
       expect(listed.kind === "ok" && listed.tasks.map((t) => [t.name, t.run?.kind])).toEqual([["dev", "running"]]);
 
       await mise.stop({ repo: "web", task: null }, "dev");
-      expect(await mise.tasks("web")).toEqual({ kind: "ok", tasks: [] });
+      expect(await mise.tasks("web")).toEqual({ kind: "ok", tasks: [], packages: [] });
     },
     TIMEOUT,
   );
@@ -744,4 +749,123 @@ describe("the convention tasks file (ADR-157)", () => {
       ["notes", "outside"],
     ]);
   });
+});
+
+/**
+ * A package of the repo (ADR-305): `mise.toml` in its folder, which Trackwall looks for, and the fake mise's config there.
+ * mise in a package lists the mise tasks of the root's config too, as real mise does.
+ */
+function writePackage(root: string, pkg: string, config: object): string {
+  const dir = join(root, ...pkg.split("/"));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "mise.toml"), "[tasks]\n");
+  writeFileSync(join(dir, "fake-mise.json"), JSON.stringify(config));
+  return dir;
+}
+
+describe("mise tasks of a monorepo's packages (ADR-305)", () => {
+  test("a package's own mise tasks follow the root's as //<package>:<task>, and its untrusted config is named, not hidden", async () => {
+    const { mise, repoDir } = setup({ tasks: [] });
+    writeFileSync(join(repoDir, "mise.toml"), "[tasks.build]\n");
+    const rootTask = { name: "build", description: "build all", source: join(repoDir, "mise.toml") };
+    const client = writePackage(repoDir, "packages/client", {
+      tasks: [
+        rootTask,
+        { name: "test-integration", description: "integration tests", source: join(repoDir, "packages", "client", "mise.toml") },
+      ],
+    });
+    writePackage(repoDir, "packages/admin", { tasks: [], untrusted: true });
+    writePackage(repoDir, "node_modules/some-lib", {
+      tasks: [{ name: "postinstall", source: join(repoDir, "node_modules", "some-lib", "mise.toml") }],
+    });
+    writeConfig(repoDir, { tasks: [rootTask] });
+
+    const listed = await mise.tasks("web");
+
+    expect(listed.kind === "ok" && listed.tasks.map((t) => [t.name, t.description, t.source])).toEqual([
+      ["build", "build all", "mise.toml"],
+      ["//packages/client:test-integration", "integration tests", "packages/client/mise.toml"],
+    ]);
+    expect(listed.kind === "ok" && listed.packages).toEqual([
+      {
+        path: "packages/admin",
+        problem: { kind: "untrusted", message: expect.stringContaining("are not trusted") },
+      },
+      { path: "packages/client", problem: null },
+    ]);
+    expect(existsSync(join(client, "calls.log"))).toBe(false);
+  });
+
+  test(
+    "a package's mise task runs in the package folder under the name mise knows it by, and its log is the listed name's",
+    async () => {
+      const { mise, repoDir, logs } = setup({ tasks: [] });
+      const client = writePackage(repoDir, "packages/client", {
+        tasks: [{ name: "test-integration", source: join(repoDir, "packages", "client", "mise.toml") }],
+        exits: { "test-integration": 0 },
+      });
+      const name = "//packages/client:test-integration";
+
+      await mise.start({ repo: "web", task: null }, name);
+      const ended = await mise.waitForEnd({ repo: "web", task: null }, name, 20_000, new AbortController().signal);
+
+      expect(ended).toMatchObject({ kind: "exited", exitCode: 0 });
+      expect(readFileSync(join(client, "calls.log"), "utf8")).toBe("run test-integration\n");
+      expect(existsSync(join(repoDir, "calls.log"))).toBe(false);
+      const log = logs.tail({ source: { kind: "mise-task", repo: "web", miseTask: name }, limit: 10 });
+      expect(log.records.map((r) => r.msg)).toEqual(["[test-integration] $ done"]);
+    },
+    TIMEOUT,
+  );
+
+  test("a package name leads nowhere outside the packages found, and a parent's mise task is not run as the package's", async () => {
+    const { mise, home, repoDir } = setup({ tasks: [] });
+    writePackage(repoDir, "packages/client", {
+      tasks: [{ name: "deploy", source: join(repoDir, "mise.toml") }],
+      exits: { deploy: 0 },
+    });
+    writePackage(home, "elsewhere", { tasks: [{ name: "x", source: join(home, "elsewhere", "mise.toml") }], exits: { x: 0 } });
+    writePackage(repoDir, "node_modules/lib", { tasks: [{ name: "x", source: join(repoDir, "node_modules", "lib", "mise.toml") }] });
+    const root = { repo: "web", task: null };
+
+    for (const name of ["//packages/client:deploy", "//../elsewhere:x", "//node_modules/lib:x", "//packages/none:x"])
+      await expect(mise.start(root, name)).rejects.toMatchObject({ code: "not_found" });
+    expect(existsSync(join(repoDir, "packages", "client", "calls.log"))).toBe(false);
+    expect(existsSync(join(home, "elsewhere", "calls.log"))).toBe(false);
+  });
+
+  test("trusting the repo trusts the config of each package found, so their mise tasks are listed", async () => {
+    const { mise, repoDir } = setup({ tasks: [], untrusted: true });
+    const client = writePackage(repoDir, "packages/client", {
+      tasks: [{ name: "test", source: join(repoDir, "packages", "client", "mise.toml") }],
+      untrusted: true,
+    });
+
+    const trusted = await mise.trust("web");
+
+    expect(JSON.parse(readFileSync(join(client, "fake-mise.json"), "utf8")).untrusted).toBe(false);
+    expect(trusted.kind === "ok" && trusted.tasks.map((t) => t.name)).toEqual(["//packages/client:test"]);
+    expect(trusted.kind === "ok" && trusted.packages).toEqual([{ path: "packages/client", problem: null }]);
+  });
+
+  test(
+    "in a task worktree a package's mise task runs in the worktree's package folder, which mise trusts for that run",
+    async () => {
+      const { mise, repoDir, worktree } = setup({ tasks: [] });
+      writePackage(repoDir, "packages/client", { tasks: [] });
+      const inWorktree = writePackage(worktree, "packages/client", {
+        tasks: [{ name: "test", source: join(worktree, "packages", "client", "mise.toml") }],
+        exits: { test: 4 },
+        untrusted: true,
+      });
+      const target = { repo: "web", task: TASK };
+
+      await mise.start(target, "//packages/client:test");
+      const ended = await mise.waitForEnd(target, "//packages/client:test", 20_000, new AbortController().signal);
+
+      expect(ended).toMatchObject({ kind: "exited", exitCode: 4 });
+      expect(readFileSync(join(inWorktree, "calls.log"), "utf8")).toBe("run test\n");
+    },
+    TIMEOUT,
+  );
 });

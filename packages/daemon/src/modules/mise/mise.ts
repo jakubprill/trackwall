@@ -5,6 +5,7 @@ import {
   type ConventionTasksState,
   type LogSource,
   type MiseConfigCheck,
+  type MisePackage,
   MiseRunArguments,
   type MiseTarget,
   type MiseTask,
@@ -12,13 +13,17 @@ import {
   type MiseTasks,
   miseTargetKey,
   miseTaskLogSource,
+  packageTaskName,
   type RunningMiseTask,
   type RunState,
+  splitPackageTask,
   TASK_PORT_ENV,
 } from "@trackwall/protocol";
 import { z } from "zod";
 import { envKey } from "../../infra/env-key.ts";
 import { DomainError, SpawnFailure } from "../../infra/errors.ts";
+import { findMisePackages, packageDir } from "../../infra/mise-packages.ts";
+import { isInside } from "../../infra/path-inside.ts";
 import { waitLimited } from "../../infra/wait-limit.ts";
 import { conventionTasksPath, conventionTasksState, writeConventionTasks } from "./convention-tasks.ts";
 import { type MiseCliResult, miseFailure, runMiseCli } from "./mise-cli.ts";
@@ -35,6 +40,9 @@ import { type TrackedPaths, taskOrigins } from "./task-origin.ts";
  * gets the worktree as a trusted path for that one run, never through `mise trust`, which would trust the path for good.
  * A run in a task worktree also gets the task port in `TASK_PORT_ENV` (ADR-61), so a server it starts does not take the
  * port of the same server running from the repo root or another task.
+ * A monorepo's packages with a mise config of their own (ADR-305) are listed and run in their folder (`mise run` with
+ * the package folder as its working directory), each mise task named `//<package>:<task>`: mise from the root never reads
+ * them, and its own `//` notation needs its experimental mode.
  */
 
 /** What `mise` needs from `procs`; wired in the facade. */
@@ -175,24 +183,44 @@ export class Mise {
     this.deps = deps;
   }
 
-  /** The mise tasks of a repo root with their runs there, and where each is defined (ADR-110). */
+  /**
+   * The mise tasks of a repo root with their runs there, and where each is defined (ADR-110), then those of its packages
+   * (ADR-305). A package is read only once the root lists its tasks: mise reads the root's config in a package too.
+   */
   async tasks(repo: string): Promise<MiseTasks> {
     const root: MiseTarget = { repo, task: null };
     const dir = await this.deps.repos.repoPath(repo);
-    const listed = await this.list(dir, await this.deps.env());
+    const env = await this.deps.env();
+    const listed = await this.list(dir, env);
     if (listed.kind !== "ok") return { ...listed, running: this.liveOutside(root, []) };
+    const inPackages = await Promise.all((await findMisePackages(dir)).map((pkg) => this.packageList(dir, pkg, env)));
+    const all = [...listed.tasks, ...inPackages.flatMap((p) => p.tasks)];
     const originOf = await taskOrigins(
       dir,
-      listed.tasks.map((t) => t.source),
+      all.map((t) => t.source),
       this.deps.vcs,
       conventionTasksPath(await this.deps.repos.projectsDir()),
     );
-    const tasks: MiseTask[] = listed.tasks.map((t) => ({
+    const tasks: MiseTask[] = all.map((t) => ({
       ...t,
       ...originOf(t.source),
       run: this.deps.procs.state(owner(root, t.name)) ?? null,
     }));
-    return { kind: "ok", tasks: [...tasks, ...this.liveOutside(root, tasks)] };
+    return { kind: "ok", tasks: [...tasks, ...this.liveOutside(root, tasks)], packages: inPackages.map((p) => p.package) };
+  }
+
+  /**
+   * The mise tasks a package's own config defines, named `//<package>:<task>`, or why mise did not list them. mise in a
+   * package lists the root's and other parents' mise tasks too, which run from the root already; only those whose source
+   * is in the package folder are its own.
+   */
+  private async packageList(root: string, pkg: string, env: NodeJS.ProcessEnv): Promise<{ package: MisePackage; tasks: ListedMiseTask[] }> {
+    const listed = await this.listOwn(packageDir(root, pkg), env);
+    if (listed.kind !== "ok") {
+      const kind = listed.kind === "untrusted" ? "untrusted" : "error";
+      return { package: { path: pkg, problem: { kind, message: listed.message } }, tasks: [] };
+    }
+    return { package: { path: pkg, problem: null }, tasks: listed.tasks.map((t) => ({ ...t, name: packageTaskName(pkg, t.name) })) };
   }
 
   /** Running mise tasks of all repo roots and task worktrees started in this daemon run; state from `procs`, without asking mise. */
@@ -230,9 +258,9 @@ export class Mise {
     const parsedArgs = MiseRunArguments.safeParse(options.args ?? []);
     if (!parsedArgs.success) throw new DomainError("bad_request", z.prettifyError(parsedArgs.error));
     const args = parsedArgs.data;
-    const place = await this.place(target, options.port);
-    const listed = await this.listedTask(place, miseTask);
-    if (!listed) throw new DomainError("not_found", `${where(target)} has no mise task "${miseTask}"`);
+    const found = await this.listedTask(await this.place(target, options.port), miseTask);
+    if (!found) throw new DomainError("not_found", `${where(target)} has no mise task "${miseTask}"`);
+    const { place, task: listed } = found;
     if (args.length > 0 && listed.usage === null)
       throw new DomainError(
         "bad_request",
@@ -241,7 +269,7 @@ export class Mise {
     const run = await this.launch(
       owner(target, miseTask),
       place,
-      ["run", miseTask, ...args],
+      ["run", listed.miseName, ...args],
       target.repo,
       miseTaskLogSource(target.repo, target.task, miseTask),
     );
@@ -256,10 +284,11 @@ export class Mise {
    */
   async runToEnd(repo: string, miseTask: string, signal: AbortSignal): Promise<RunState | null> {
     const root: MiseTarget = { repo, task: null };
-    const place = await this.place(root);
-    if (!(await this.listedTask(place, miseTask))) return null;
+    const found = await this.listedTask(await this.place(root), miseTask);
+    if (!found) return null;
     this.remember(root, miseTask);
-    return this.runGroupToEnd(owner(root, miseTask), place, ["run", miseTask], repo, miseTaskLogSource(repo, null, miseTask), signal);
+    const args = ["run", found.task.miseName];
+    return this.runGroupToEnd(owner(root, miseTask), found.place, args, repo, miseTaskLogSource(repo, null, miseTask), signal);
   }
 
   /**
@@ -278,14 +307,15 @@ export class Mise {
   ): Promise<{ run: RunState; filtered: boolean }> {
     const parsedArgs = MiseRunArguments.safeParse([filter]);
     if (!parsedArgs.success) throw new DomainError("bad_request", z.prettifyError(parsedArgs.error));
-    const place = await this.taskFolderPlace(target.repo, () => this.deps.tasks.trustedReproCopy(target.task, target.repo));
-    const task = await this.listedTask(place, miseTask);
-    if (!task) throw new DomainError("not_found", `the reproduction check's copy of ${target.repo} has no mise task "${miseTask}"`);
+    const copy = await this.taskFolderPlace(target.repo, () => this.deps.tasks.trustedReproCopy(target.task, target.repo));
+    const found = await this.listedTask(copy, miseTask);
+    if (!found) throw new DomainError("not_found", `the reproduction check's copy of ${target.repo} has no mise task "${miseTask}"`);
+    const { place, task } = found;
     const filtered = task.usage !== null;
     const run = await this.runGroupToEnd(
       `task-repro:${target.task}:${target.repo}:${miseTask}`,
       place,
-      ["run", miseTask, ...(filtered ? parsedArgs.data : [])],
+      ["run", task.miseName, ...(filtered ? parsedArgs.data : [])],
       target.repo,
       miseTaskLogSource(target.repo, target.task, miseTask),
       signal,
@@ -347,11 +377,17 @@ export class Mise {
     return new DomainError("not_found", `mise task "${miseTask}" in ${place} has not been run`);
   }
 
-  /** `mise trust` without a path trusts the config in the repo root, not in parent directories. */
+  /**
+   * `mise trust` without a path trusts the config in its working directory, not in parent directories: in the repo root,
+   * then in each package found now (ADR-305), which mise trusts one by one.
+   */
   async trust(repo: string): Promise<MiseTasks> {
-    // The repo root only: a task worktree is trusted by its mise config instead (ADR-59, `agents`).
+    // The repo root and its packages only: a task worktree is trusted by its mise config instead (ADR-59, `agents`).
     const dir = await this.deps.repos.repoPath(repo);
-    this.cliOutput(await runMiseCli(this.deps.command, ["trust"], dir, await this.deps.env()));
+    const env = await this.deps.env();
+    this.cliOutput(await runMiseCli(this.deps.command, ["trust"], dir, env));
+    for (const pkg of await findMisePackages(dir))
+      this.cliOutput(await runMiseCli(this.deps.command, ["trust"], packageDir(dir, pkg), env));
     const tasks = await this.tasks(repo);
     if (tasks.kind === "ok") this.deps.onTrusted(repo);
     return tasks;
@@ -589,10 +625,31 @@ export class Mise {
     return read.kind === "unredacted" ? { kind: "error", message: read.message } : read;
   }
 
-  private async listedTask(place: RunPlace, miseTask: string): Promise<ListedMiseTask | undefined> {
-    const listed = await this.list(place.dir, place.env);
-    if (listed.kind !== "ok") throw new DomainError("mise_unavailable", listed.message);
-    return listed.tasks.find((t) => t.name === miseTask);
+  /**
+   * A mise task of the current list of `place` and where it runs: `place` itself for a mise task of the root, the package
+   * folder for one named `//<package>:<task>` (ADR-305), with the secrets of the package's `[env]`. The package must be one
+   * `findMisePackages` finds in `place`, so a name never leads a run out of the folders listed, and the mise task must
+   * be the package's own; `miseName` is the name mise knows it by there.
+   */
+  private async listedTask(
+    place: RunPlace,
+    miseTask: string,
+  ): Promise<{ place: RunPlace; task: ListedMiseTask & { miseName: string } } | undefined> {
+    const { package: pkg, task: name } = splitPackageTask(miseTask);
+    if (pkg === null) {
+      const listed = await this.list(place.dir, place.env);
+      if (listed.kind !== "ok") throw new DomainError("mise_unavailable", listed.message);
+      const task = listed.tasks.find((t) => t.name === miseTask);
+      return task && { place, task: { ...task, miseName: name } };
+    }
+    if (!(await findMisePackages(place.dir)).includes(pkg)) return undefined;
+    const dir = packageDir(place.dir, pkg);
+    const listed = await this.listOwn(dir, place.env);
+    if (listed.kind !== "ok") throw new DomainError("mise_unavailable", `${pkg}: ${listed.message}`);
+    const task = listed.tasks.find((t) => t.name === name);
+    if (!task) return undefined;
+    const inPackage = { dir, env: place.env, secrets: await this.secretsIn(dir, place.env) };
+    return { place: inPackage, task: { ...task, name: miseTask, miseName: name } };
   }
 
   /** A mise task started in this daemon run: the list shows it so it can be stopped, even when it vanishes from the config. */
@@ -658,6 +715,15 @@ export class Mise {
   private async list(dir: string, env: NodeJS.ProcessEnv): Promise<TaskList> {
     return parseTaskList(await runMiseCli(this.deps.command, ["tasks", "ls", "--json"], dir, env));
   }
+
+  /**
+   * The mise tasks a package folder's own config defines (ADR-305), under the names mise gives them there: mise in a
+   * package lists the root's and every parent's mise tasks too, which are not the package's.
+   */
+  private async listOwn(dir: string, env: NodeJS.ProcessEnv): Promise<TaskList> {
+    const listed = await this.list(dir, env);
+    return listed.kind === "ok" ? { kind: "ok", tasks: await definedIn(dir, listed.tasks) } : listed;
+  }
 }
 
 /** The result of `mise tasks ls --json` as a list of mise tasks or the reason there is none. */
@@ -680,6 +746,17 @@ export function parseTaskList(result: MiseCliResult): TaskList {
     .filter((t) => !t.hide && MiseTaskName.safeParse(t.name).success)
     .map((t) => ({ name: t.name, description: t.description ?? "", source: t.source ?? null, usage: usageSpec(t.usage) }));
   return { kind: "ok", tasks };
+}
+
+/**
+ * The mise tasks of `tasks` that a file in `dir` defines, by real paths on both sides, as mise may report the canonical
+ * path (`/private/var` on macOS); a mise task of unknown source is not defined there.
+ */
+async function definedIn(dir: string, tasks: readonly ListedMiseTask[]): Promise<ListedMiseTask[]> {
+  const real = await realpath(dir).catch(() => dir);
+  const inside = async (source: string | null) => source !== null && isInside(real, await realpath(source).catch(() => source));
+  const own = await Promise.all(tasks.map((t) => inside(t.source)));
+  return tasks.filter((_, i) => own[i]);
 }
 
 /** A usage spec that declares something; mise gives an empty string for a mise task without one. */
