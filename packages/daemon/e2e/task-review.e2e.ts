@@ -51,6 +51,15 @@ describe("an agent task, verified and reviewed", () => {
     await verification.getByRole("button", { name: "at shop.CartTest.sums(CartTest.java:12)" }).waitFor();
     expect(await verification.getByText("at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:151)").count()).toBe(1);
 
+    // The Tests tab lists the failed tests of the worktree's reports, with their count on the tab, and opens the first
+    // one as the Verification section does (ADR-304).
+    await page.getByRole("tab", { name: "Tests (1)" }).click();
+    const reports = page.getByRole("region", { name: "Test reports" });
+    await reports.getByText("1 test · 1 failed").waitFor();
+    await reports.getByRole("list", { name: "Tests" }).getByRole("button", { name: /^sums/ }).waitFor();
+    await reports.getByRole("button", { name: "at shop.CartTest.sums(CartTest.java:12)" }).waitFor();
+    await reports.getByRole("button", { name: "Fix this" }).waitFor();
+
     // The agent's work: a commit on the task's branch in its worktree.
     const task = daemon.facade.agents.sessions().tasks.find((t) => t.prompt === PROMPT);
     if (task === undefined) throw new Error("the task is not on the list");

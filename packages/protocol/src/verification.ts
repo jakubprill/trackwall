@@ -79,14 +79,14 @@ export const Verification = z.object({
 export type Verification = z.infer<typeof Verification>;
 
 /**
- * A test fix (ADR-302): the user's request to a task's agent to fix failed tests of the task's last verification, with
- * those tests as the verification read them from the JUnit reports. The agent reads it with `get_review_comments`, like
- * the user's review (ADR-62) and a pipeline fix (ADR-197).
+ * A test fix (ADR-302): the user's request to a task's agent to fix failed tests of the task's last verification, or of
+ * the test reports in its worktree from the "Tests" tab (ADR-304), with those tests as read from the JUnit reports. The
+ * agent reads it with `get_review_comments`, like the user's review (ADR-62) and a pipeline fix (ADR-197).
  */
 export const TestFix = z.object({
-  /** The run of the verification the tests failed in (`Verification.runId`). */
-  runId: z.string(),
-  /** The verification ran on an earlier version of the changes (ADR-209), so some of these may pass by now. */
+  /** The run of the verification the tests failed in (`Verification.runId`); `null` for tests from the "Tests" tab. */
+  runId: z.string().nullable(),
+  /** The verification ran, or the reports were written, before the task's files last changed (ADR-209), so some may pass by now. */
   outdated: z.boolean(),
   /** The failed tests to fix: the one the user picked, or every one the verification kept. */
   failures: z.array(TestFailure).min(1).max(VERIFICATION_MAX_FAILURES),

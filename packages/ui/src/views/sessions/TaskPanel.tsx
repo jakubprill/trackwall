@@ -23,8 +23,11 @@ import type { LiveFeed } from "@/lib/daemon-events";
 import { relativeTime } from "@/lib/format";
 import { proposerLabel, type TaskTab, taskName, taskTabs } from "@/lib/session-entries";
 import { isLive } from "@/lib/session-state";
+import { failedCount } from "@/lib/task-tests";
 import { useTaskDetails } from "@/lib/use-task-details";
 import { useTaskReview } from "@/lib/use-task-review";
+import { type TaskTestsState, useTaskTests } from "@/lib/use-task-tests";
+import type { TaskVerificationState } from "@/lib/use-task-verification";
 import { JavaNavigationMark } from "./JavaNavigationMark.tsx";
 import { PausedNotice } from "./PausedNotice.tsx";
 import { PlanApprovalNotice } from "./PlanApprovalNotice.tsx";
@@ -41,6 +44,7 @@ import { TaskMoreMenu } from "./TaskMoreMenu.tsx";
 import { TaskNoticeStrip } from "./TaskNotices.tsx";
 import { TaskRemoval } from "./TaskRemoval.tsx";
 import { TaskRounds } from "./TaskRounds.tsx";
+import { TaskTestsView } from "./TaskTestsView.tsx";
 import { VerifyButton } from "./TaskVerification.tsx";
 import { TokenBudgetMark } from "./TokenBudgetMark.tsx";
 
@@ -107,6 +111,13 @@ export function TaskPanel({
   const tabs = taskTabs(session, otherAttempts(task, tasks).length > 0);
   // A tab the task no longer has (no session, or the other attempt ended) falls back to its changes.
   const shown: TaskTab = tabs.some((t) => t.id === tab) ? tab : "changes";
+  const { verification } = details.verification;
+  const tests = useTaskTests(conn, task.id, {
+    shown: shown === "tests",
+    paused: confirmingRemoval,
+    verdict: verification ? `${verification.runId}:${verification.state}` : "",
+  });
+  const failedTests = tests.tests ? failedCount(tests.tests) : 0;
 
   return (
     <>
@@ -181,7 +192,7 @@ export function TaskPanel({
         <TaskDetails conn={conn} task={task} details={details} sessions={sessions} onOpenTask={onOpenTask} />
       </section>
       <div className="px-4">
-        <TabBar tabs={tabs} active={shown} onSelect={setTab} />
+        <TabBar tabs={tabs.map((t) => (t.id === "tests" ? { ...t, count: failedTests } : t))} active={shown} onSelect={setTab} />
       </div>
       <TaskTabContent
         shown={shown}
@@ -190,6 +201,8 @@ export function TaskPanel({
         session={session}
         paused={confirmingRemoval}
         review={review}
+        tests={tests}
+        verification={details.verification}
         onOpenTask={onOpenTask}
         onShowImpact={onShowImpact}
         comparison={{ tasks, sessions, outcomes, onChanged, onRemoved }}
@@ -206,6 +219,8 @@ function TaskTabContent({
   session,
   paused,
   review,
+  tests,
+  verification,
   onOpenTask,
   onShowImpact,
   comparison,
@@ -216,6 +231,8 @@ function TaskTabContent({
   session: Session | undefined;
   paused: boolean;
   review: ReturnType<typeof useTaskReview>;
+  tests: TaskTestsState;
+  verification: TaskVerificationState;
   onOpenTask: (id: string) => void;
   onShowImpact: (task: string) => void;
   /** What the "Compare" tab needs beyond the task (ADR-252). */
@@ -230,6 +247,7 @@ function TaskTabContent({
           <TaskChangesView conn={conn} task={task.id} baseBranch={task.baseBranch} paused={paused} review={review} />
         </div>
       )}
+      {shown === "tests" && <TaskTestsView conn={conn} task={task.id} state={tests} verification={verification} paused={paused} />}
       {shown === "compare" && (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <TaskComparison conn={conn} task={task} paused={paused} onOpenTask={onOpenTask} {...comparison} />

@@ -44,6 +44,12 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     show: { place: { kind: "view", view: "repos" } },
   },
   {
+    id: "tests-tab",
+    title: "A Tests tab in every task",
+    text: "The Tests tab of a task lists the tests that failed in its worktree's test reports, without pages and without the passed ones, each with its stack trace and Fix this; All shows the rest.",
+    show: { place: { kind: "view", view: "sessions" } },
+  },
+  {
     id: "remove-a-repo",
     title: "Remove a repo",
     text: "Remove… in a repo's header takes the repo off the list once you type its name: its folder moves into .trackwall/removed, and nothing is deleted.",
@@ -60,12 +66,6 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     title: "Settings in the workspace store",
     text: "Turn on Keep Trackwall and Copilot CLI settings in the store, and workspace.yaml and your Copilot CLI settings get a history in git, with the tokens in mcp-config.json masked, and a new container gets them back with Restore settings from the store.",
     show: { place: { kind: "settings", category: "workspace" } },
-  },
-  {
-    id: "accept-changed-git-hooks",
-    title: "Accept changed git hooks",
-    text: "When a package install in a sandboxed task changes the repo's git hooks, the error names them, and End task shows them with Accept these settings, so the task can end.",
-    show: { place: { kind: "view", view: "sessions" } },
   },
   {
     id: "tips",

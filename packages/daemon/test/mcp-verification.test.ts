@@ -122,7 +122,7 @@ describe.skipIf(process.versions.bun === undefined)("verify_task (real worktree 
       const { delivery } = await daemon.post(verificationApi.fixTests, { task: task.id, runId: verification.runId, failure: null });
       expect(["typed", "queued"]).toContain(delivery);
       const asked = daemon.facade.agents.sessions().sessions.find((s) => s.id === session);
-      expect(asked?.readRequest?.prompt).toContain("The user asks you to fix tests that failed in your task's last verification");
+      expect(asked?.readRequest?.prompt).toContain("The user asks you to fix tests that failed in your task's worktree");
       const read = GetReviewCommentsResult.parse((await client.callTool({ name: "get_review_comments", arguments: {} })).structuredContent);
       expect(read.testFix).toEqual({ runId: verification.runId, outdated: false, failures: verification.failures, otherFailures: 0 });
       // Read once: a second call has nothing.

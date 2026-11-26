@@ -53,6 +53,7 @@ import { type MiseSnapshot, miseConfigChanges, miseConfigDigest, readMiseConfig,
 import { planFirstMessage } from "./task-plan.ts";
 import { freeTaskPort, withTaskPorts } from "./task-port.ts";
 import { folderSize, lastActivity } from "./task-worktrees.ts";
+import { writtenSince } from "./written-since.ts";
 
 /**
  * Agent tasks (§4.4, ADR-31): a prompt for Copilot CLI in its own worktree on a new branch from the repo's default
@@ -1093,6 +1094,14 @@ export class AgentTasks {
   /** The fingerprint of what the task's worktree holds (ADR-209), for a verification to tell when its verdict is outdated. */
   fingerprint(id: string): Promise<string> {
     return this.#readWorktree(id, (task) => this.#deps.vcs.worktreeFingerprint(task.worktree, task.base));
+  }
+
+  /** Whether a file the task changed was written after `sinceMs` (ADR-304), for the "Tests" tab's note on old reports. */
+  changedSince(id: string, sinceMs: number): Promise<boolean> {
+    return this.#readWorktree(id, async (task) => {
+      const { paths } = await this.#deps.vcs.changedPaths(task.worktree, task.base);
+      return writtenSince(task.worktree, paths, sinceMs);
+    });
   }
 
   /** A git read of the task's worktree, which ending the task waits for before it deletes the worktree. */

@@ -26,9 +26,12 @@ export interface ReportFailure {
 export interface JunitReport {
   counts: TestCounts;
   failures: ReportFailure[];
-  /** Every test case in report order. */
-  cases: TestCase[];
+  /** Every test case in report order, with its time; failed ones in the order of `failures`. */
+  cases: TimedTestCase[];
 }
+
+/** A test case with its time in seconds, `null` when the report has none. */
+type TimedTestCase = TestCase & { timeSeconds: number | null };
 
 type CaseNames = { suite: string; className: string | null; name: string; timeSeconds: number | null };
 type Outcome = ({ kind: "passed" } & CaseNames) | ({ kind: "skipped" } & CaseNames) | ReportFailure;
@@ -77,11 +80,11 @@ function collectSuite(suite: XmlElement, outcomes: Outcome[]): void {
   }
 }
 
-function caseOf(outcome: Outcome): TestCase {
-  const { suite, className, name } = outcome;
+function caseOf(outcome: Outcome): TimedTestCase {
+  const { suite, className, name, timeSeconds } = outcome;
   if (outcome.kind === "passed" || outcome.kind === "skipped")
-    return { suite, className, name, kind: outcome.kind, type: null, message: null };
-  return { suite, className, name, kind: outcome.kind, type: outcome.type, message: outcome.message };
+    return { suite, className, name, kind: outcome.kind, type: null, message: null, timeSeconds };
+  return { suite, className, name, kind: outcome.kind, type: outcome.type, message: outcome.message, timeSeconds };
 }
 
 function outcomeOf(testCase: XmlElement, suite: string): Outcome {

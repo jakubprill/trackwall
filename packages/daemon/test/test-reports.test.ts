@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { TASK_TESTS_MAX_CASES, TASK_TESTS_MAX_FAILURES } from "@trackwall/protocol";
 import { TestReports } from "../src/modules/test-results/test-reports.ts";
 import { SLOW_TEST_TIMEOUT_MS } from "./support/test-timeouts.ts";
 
@@ -26,6 +27,8 @@ function testResults(repoDir: string, worktrees: Record<string, string> = {}) {
         if (worktree === undefined) throw new Error(`no task ${id}`);
         return { worktree };
       },
+      taskChangedSince: async () => false,
+      askToFixTests: () => "queued",
     },
     logs: { mask: (text) => text.replaceAll("abcdefgh12345", "***") },
     env: async () => ({}),
@@ -170,4 +173,37 @@ describe("test results from the reports in a checkout", () => {
       code: "not_found",
     });
   });
+});
+
+describe("the tests of a task's worktree for its Tests tab (ADR-304)", () => {
+  test("masks secrets in test names, as in messages", async () => {
+    const worktree = checkout({
+      "target/surefire-reports/TEST-a.LoginTest.xml": `<testsuite name="a.LoginTest"><testcase name="logsIn(abcdefgh12345)" classname="a.LoginTest"/></testsuite>`,
+    });
+
+    const tests = await testResults(worktree, { t1: worktree }).taskTests("t1");
+
+    expect(tests.cases.map((c) => c.name)).toEqual(["logsIn(***)"]);
+  });
+
+  test(
+    "a list too long to send keeps every failed test and details the first ones",
+    async () => {
+      const cases = (count: number, body: string) =>
+        Array.from({ length: count }, (_, i) => `<testcase name="t${i}" classname="a.BigTest">${body}</testcase>`).join("");
+      const worktree = checkout({
+        "target/surefire-reports/TEST-a.BigTest.xml": `<testsuite name="a.BigTest">${cases(TASK_TESTS_MAX_CASES, "")}${cases(TASK_TESTS_MAX_FAILURES + 1, `<failure message="no">x</failure>`)}</testsuite>`,
+      });
+
+      const tests = await testResults(worktree, { t1: worktree }).taskTests("t1");
+
+      expect(tests.totals.tests).toBe(TASK_TESTS_MAX_CASES + TASK_TESTS_MAX_FAILURES + 1);
+      expect(tests.cases).toHaveLength(TASK_TESTS_MAX_CASES);
+      expect(tests.cases.filter((c) => c.kind === "failure")).toHaveLength(TASK_TESTS_MAX_FAILURES + 1);
+      expect(tests.failures).toHaveLength(TASK_TESTS_MAX_FAILURES);
+      expect(tests.cases[TASK_TESTS_MAX_FAILURES]?.failure).toBeNull();
+      expect(tests.truncated).toBe(true);
+    },
+    SLOW_TEST_TIMEOUT_MS,
+  );
 });

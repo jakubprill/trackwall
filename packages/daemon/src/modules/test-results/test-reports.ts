@@ -1,28 +1,32 @@
 import { readFile } from "node:fs/promises";
 import {
+  type PromptDelivery,
   REPRODUCTION_FAILURE_MAX_CHARS,
-  TEST_FAILURE_HEAD_LINES,
-  TEST_FAILURE_LINE_MAX_CHARS,
-  TEST_FAILURE_MESSAGE_MAX_CHARS,
+  type TaskTestRef,
+  type TaskTests,
   TEST_RESULTS_MAX_FAILURES,
   TEST_RESULTS_MAX_PROBLEMS,
   TEST_RESULTS_MAX_REPORTS,
   type TestCase,
   type TestFailure,
+  type TestFix,
   type TestReport,
   type TestReportProblem,
   type TestResults,
 } from "@trackwall/protocol";
 import { DomainError, messageOf } from "../../infra/errors.ts";
 import { mapLimit } from "../../infra/map-limit.ts";
-import { addCounts, emptyCounts, type JunitReport, parseJunitReport, type ReportFailure } from "./junit-report.ts";
+import { addCounts, emptyCounts, parseJunitReport } from "./junit-report.ts";
+import { forAgent, type Mask, type ReadReport } from "./report-failure.ts";
 import { findReportFiles, type ReportFile } from "./report-files.ts";
+import { tabTestFix, taskTestsOf } from "./task-tests.ts";
 
 /**
  * The `test-results` module (§4, §4.9, ADR-60): the JUnit XML reports a test run left in a repo root or a task's
  * worktree, read on request and summed up for an agent, so it learns which tests failed and why without scrolling a
  * Gradle or Maven log. It runs nothing and writes nothing; the reports are whatever the build tools wrote last, so
- * every report carries its modification time and `since` leaves out those from earlier runs. Every text from a
+ * every report carries its modification time and `since` leaves out those from earlier runs. The tests of a task's
+ * worktree also go to its "Tests" tab (ADR-304), and a failed one from there to the task's agent as a test fix. Every text from a
  * report is masked like a log line (§4.2) before it is cut, because a test can print a secret it read.
  */
 
@@ -31,9 +35,14 @@ interface TestReportsRepos {
   repoPath(id: string): Promise<string>;
 }
 
-/** What the module needs from `agents`: a task's worktree (`not_found` for an unknown or ended task). */
+/**
+ * What the module needs from `agents`: a task's worktree (`not_found` for an unknown or ended task), whether a file the
+ * task changed was written after a moment, and handing the user's test fix to the task's agent (ADR-304).
+ */
 interface TestReportsTasks {
   task(id: string): { worktree: string };
+  taskChangedSince(id: string, sinceMs: number): Promise<boolean>;
+  askToFixTests(id: string, fix: TestFix): PromptDelivery;
 }
 
 /** What the module needs from `logs`: masking secret values the way log lines are masked. */
@@ -61,11 +70,6 @@ export interface TestReportsTarget {
 /** A larger report is a log captured into `system-out`, not test results worth parsing in the daemon's thread. */
 const MAX_REPORT_BYTES = 20 * 1024 * 1024;
 const READ_CONCURRENCY = 8;
-/** The line that starts a cause in a Java stack trace. */
-const CAUSED_BY = /^\s*Caused by:/;
-
-type ReadReport = { file: ReportFile; report: JunitReport } | { file: ReportFile; problem: string };
-type Mask = (text: string) => string;
 
 export class TestReports {
   readonly #deps: TestReportsDeps;
@@ -77,13 +81,8 @@ export class TestReports {
   /** The reports under the target, newest first; only those written at or after `since` (ISO 8601) when it is given. */
   async results(target: TestReportsTarget, since: string | undefined): Promise<TestResults> {
     const dir = await this.#dir(target);
-    const found = await findReportFiles(dir, since === undefined ? Number.NEGATIVE_INFINITY : Date.parse(since)).catch((err: unknown) => {
-      throw new DomainError("not_found", `cannot read ${dir}: ${messageOf(err)}`);
-    });
-    const files = found.files.sort((a, b) => b.mtimeMs - a.mtimeMs || a.path.localeCompare(b.path));
-    const read = await mapLimit(files, READ_CONCURRENCY, readReport);
-    const env = await this.#deps.env();
-    const summary = summarize(read, (text) => this.#deps.logs.mask(text, env));
+    const { found, read } = await this.#readNewestFirst(dir, since === undefined ? Number.NEGATIVE_INFINITY : Date.parse(since));
+    const summary = summarize(read, await this.#mask());
     return { dir, ...summary, earlierReports: found.earlier, truncated: found.truncated || summary.truncated };
   }
 
@@ -95,13 +94,43 @@ export class TestReports {
   async casesIn(dir: string, since: string): Promise<{ cases: TestCase[]; unread: number; truncated: boolean }> {
     const found = await findReportFiles(dir, Date.parse(since));
     const read = await mapLimit(found.files, READ_CONCURRENCY, readReport);
-    const env = await this.#deps.env();
-    const mask: Mask = (text) => this.#deps.logs.mask(text, env);
+    const mask = await this.#mask();
     const cut = (text: string | null) => (text === null ? null : mask(text).slice(0, REPRODUCTION_FAILURE_MAX_CHARS));
     const cases = read.flatMap((entry) =>
-      "problem" in entry ? [] : entry.report.cases.map((c) => ({ ...c, type: cut(c.type), message: cut(c.message) })),
+      "problem" in entry
+        ? []
+        : entry.report.cases.map(({ timeSeconds: _, ...c }) => ({ ...c, type: cut(c.type), message: cut(c.message) })),
     );
     return { cases, unread: read.filter((entry) => "problem" in entry).length, truncated: found.truncated };
+  }
+
+  /** Every test of the reports in a task's worktree, for its "Tests" tab (ADR-304). */
+  async taskTests(task: string): Promise<TaskTests> {
+    const { found, read } = await this.#readNewestFirst(this.#deps.tasks.task(task).worktree, Number.NEGATIVE_INFINITY);
+    const tests = taskTestsOf(read, await this.#mask());
+    const changedAfter = tests.newestReportAt !== null && (await this.#deps.tasks.taskChangedSince(task, Date.parse(tests.newestReportAt)));
+    return { ...tests, changedAfter, truncated: found.truncated || tests.truncated };
+  }
+
+  /** Hands failed tests of a task's reports to its agent as a test fix (ADR-304): the one named, or the first ones. */
+  async fixTests(task: string, test: TaskTestRef | null): Promise<{ delivery: PromptDelivery }> {
+    const fix = tabTestFix(await this.taskTests(task), test);
+    return { delivery: this.#deps.tasks.askToFixTests(task, fix) };
+  }
+
+  /** The reports under `dir` written at or after `sinceMs`, read, newest first; a missing `dir` is `not_found`. */
+  async #readNewestFirst(dir: string, sinceMs: number) {
+    const found = await findReportFiles(dir, sinceMs).catch((err: unknown) => {
+      throw new DomainError("not_found", `cannot read ${dir}: ${messageOf(err)}`);
+    });
+    const files = found.files.sort((a, b) => b.mtimeMs - a.mtimeMs || a.path.localeCompare(b.path));
+    return { found, read: await mapLimit(files, READ_CONCURRENCY, readReport) };
+  }
+
+  /** Masking secret values of the user's environment like a log line (§4.2). */
+  async #mask(): Promise<Mask> {
+    const env = await this.#deps.env();
+    return (text) => this.#deps.logs.mask(text, env);
   }
 
   async #dir({ repo, task }: TestReportsTarget): Promise<string> {
@@ -143,29 +172,4 @@ function summarize(read: readonly ReadReport[], mask: Mask) {
     failures: failures.slice(0, TEST_RESULTS_MAX_FAILURES),
     problems: problems.slice(0, TEST_RESULTS_MAX_PROBLEMS),
   };
-}
-
-/** A failed test for an agent: every text masked first, then cut, so a cut never leaves half a secret unmasked. */
-function forAgent({ stack, ...failure }: ReportFailure, report: string, mask: Mask): TestFailure {
-  const masked = (text: string | null) => (text === null ? null : mask(text));
-  return {
-    ...failure,
-    report,
-    suite: mask(failure.suite),
-    className: masked(failure.className),
-    name: mask(failure.name),
-    type: masked(failure.type),
-    message: masked(failure.message)?.slice(0, TEST_FAILURE_MESSAGE_MAX_CHARS) ?? null,
-    ...trimStack(mask(stack)),
-  };
-}
-
-/**
- * The start of a stack trace and every `Caused by` with the frame after it, each line cut: the thrown exception and
- * its root cause are what an agent needs, the frames of the test framework in between are not.
- */
-export function trimStack(text: string): { lines: string[]; omittedLines: number } {
-  const all = text.split(/\r?\n/).filter((line) => line.trim() !== "");
-  const kept = all.filter((line, i) => i < TEST_FAILURE_HEAD_LINES || CAUSED_BY.test(line) || CAUSED_BY.test(all[i - 1] ?? ""));
-  return { lines: kept.map((line) => line.slice(0, TEST_FAILURE_LINE_MAX_CHARS)), omittedLines: all.length - kept.length };
 }

@@ -603,9 +603,13 @@ _Avoid_: CI, build (a build is a mise task), checks
 The user's request to a task's agent to fix the failed pipeline of the task's merge request, with the end of the failed jobs' logs. Queued like a review and read with `get_review_comments` (ADR-197); the fix goes on the same task branch, so the merge request gets it with the next push.
 _Avoid_: retry, rerun (that is the repo host's button), fix task (no new task is made)
 
-**Test fix** (`TestFix`, `verification/fix-tests`, "Fix failed tests" and "Fix this" in a task's Verification section):
-The user's request to a task's agent to fix failed tests of the task's last verification, one test or all it kept, with each test's message and stack trace from the test report. Queued like a review and read with `get_review_comments` (ADR-302).
+**Test fix** (`TestFix`, `verification/fix-tests` and `task-tests/fix-tests`, "Fix failed tests" and "Fix this" in a task's Verification section and its "Tests" tab):
+The user's request to a task's agent to fix failed tests of the task's last verification or of the test reports in its worktree, one test or the first ones, with each test's message and stack trace from the test report. Queued like a review and read with `get_review_comments` (ADR-302, ADR-304).
 _Avoid_: retry (that is a new task on another model, ADR-233), rerun, verify again
+
+**Task tests** (`TaskTests`, `task-tests/get`, the "Tests" tab of a task):
+Every test case of the JUnit reports in a task's worktree, whichever run wrote them (Verify or the agent's own), with its outcome; the tab lists the failed ones by default, the skipped or all of them on request, by class, without pages (ADR-304).
+_Avoid_: test results (that is `get_test_results` for an agent, ADR-60), test run, test report (one file)
 
 **Merge request thread** (`MergeRequestThread`, `merge-requests/threads`, "Read threads" under an open merge request in the task panel):
 An unresolved thread of a task's merge request on the repo host: a reviewer's comment on a line, a file or the merge request as a whole, with the replies under it (a GitLab discussion that can be resolved, a GitHub review thread). The threads the user picks go to the task's agent with "Send to agent" as **merge request comments** (`MergeRequestComments`), queued like a review and read with `get_review_comments` (ADR-256).
