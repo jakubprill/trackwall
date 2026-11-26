@@ -33,7 +33,8 @@ export interface WhatsNewEntry {
 /**
  * The changes worth a look, newest first. A feature a user should notice after an update adds its entry at the top in
  * the same PR (AGENTS.md), and the oldest entries go when the list would hold more than `WHATS_NEW_MOST`: a computer
- * that skipped that many changes reads the release notes.
+ * that skipped that many changes reads the release notes. "Tips" stays last: it is the entry whose Show brings back a
+ * tip, which `tips.e2e.ts` checks, so the list always has one.
  */
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
   {
@@ -67,10 +68,10 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     show: { place: { kind: "settings", category: "workspace" } },
   },
   {
-    id: "sync-main-in-new-task",
-    title: "Sync main in the New task form",
-    text: "When a repo's main is behind the server, the New task form says so above Create task and offers Sync main, so the task starts from the newest code.",
-    show: { place: { kind: "new-session" } },
+    id: "tips",
+    title: "Tips",
+    text: "A tip explains a feature where you meet it for the first time, such as Own worktree in the New session form.",
+    show: { place: { kind: "new-session" }, tip: "own-worktree" },
   },
 ];
 
