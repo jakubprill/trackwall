@@ -5,13 +5,14 @@ import {
   REVIEW_UNREAD_MAX,
   ReviewComment,
   TaskId,
+  TestFix,
 } from "@trackwall/protocol";
 import { z } from "zod";
 import { DomainError } from "../../infra/errors.ts";
 
 /**
  * Review comments the user sent on a task's changes and its agent has not read yet (ADR-62), per task, oldest first,
- * the user's latest pipeline fix (ADR-197) and the merge request threads the user handed over (ADR-256), which
+ * the user's latest pipeline fix (ADR-197) and test fix (ADR-302), and the merge request threads the user handed over (ADR-256), which
  * `get_review_comments` returns with them.
  * Since ADR-115 they outlive a daemon restart in `agent-queues.json` (`stored`, `restore`), so the resumed task session
  * reads them; every change is reported to `changed`, which writes the file. A comment counts as read once `take`
@@ -19,8 +20,8 @@ import { DomainError } from "../../infra/errors.ts";
  */
 
 /**
- * What `agent-queues.json` keeps of the reviews: the unread comments of each task, its unread pipeline fix and its
- * unread merge request comments.
+ * What `agent-queues.json` keeps of the reviews: the unread comments of each task, its unread pipeline fix and test
+ * fix, and its unread merge request comments.
  */
 export const StoredReviews = z.array(
   z.object({
@@ -28,6 +29,8 @@ export const StoredReviews = z.array(
     comments: z.array(ReviewComment).max(REVIEW_UNREAD_MAX),
     // A file from before ADR-197 has none.
     pipelineFix: PipelineFix.nullable().default(null),
+    // A file from before ADR-302 has none.
+    testFix: TestFix.nullable().default(null),
     // A file from before ADR-256 has none.
     mergeRequestComments: MergeRequestComments.nullable().default(null),
   }),
@@ -38,6 +41,7 @@ export type StoredReviews = z.infer<typeof StoredReviews>;
 export interface UnreadReview {
   comments: ReviewComment[];
   pipelineFix: PipelineFix | null;
+  testFix: TestFix | null;
   mergeRequestComments: MergeRequestComments | null;
 }
 
@@ -80,6 +84,11 @@ export class TaskReviews {
     this.#update(task, { pipelineFix: fix });
   }
 
+  /** The user's request to fix failed tests; it replaces an unread one, which came from the same or an older verification. */
+  fixTests(task: string, fix: TestFix): void {
+    this.#update(task, { testFix: fix });
+  }
+
   /**
    * Merge request threads the user handed over (ADR-256), joined with the unread ones by thread: a thread sent again
    * replaces its older copy, and a merge request other than the one before (the branch got a new one) starts afresh.
@@ -106,6 +115,10 @@ export class TaskReviews {
     return this.#of(task).pipelineFix !== null;
   }
 
+  testFixUnread(task: string): boolean {
+    return this.#of(task).testFix !== null;
+  }
+
   threadsUnread(task: string): boolean {
     return this.#of(task).mergeRequestComments !== null;
   }
@@ -118,7 +131,7 @@ export class TaskReviews {
   }
 
   #of(task: string): UnreadReview {
-    return this.#unread.get(task) ?? { comments: [], pipelineFix: null, mergeRequestComments: null };
+    return this.#unread.get(task) ?? { comments: [], pipelineFix: null, testFix: null, mergeRequestComments: null };
   }
 
   #update(task: string, change: Partial<UnreadReview>): void {
@@ -127,6 +140,7 @@ export class TaskReviews {
   }
 }
 
-function isEmpty(review: UnreadReview): boolean {
-  return review.comments.length === 0 && review.pipelineFix === null && review.mergeRequestComments === null;
+/** Nothing of the review waits: no comment, no fix, no thread. */
+export function isEmpty(review: UnreadReview): boolean {
+  return review.comments.length === 0 && review.pipelineFix === null && review.testFix === null && review.mergeRequestComments === null;
 }

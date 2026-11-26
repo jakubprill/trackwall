@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { mcpTools } from "@trackwall/protocol";
 import { Agents } from "../src/modules/agents/agents.ts";
 import { sessionHooksFile } from "../src/modules/agents/session-launcher.ts";
 import { systemTempFolder, Vcs } from "../src/modules/vcs/vcs.ts";
@@ -94,7 +95,7 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     await agents.stop(started.id);
   }, 60_000);
 
-  test("a session in a folder Copilot CLI does not trust waits for you with its folder trust dialog, and the answer from outside the terminal starts it", async () => {
+  test("a session in a folder Copilot CLI does not trust waits for you with its folder trust dialog, the answer from outside the terminal starts it, and No ends it as done", async () => {
     const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
     const { agents, procs } = makeAgents({ shop: repoDir }, undefined, null, undefined, {
       ...process.env,
@@ -122,7 +123,9 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     window.attachment.input("\u001b");
     const ended = await waitFor(agents, refused.id, (s) => s.run.kind === "exited", "the end after No");
     expect(ended.run).toMatchObject({ kind: "exited", exitCode: 1 });
-    expect(ended.state).toMatchObject({ state: "Done", source: "hook", reason: "hook sessionEnd user_exit" });
+    // Copilot CLI 1.0.115 quits without a hook: "No" is the user's answer, not an error that waits for them (ADR-300).
+    expect(ended.state).toMatchObject({ state: "Done", source: "screen", reason: "screen folder trust refused" });
+    expect(ended.needsAttention).toBe(false);
     window.attachment.detach();
   }, 60_000);
 
@@ -243,6 +246,21 @@ describe.skipIf(process.versions.bun === undefined)("Copilot CLI sessions (real 
     expect(window.text()).toContain("Argument: --allow-tool=shell(mvn:*)");
     expect(window.text()).toContain("Argument: --allow-tool=write");
     expect(window.text()).toContain("Argument: --deny-tool=shell(git push)");
+    window.attachment.detach();
+    await agents.stop(started.id);
+  }, 60_000);
+
+  test("a session starts with Trackwall's tools that only read allowed by name, and not those that change something, since Copilot CLI 1.0.115 asks for MCP tools with readOnlyHint (ADR-300)", async () => {
+    const repoDir = mkdtempSync(join(tmpdir(), "trackwall-repo-"));
+    const { agents, procs } = makeAgents({ shop: repoDir });
+    cleanups.push(() => procs.stopAll());
+
+    const started = await agents.start("shop");
+    const window = viewer(agents, started.id);
+    await waitFor(agents, started.id, () => window.text().includes("Trackwall tools allowed"), "the allowed Trackwall tools");
+
+    const readTools = Object.values(mcpTools).filter((tool) => tool.readOnly).length;
+    expect(window.text()).toContain(`Trackwall tools allowed: ${readTools} of ${readTools} that read; that change: none`);
     window.attachment.detach();
     await agents.stop(started.id);
   }, 60_000);

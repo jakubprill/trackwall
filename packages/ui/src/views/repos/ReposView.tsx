@@ -218,7 +218,7 @@ export function ReposView({
   );
 }
 
-/** The repo the user just removed (ADR-300) and where its folder went, said above the panel until dismissed or a repo opens. */
+/** The repo the user just removed (ADR-303) and where its folder went, said above the panel until dismissed or a repo opens. */
 interface RemovedNotice {
   repo: string;
   movedTo: string;

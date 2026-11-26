@@ -51,6 +51,15 @@ function byokEnv(model: ScriptedModel, dirs: { home: string; projects: string })
 
 const TOKEN = "c".repeat(43);
 
+/**
+ * Where the daemon's state directory and projects folder are made: outside the system's temporary folder, which
+ * Copilot CLI's sandbox lets every command write (ADR-181), as a user's are. Copilot CLI 1.0.115 keeps the git
+ * directories it granted in a file in `COPILOT_HOME` and grants none when a sandboxed command could write that file
+ * (ADR-300), so a test home in the temporary folder would see a commit in a task's worktree refused. Emptied by
+ * `scripts/contract.ts` at the start of a run.
+ */
+export const CONTRACT_DIRS = fileURLToPath(new URL("../../node_modules/.cache/contract-dirs", import.meta.url));
+
 const ACP_TAP = fileURLToPath(new URL("./acp-tap.ts", import.meta.url));
 
 /**
@@ -69,8 +78,10 @@ export async function startRealCopilotDaemon(
   const command = acpTap === undefined ? [copilot] : [process.execPath, ACP_TAP, acpTap, copilot];
   const userEnv = (dirs: { home: string; projects: string }) =>
     Object.fromEntries(Object.entries({ ...byokEnv(model, dirs), ...env }).filter(([, value]) => value !== undefined));
+  mkdirSync(CONTRACT_DIRS, { recursive: true });
   const api = await startSessionApi(TOKEN, {
     ...ONE_REPO,
+    dirsParent: CONTRACT_DIRS,
     ...options,
     copilot: { command, env: userEnv },
   });

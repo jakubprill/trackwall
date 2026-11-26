@@ -58,7 +58,7 @@ export function RepoDetail({
   /** Running mise tasks from the events; `undefined` for a moment after a connection change, and polled until then. */
   runningLive: LiveFeed<RunningMiseTask[]> | undefined;
   onOpenInSessions: (selection: SessionSelection) => void;
-  /** The repo's folder moved out of the projects folder (ADR-300), to `movedTo`. */
+  /** The repo's folder moved out of the projects folder (ADR-303), to `movedTo`. */
   onRemoved: (movedTo: string) => void;
 }) {
   const [tab, setTab] = useState(initialTab);
@@ -127,7 +127,7 @@ export function RepoDetail({
   );
 }
 
-/** The repo's name, paths and actions, and under them the removal panel once "Remove…" opens it (ADR-300). */
+/** The repo's name, paths and actions, and under them the removal panel once "Remove…" opens it (ADR-303). */
 function RepoHeader({
   conn,
   repo,
@@ -179,7 +179,7 @@ function Loaded({ remote, children }: { remote: RemoteHandle<RepoOverview>; chil
  * Opens the repo in VS Code or in the system's folder app (ADR-51); the daemon does it, so it works in the browser too,
  * except when the daemon has no desktop (ADR-120). In a container the page opens VS Code in it (ADR-121), and the
  * desktop app shows the folder through the projects folder on this computer, when the user has set it (ADR-131).
- * "Remove…" comes last and only opens the removal panel (ADR-300).
+ * "Remove…" comes last and only opens the removal panel (ADR-303).
  */
 function RepoActions({
   conn,
@@ -190,7 +190,7 @@ function RepoActions({
   conn: Connection;
   repo: Repo;
   projectsDir: string | null | undefined;
-  /** Opens the removal panel (ADR-300); one click removes nothing. */
+  /** Opens the removal panel (ADR-303); one click removes nothing. */
   onRemove: () => void;
 }) {
   const [error, setError] = useState<string>();

@@ -2,7 +2,7 @@ import { countLabel, type RepoStatus, type RunningMiseTask, type SessionList, tr
 import { PROPOSAL_ITEM_KEY, type RepoActivityItem, repoActivity } from "./repo-activity.ts";
 
 /**
- * Removing a repo from the Repos view (ADR-300): what stops it, whether the typed name confirms it, and what the folder
+ * Removing a repo from the Repos view (ADR-303): what stops it, whether the typed name confirms it, and what the folder
  * takes with it that is not on the server. The daemon checks the same and refuses a repo with work in it; the panel only
  * says so first, with a way to each piece of work.
  */

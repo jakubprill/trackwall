@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Failed tests in a verification</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+body{background:var(--background);color:var(--foreground);font-family:var(--font-sans);margin:0;padding:24px;display:flex;flex-direction:column;gap:32px}
+.cap{font-size:15px;font-weight:600;margin:0 0 8px}
+.cap span{color:var(--muted-foreground);font-weight:400;font-size:13px}
+.win{width:1000px;border:1px solid var(--border);border-radius:6px;background:var(--background);overflow:hidden;font-size:12px}
+.hud{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground)}
+.head{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--border)}
+.btn{border:1px solid var(--border);border-radius:4px;padding:3px 10px;white-space:nowrap}
+.btn.p{border-color:var(--primary);color:var(--primary)}
+.dim{color:var(--muted-foreground)}
+.mono{font-family:var(--font-mono)}
+.bad{color:var(--destructive)} .ok{color:var(--success)} .warn{color:var(--warning)}
+.sec{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
+.row{display:flex;align-items:center;gap:10px}
+.pill{border-radius:999px;padding:1px 8px;font-family:var(--font-mono);font-size:11px;background:color-mix(in oklch,var(--destructive) 15%,transparent);color:var(--destructive)}
+.sp{flex:1}
+.tabs{display:flex;gap:18px;padding:6px 14px 0;border-bottom:1px solid var(--border)}
+.tabs span{padding-bottom:5px;color:var(--muted-foreground)}
+.tabs .on{border-bottom:2px solid var(--primary);color:var(--foreground)}
+.term{background:oklch(0.11 0.004 285);font-family:var(--font-mono);font-size:11px;padding:8px 12px;color:oklch(0.85 0.01 230);height:70px}
+.trace{background:var(--muted);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-family:var(--font-mono);font-size:11px;line-height:1.55}
+.trace a{color:var(--primary);text-decoration:underline;text-underline-offset:2px}
+.trace .lib{color:var(--muted-foreground)}
+.ft{border:1px solid var(--border);border-radius:4px;padding:6px 8px;display:flex;flex-direction:column;gap:6px}
+.ft.open{background:var(--card)}
+.chev{color:var(--muted-foreground);width:10px;display:inline-block}
+.split{display:grid;grid-template-columns:330px 1fr;height:390px}
+.tree{border-right:1px solid var(--border);padding:8px 0;overflow:hidden}
+.tree .n{padding:3px 12px;display:flex;gap:8px;align-items:center;white-space:nowrap}
+.tree .n.c{padding-left:28px}
+.tree .n.sel{background:var(--accent)}
+.t{margin-left:auto;color:var(--muted-foreground);font-family:var(--font-mono);font-size:11px}
+.filters{display:flex;gap:6px;padding:4px 12px 8px;border-bottom:1px solid var(--border);margin-bottom:6px}
+.f{border:1px solid var(--border);border-radius:999px;padding:1px 8px}
+.f.on{background:var(--secondary);color:var(--primary)}
+.detail{padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.ic{display:inline-block;width:8px;height:8px;border-radius:50%}
+.ic.b{background:var(--destructive)} .ic.g{background:var(--success)} .ic.s{background:var(--muted-foreground)}
+.diff{font-family:var(--font-mono);font-size:11px;display:grid;grid-template-columns:70px 1fr;gap:2px 8px}
+.exp{color:var(--success)} .act{color:var(--destructive)}
+</style>
+
+<div id="today"><p class="cap">Before <span>— the Verification section of a task: five failed tests at most, each a name and two lines of message</span></p>
+<div class="win">
+ <div class="head"><b>orders-api</b><span class="dim">Fix discount rounding for multi-currency carts</span><span class="sp"></span><span class="btn">Verify</span><span class="btn">Review</span></div>
+ <div class="sec">
+  <div class="row"><span class="hud">Verification</span><span class="bad">● failed</span><span class="dim sp">mise task test · started 2 min ago · took 48 s</span><span class="btn">Log</span></div>
+  <div>412 tests · 3 failed · 1 error · 6 skipped</div>
+  <div class="dim" style="font-size:11px">mise task test exited with code 1</div>
+  <div class="mono bad" style="font-size:11px">DiscountCalculatorTest › appliesPercentDiscountInEur</div>
+  <div class="mono dim" style="font-size:11px">expected: &lt;90.00&gt; but was: &lt;89.99&gt;</div>
+  <div class="mono bad" style="font-size:11px">DiscountCalculatorTest › roundsHalfEvenForPln</div>
+  <div class="mono dim" style="font-size:11px">expected: &lt;12.35&gt; but was: &lt;12.34&gt;</div>
+  <div class="mono bad" style="font-size:11px">CartControllerIT › returnsTotalWithDiscount</div>
+  <div class="mono dim" style="font-size:11px">Status expected:&lt;200&gt; but was:&lt;500&gt;</div>
+  <div class="mono bad" style="font-size:11px">OrderRepositoryTest › savesOrderWithLines</div>
+  <div class="mono dim" style="font-size:11px">org.springframework.dao.DataIntegrityViolationException: could not execute statement; SQL [n/a]; constraint …</div>
+ </div>
+ <div class="tabs"><span class="on">Terminal</span><span>Shell</span><span>Changes</span><span>Rounds</span><span>Impact</span><span>MCP calls</span></div>
+ <div class="term">● The agent is working…</div>
+</div></div>
+
+<div id="a"><p class="cap">Variant A, chosen and built <span>— the same section, a test opens to expected and actual, its stack trace with links to the repo's files, and "Fix this"</span></p>
+<div class="win">
+ <div class="head"><b>orders-api</b><span class="dim">Fix discount rounding for multi-currency carts</span><span class="sp"></span><span class="btn">Verify</span><span class="btn">Review</span></div>
+ <div class="sec">
+  <div class="row"><span class="hud">Verification</span><span class="bad">● failed</span><span class="dim sp">mise task test · started 2 min ago · took 48 s</span><span class="btn">Log</span></div>
+  <div class="row"><span>412 tests · <span class="bad">3 failed · 1 error</span> · 6 skipped</span><span class="dim">in 4 classes of 2 modules</span><span class="sp"></span><span class="btn p">Fix failed tests</span></div>
+  <div class="ft open">
+   <div class="row"><span class="chev">▾</span><span class="mono bad">DiscountCalculatorTest › appliesPercentDiscountInEur</span><span class="pill">failure</span><span class="sp"></span><span class="dim mono">0.04 s</span><span class="btn">Fix this</span></div>
+   <div class="diff"><span class="dim">expected</span><span class="exp">90.00</span><span class="dim">actual</span><span class="act">89.99</span></div>
+   <div class="trace">org.opentest4j.AssertionFailedError: expected: &lt;90.00&gt; but was: &lt;89.99&gt;<br>
+    <span class="lib">&nbsp;&nbsp;at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:151) · 3 library frames</span><br>
+    &nbsp;&nbsp;at shop.pricing.<a>DiscountCalculatorTest.java:58</a> appliesPercentDiscountInEur<br>
+    &nbsp;&nbsp;at shop.pricing.<a>DiscountCalculator.java:41</a> apply<br>
+    <span class="lib">&nbsp;&nbsp;… 64 more lines in the report</span></div>
+  </div>
+  <div class="ft"><div class="row"><span class="chev">▸</span><span class="mono bad">DiscountCalculatorTest › roundsHalfEvenForPln</span><span class="pill">failure</span><span class="dim mono">expected 12.35, actual 12.34</span></div></div>
+  <div class="ft"><div class="row"><span class="chev">▸</span><span class="mono bad">CartControllerIT › returnsTotalWithDiscount</span><span class="pill">failure</span><span class="dim mono">Status expected:&lt;200&gt; but was:&lt;500&gt;</span></div></div>
+  <div class="ft"><div class="row"><span class="chev">▸</span><span class="mono bad">OrderRepositoryTest › savesOrderWithLines</span><span class="pill">error</span><span class="dim mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:520px">Caused by: org.h2.jdbc.JdbcSQLIntegrityConstraintViolationException: NULL not allowed for column "CURRENCY"</span></div></div>
+ </div>
+ <div class="tabs"><span class="on">Terminal</span><span>Shell</span><span>Changes</span><span>Rounds</span><span>Impact</span><span>MCP calls</span></div>
+ <div class="term">● The agent is working…</div>
+</div></div>
+
+<div id="b"><p class="cap">Variant B, not built <span>— a "Tests" tab: every test of the worktree's latest reports (from Verify and the agent's runs), a tree, filters, the slowest</span></p>
+<div class="win">
+ <div class="head"><b>orders-api</b><span class="dim">Fix discount rounding for multi-currency carts</span><span class="sp"></span><span class="btn">Verify</span><span class="btn">Review</span></div>
+ <div class="tabs"><span>Terminal</span><span>Shell</span><span>Changes</span><span class="on">Tests <span class="bad">4</span></span><span>Rounds</span><span>Impact</span><span>MCP calls</span></div>
+ <div class="row" style="padding:8px 14px;border-bottom:1px solid var(--border)"><span>412 tests · <span class="bad">3 failed · 1 error</span> · 6 skipped · 41.7 s</span><span class="dim">reports from 2 min ago (Verify)</span><span class="sp"></span><span class="btn">Slowest</span><span class="btn p">Fix failed tests</span></div>
+ <div class="split">
+  <div class="tree">
+   <div class="filters"><span class="f on">Failed 4</span><span class="f">Skipped 6</span><span class="f">All 412</span></div>
+   <div class="n"><span class="chev">▾</span><span class="hud">pricing</span></div>
+   <div class="n"><span class="chev">▾</span><span class="ic b"></span><span class="mono">DiscountCalculatorTest</span><span class="t">2/18</span></div>
+   <div class="n c sel"><span class="ic b"></span><span class="mono">appliesPercentDiscountInEur</span><span class="t">0.04 s</span></div>
+   <div class="n c"><span class="ic b"></span><span class="mono">roundsHalfEvenForPln</span><span class="t">0.01 s</span></div>
+   <div class="n"><span class="chev">▾</span><span class="hud">orders-app</span></div>
+   <div class="n"><span class="chev">▾</span><span class="ic b"></span><span class="mono">CartControllerIT</span><span class="t">1/9</span></div>
+   <div class="n c"><span class="ic b"></span><span class="mono">returnsTotalWithDiscount</span><span class="t">1.20 s</span></div>
+   <div class="n"><span class="chev">▾</span><span class="ic b"></span><span class="mono">OrderRepositoryTest</span><span class="t">1/12</span></div>
+   <div class="n c"><span class="ic b"></span><span class="mono">savesOrderWithLines</span><span class="t">0.31 s</span></div>
+  </div>
+  <div class="detail">
+   <div class="row"><span class="mono bad" style="font-size:13px">appliesPercentDiscountInEur</span><span class="pill">failure</span><span class="sp"></span><span class="btn">Open in VS Code</span><span class="btn">Fix this</span></div>
+   <div class="dim mono">shop.pricing.DiscountCalculatorTest · pricing/target/surefire-reports/TEST-shop.pricing.DiscountCalculatorTest.xml</div>
+   <div class="diff"><span class="dim">expected</span><span class="exp">90.00</span><span class="dim">actual</span><span class="act">89.99</span></div>
+   <div class="trace">org.opentest4j.AssertionFailedError: expected: &lt;90.00&gt; but was: &lt;89.99&gt;<br>
+    <span class="lib">&nbsp;&nbsp;at org.junit.jupiter.api.AssertionUtils.fail(AssertionUtils.java:151) · 3 library frames</span><br>
+    &nbsp;&nbsp;at shop.pricing.<a>DiscountCalculatorTest.java:58</a> appliesPercentDiscountInEur<br>
+    &nbsp;&nbsp;at shop.pricing.<a>DiscountCalculator.java:41</a> apply</div>
+   <div class="hud" style="margin-top:4px">Output of the test (system-out)</div>
+   <div class="trace dim">2026-11-25 14:02:11 DEBUG s.p.DiscountCalculator - rate=0.1 scale=2 mode=HALF_DOWN</div>
+  </div>
+ </div>
+</div></div>
+</body></html>

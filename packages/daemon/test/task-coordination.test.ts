@@ -652,6 +652,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 0,
         pipelineFix: false,
+        testFix: false,
         mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,
@@ -665,6 +666,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 2,
         pipelineFix: false,
+        testFix: false,
         mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,
@@ -680,6 +682,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 0,
         pipelineFix: false,
+        testFix: false,
         mergeRequestThreads: false,
         messages: 1,
         handoffMoved: false,
@@ -699,6 +702,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 1,
         pipelineFix: true,
+        testFix: false,
         mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,
@@ -718,6 +722,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 0,
         pipelineFix: true,
+        testFix: false,
         mergeRequestThreads: true,
         messages: 0,
         handoffMoved: false,
@@ -737,6 +742,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 0,
         pipelineFix: false,
+        testFix: false,
         mergeRequestThreads: false,
         messages: 0,
         handoffMoved: true,
@@ -755,6 +761,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 0,
         pipelineFix: false,
+        testFix: false,
         mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,
@@ -773,6 +780,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 1,
         pipelineFix: false,
+        testFix: false,
         mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,
@@ -792,6 +800,7 @@ describe("the prompt the daemon types for what waits", () => {
       readRequestPrompt({
         reviewComments: 0,
         pipelineFix: false,
+        testFix: false,
         mergeRequestThreads: false,
         messages: 0,
         handoffMoved: false,

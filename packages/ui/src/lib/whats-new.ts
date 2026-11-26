@@ -43,6 +43,12 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     show: { place: { kind: "view", view: "repos" } },
   },
   {
+    id: "failed-tests-open",
+    title: "Failed tests open to their stack trace",
+    text: "Click a failed test in a task's Verification to see what it expected, what it got and where in your code it failed, open that line in VS Code, and hand the test to the agent with Fix this.",
+    show: { place: { kind: "view", view: "sessions" } },
+  },
+  {
     id: "settings-in-the-store",
     title: "Settings in the workspace store",
     text: "Turn on Keep Trackwall and Copilot CLI settings in the store, and workspace.yaml and your Copilot CLI settings get a history in git, with the tokens in mcp-config.json masked, and a new container gets them back with Restore settings from the store.",
@@ -65,12 +71,6 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     title: "Sync main in the New task form",
     text: "When a repo's main is behind the server, the New task form says so above Create task and offers Sync main, so the task starts from the newest code.",
     show: { place: { kind: "new-session" } },
-  },
-  {
-    id: "tips",
-    title: "Tips",
-    text: "A tip explains a feature where you meet it for the first time, such as Own worktree in the New session form.",
-    show: { place: { kind: "new-session" }, tip: "own-worktree" },
   },
 ];
 

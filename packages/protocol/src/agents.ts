@@ -17,6 +17,7 @@ import { REVIEW_COMMENTS_MAX, ReviewComment } from "./review.ts";
 import { singleLine } from "./single-line.ts";
 import { TaskModel } from "./task-model.ts";
 import { TaskStateChange } from "./task-state.ts";
+import { TEST_FAILURE_LINE_MAX_CHARS } from "./test-results.ts";
 import { CommitHash, RepoId, SandboxSettings } from "./workspace.ts";
 
 /**
@@ -1030,6 +1031,10 @@ export type StartOptions = z.infer<typeof StartOptions>;
 const SessionRequest = z.object({ session: SessionId }).strict();
 const TaskRequest = z.object({ task: TaskId }).strict();
 
+/** The file of a stack trace frame in a task's worktree (ADR-302): an absolute path, and the frame's line when it has one. */
+export const TaskFrameFile = z.object({ path: z.string(), line: z.number().int().positive().nullable() });
+export type TaskFrameFile = z.infer<typeof TaskFrameFile>;
+
 /** A worktree fingerprint (ADR-209): a sha256 in hex. */
 const WorktreeFingerprint = z.string().regex(/^[0-9a-f]{64}$/);
 
@@ -1078,7 +1083,7 @@ export const TaskWorktreeSize = z.object({
 export type TaskWorktreeSize = z.infer<typeof TaskWorktreeSize>;
 const ProposalRequest = z.object({ proposal: TaskId }).strict();
 
-/** The repo to remove and its name as the user typed it to confirm (ADR-300); a mistyped name moves nothing. */
+/** The repo to remove and its name as the user typed it to confirm (ADR-303); a mistyped name moves nothing. */
 const RemoveRepoRequest = z.object({ repo: RepoId, confirmation: z.string().max(200) }).strict();
 
 /** Where the removed repo's folder went, inside `.trackwall/removed` of the projects folder (ADR-83). */
@@ -1273,6 +1278,18 @@ export const agentsApi = {
   sessionJavaNavigation: endpoint("session-java-navigation", SessionRequest, JavaNavigationStatus.nullable()),
   openTaskEditor: endpoint("open-task-editor", TaskRequest, Done),
   /**
+   * The file of one Java stack trace frame (`at shop.Cart.total(Cart.java:42)`, as `TestFailure.lines` has it) with the
+   * frame's line (ADR-302): the daemon finds it among the files git tracks in the task's worktree by the frame's package
+   * and file name, as for a task's stack trace (ADR-222), and never takes a path from the line itself. With `open` (a
+   * daemon with a desktop) it opens the file in VS Code at that line; a page of a daemon in a container opens it itself
+   * (ADR-121). `not_found` when no tracked file matches.
+   */
+  taskFrameFile: endpoint(
+    "task-frame-file",
+    TaskRequest.extend({ frame: z.string().min(1).max(TEST_FAILURE_LINE_MAX_CHARS), open: z.boolean() }),
+    TaskFrameFile,
+  ),
+  /**
    * A file of a session's conversation in VS Code at a line (ADR-107): `path` as a tool call names it, inside the
    * session's working directory.
    */
@@ -1394,7 +1411,7 @@ export const agentsApi = {
    */
   approveRepoRemoval: endpoint("approve-repo-removal", ProposalRequest, Done),
   /**
-   * The user removes a repo from the Repos view (ADR-300): `confirmation` is the repo's name as the user typed it and must
+   * The user removes a repo from the Repos view (ADR-303): `confirmation` is the repo's name as the user typed it and must
    * equal `repo`. The same checks and move as an approved removal (ADR-83); the proposals for the repo are rejected.
    */
   removeRepo: endpoint("remove-repo", RemoveRepoRequest, RemovedRepo),

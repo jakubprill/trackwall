@@ -9,7 +9,7 @@ import { notOnServer, removalConfirmed } from "@/lib/repo-removal";
 import { RepoActivityButton } from "./RepoActivityBar.tsx";
 
 /**
- * The question before a repo is removed from the Repos view (ADR-300): where its folder goes and that nothing is deleted,
+ * The question before a repo is removed from the Repos view (ADR-303): where its folder goes and that nothing is deleted,
  * what it takes along that is not on the server, the work that must end first, and the repo's name to type, as on
  * GitHub. "Remove repo" stays off until nothing blocks the removal and the name is typed exactly.
  */

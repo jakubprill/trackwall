@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { MergeRequestThread, PipelineFix, ReviewComment } from "@trackwall/protocol";
+import type { MergeRequestThread, PipelineFix, ReviewComment, TestFailure } from "@trackwall/protocol";
 import { StoredReviews, TaskReviews } from "../src/modules/agents/task-reviews.ts";
 
 const comment: ReviewComment = { path: "src/a.ts", side: "new", line: 3, code: "return 1;", text: "Return 2." };
@@ -30,7 +30,7 @@ describe("unread review comments of a task", () => {
     expect(reviews.add("t2", [comment])).toBe(1);
 
     expect(reviews.take("t1").comments).toHaveLength(3);
-    expect(reviews.take("t1")).toEqual({ comments: [], pipelineFix: null, mergeRequestComments: null });
+    expect(reviews.take("t1")).toEqual({ comments: [], pipelineFix: null, testFix: null, mergeRequestComments: null });
     expect(reviews.unread("t2")).toBe(1);
   });
 
@@ -51,13 +51,13 @@ describe("unread review comments of a task", () => {
     const before = new TaskReviews(() => changes.push("changed"));
     before.add(kept, [comment]);
     before.add(ended, [comment, comment]);
-    expect(before.take("unknown")).toEqual({ comments: [], pipelineFix: null, mergeRequestComments: null });
+    expect(before.take("unknown")).toEqual({ comments: [], pipelineFix: null, testFix: null, mergeRequestComments: null });
     expect(changes).toHaveLength(2);
 
     const after = new TaskReviews(() => {});
     after.restore(before.stored(), (task) => task === kept);
 
-    expect(after.take(kept)).toEqual({ comments: [comment], pipelineFix: null, mergeRequestComments: null });
+    expect(after.take(kept)).toEqual({ comments: [comment], pipelineFix: null, testFix: null, mergeRequestComments: null });
     expect(after.unread(ended)).toBe(0);
   });
 
@@ -68,7 +68,12 @@ describe("unread review comments of a task", () => {
     reviews.fixPipeline("t1", fix("b".repeat(40)));
 
     expect(reviews.pipelineFixUnread("t1")).toBe(true);
-    expect(reviews.take("t1")).toEqual({ comments: [comment], pipelineFix: fix("b".repeat(40)), mergeRequestComments: null });
+    expect(reviews.take("t1")).toEqual({
+      comments: [comment],
+      pipelineFix: fix("b".repeat(40)),
+      testFix: null,
+      mergeRequestComments: null,
+    });
     expect(reviews.pipelineFixUnread("t1")).toBe(false);
   });
 
@@ -79,11 +84,42 @@ describe("unread review comments of a task", () => {
 
     const after = new TaskReviews(() => {});
     after.restore(StoredReviews.parse(JSON.parse(JSON.stringify(before.stored()))), () => true);
-    expect(after.take(task)).toEqual({ comments: [], pipelineFix: fix("a".repeat(40)), mergeRequestComments: null });
+    expect(after.take(task)).toEqual({ comments: [], pipelineFix: fix("a".repeat(40)), testFix: null, mergeRequestComments: null });
 
     const old = new TaskReviews(() => {});
     old.restore(StoredReviews.parse([{ task, comments: [comment] }]), () => true);
-    expect(old.take(task)).toEqual({ comments: [comment], pipelineFix: null, mergeRequestComments: null });
+    expect(old.take(task)).toEqual({ comments: [comment], pipelineFix: null, testFix: null, mergeRequestComments: null });
+  });
+
+  test("a test fix waits with the comments, a newer one replaces it, and it outlives a daemon restart (ADR-302)", () => {
+    const task = "6f1d0a52-2c41-4a8e-9a3f-0c5a1b2d3e4f";
+    const failure: TestFailure = {
+      report: "target/surefire-reports/TEST-shop.CartTest.xml",
+      suite: "shop.CartTest",
+      className: "shop.CartTest",
+      name: "sums",
+      kind: "failure",
+      type: "org.opentest4j.AssertionFailedError",
+      message: "expected: <3> but was: <4>",
+      lines: ["\tat shop.CartTest.sums(CartTest.java:12)"],
+      omittedLines: 0,
+      timeSeconds: 0.1,
+    };
+    const before = new TaskReviews(() => {});
+    before.add(task, [comment]);
+    before.fixTests(task, { runId: "run-1", outdated: false, failures: [failure], otherFailures: 2 });
+    before.fixTests(task, { runId: "run-2", outdated: true, failures: [failure], otherFailures: 0 });
+    expect(before.testFixUnread(task)).toBe(true);
+
+    const after = new TaskReviews(() => {});
+    after.restore(StoredReviews.parse(JSON.parse(JSON.stringify(before.stored()))), () => true);
+    expect(after.take(task)).toEqual({
+      comments: [comment],
+      pipelineFix: null,
+      testFix: { runId: "run-2", outdated: true, failures: [failure], otherFailures: 0 },
+      mergeRequestComments: null,
+    });
+    expect(after.testFixUnread(task)).toBe(false);
   });
 
   test("merge request threads add up by thread until the agent reads them, a thread sent again replaces its copy (ADR-256)", () => {
@@ -95,6 +131,7 @@ describe("unread review comments of a task", () => {
     expect(reviews.take("t1")).toEqual({
       comments: [],
       pipelineFix: null,
+      testFix: null,
       mergeRequestComments: { mergeRequest: MR, threads: [thread("b2", "Add a test."), thread("a1", "Use a constant, please.")] },
     });
     expect(reviews.threadsUnread("t1")).toBe(false);

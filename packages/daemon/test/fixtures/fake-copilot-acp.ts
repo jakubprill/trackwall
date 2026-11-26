@@ -339,14 +339,19 @@ export function serveAcp(o: FakeAcpOptions): void {
     return existsSync(path) ? readFileSync(path, "utf8") : "";
   }
 
+  /**
+   * Like Copilot CLI 1.0.115, "Always allow" only where a session-wide approval is possible: not for a shell command on
+   * Windows, which is a PowerShell command there (the contract test).
+   */
   async function permission(sessionId: string, toolCallId: string, tool: FakeToolCall): Promise<boolean> {
+    const always = tool.kind !== "execute" || process.platform !== "win32";
     const answer = PermissionAnswer.parse(
       await ask("session/request_permission", {
         sessionId,
         toolCall: { toolCallId, ...tool, status: "pending" },
         options: [
           { optionId: "allow_once", kind: "allow_once", name: "Allow once" },
-          { optionId: "allow_always", kind: "allow_always", name: "Always allow" },
+          ...(always ? [{ optionId: "allow_always", kind: "allow_always", name: "Always allow" }] : []),
           { optionId: "reject_once", kind: "reject_once", name: "Deny" },
         ],
       }),

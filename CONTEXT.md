@@ -552,7 +552,7 @@ A change to the projects folder itself that no task can make, because a task wor
 _Avoid_: command, operation
 
 **Repo removal** (`TaskProposal.kind: "remove_repo"`, the `approve-repo-removal` and `remove-repo` actions, `TrackwallFolder` `removed`):
-The folder action that takes a repo out of the projects folder: "Remove repo" moves its folder into `.trackwall/removed` in the projects folder, where the user can move it back or delete it, once no session, task or process runs in it (ADR-83). A session proposes it, or the user starts it with "Remove…" in the repo's header and confirms it by typing the repo's name (ADR-300).
+The folder action that takes a repo out of the projects folder: "Remove repo" moves its folder into `.trackwall/removed` in the projects folder, where the user can move it back or delete it, once no session, task or process runs in it (ADR-83). A session proposes it, or the user starts it with "Remove…" in the repo's header and confirms it by typing the repo's name (ADR-303).
 _Avoid_: delete repo, archive
 
 **Rejection reason** (`reason` of `reject-proposal`, `rejectionReason` of `wait_for_session`):
@@ -602,6 +602,10 @@ _Avoid_: CI, build (a build is a mise task), checks
 **Pipeline fix** (`PipelineFix`, `merge-requests/fix-pipeline`, "Fix" under a failed pipeline in the task panel):
 The user's request to a task's agent to fix the failed pipeline of the task's merge request, with the end of the failed jobs' logs. Queued like a review and read with `get_review_comments` (ADR-197); the fix goes on the same task branch, so the merge request gets it with the next push.
 _Avoid_: retry, rerun (that is the repo host's button), fix task (no new task is made)
+
+**Test fix** (`TestFix`, `verification/fix-tests`, "Fix failed tests" and "Fix this" in a task's Verification section):
+The user's request to a task's agent to fix failed tests of the task's last verification, one test or all it kept, with each test's message and stack trace from the test report. Queued like a review and read with `get_review_comments` (ADR-302).
+_Avoid_: retry (that is a new task on another model, ADR-233), rerun, verify again
 
 **Merge request thread** (`MergeRequestThread`, `merge-requests/threads`, "Read threads" under an open merge request in the task panel):
 An unresolved thread of a task's merge request on the repo host: a reviewer's comment on a line, a file or the merge request as a whole, with the replies under it (a GitLab discussion that can be resolved, a GitHub review thread). The threads the user picks go to the task's agent with "Send to agent" as **merge request comments** (`MergeRequestComments`), queued like a review and read with `get_review_comments` (ADR-256).

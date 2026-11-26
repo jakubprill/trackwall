@@ -230,6 +230,7 @@ describe.skipIf(process.versions.bun === undefined)(
         otherParts: [],
         comments: [COMMENT],
         pipelineFix: null,
+        testFix: null,
         mergeRequestComments: null,
       });
       expect(after.facade.agents.takeMessages(resumed).map((m) => m.text)).toEqual(["Use the v2 API"]);
