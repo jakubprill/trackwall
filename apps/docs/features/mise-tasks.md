@@ -12,12 +12,11 @@ Run, stop and follow the mise tasks of any repo, with live logs and the errors p
 
 ## What you get
 
-- Every mise task of a repo in one tab, with "Run" and "Stop", and where it comes from: the repo, your local files, your global mise config or Trackwall's convention tasks.
+- Every mise task of a repo in one tab, also those of a monorepo's packages, with "Run" and "Stop", and where it comes from: the repo, your local files, your global mise config or Trackwall's convention tasks.
 - Convention tasks: `setup`, `build` and `test` for every Maven, Gradle and npm repo that has none of its own, with one click.
 - A live log of each task, with errors and warnings highlighted, and secrets kept out of it.
 - A clean stop: a stopped task takes everything it started with it.
 - Arguments for a run, such as one test class for `test`, and the mise tasks agents run, in the same place, where you can watch and stop them.
-- The tasks of a monorepo's packages, each run in its own folder, next to the repo's own.
 
 ## How it works
 
