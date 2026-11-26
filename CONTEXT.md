@@ -285,7 +285,7 @@ The files git ignores that the repo root's `.worktreeinclude` names (`.gitignore
 _Avoid_: copied files, local files
 
 **Trusted mise config** (`StoredTask.trustedMiseConfig`, `TaskMiseConfig`, actions `task-mise-config` and `trust-task-mise-config`; UI "Trust this config"):
-The mise files of a task's worktree (config files, `.tool-versions`, file tasks) as the user consented to them, kept as hashes in `tasks.json`: as the worktree was created, or as the user trusted them later in the task panel (ADR-59). A mise task runs in the worktree only while its files match; a changed file shows up as a `MiseConfigChange`.
+The mise files of a task's worktree (config files, `.tool-versions`, file tasks, also those of its mise packages, ADR-305) as the user consented to them, kept as hashes in `tasks.json`: as the worktree was created, or as the user trusted them later in the task panel (ADR-59). A mise task runs in the worktree only while its files match; a changed file shows up as a `MiseConfigChange`.
 
 **Trust notice** (`MiseTrustNotices`, `Unread.trustNotice`):
 The sentence in the daemon's prompt that tells a session the user trusted the mise config that refused its last `run_mise_task`, `verify_task` or `start_service`, so it runs it again (ADR-92). The trust is "Trust this config" for a task worktree or mise trust for a repo root, and only a session refused there since its last try gets the notice.
@@ -701,6 +701,10 @@ _Avoid_: main session (that word names the role of commissioning work), root ses
 
 **mise task**:
 A named command from a repo's `mise.toml`: `setup`, `dev`, `test`, `build`, `lint`, `health`. In code always qualified (`miseTask`, `mise.run(...)`), never a bare `task`. Tasks stored in the commit (`DeclaredMiseTask` in `RepoCard.mise`, type `MiseSetup`: mise configuration files and the tasks from `[tasks]` and task directories) are computed by the repo card; a repo without them, and without mise tasks in its local config (ADR-86), has the `no-mise` tag (ADR-34), and a repo with mise tasks in its local config has the `local-mise` tag (`LOCAL_MISE_TAG`, ADR-110). Each mise task of a repo's list has an **origin** (`MiseTaskOrigin`; UI "repo", "local", "outside repo"): `repo` when a file git tracks defines it, `local` when a file in the repo git does not track does, `outside` when a mise config outside the repo does (the user's global one, a parent folder's), `convention` (UI "convention") when the convention tasks file does (ADR-157); `source` names the file (ADR-110). The MCP tools for mise tasks have `mise` in the name and the `miseTask` argument (`run_mise_task`, `stop_mise_task`, `wait_for_mise_task`, `list_running_mise_tasks`, ADR-41).
+
+**mise package** (`MisePackage`, `MisePackagePath`, `findMisePackages`, `packageTaskName`; UI a box named by the folder in "mise tasks"):
+A folder below a repo root, up to four levels deep and outside hidden, dependency and build output folders, that holds a mise config of its own, such as `packages/client` of a monorepo (ADR-305). mise run from the root never reads it, so Trackwall lists its own mise tasks as `//<package>:<task>` (mise's own notation) and runs each in the package folder. A package's config is trusted on its own, like the root's.
+_Avoid_: module (a Maven or Gradle module), workspace (that is the projects folder's), subproject
 
 **Convention tasks** (`CONVENTION_TASKS`, `mise/convention-tasks.ts`, actions `convention-tasks` and `write-convention-tasks`; UI "Add convention tasks"):
 The mise tasks `setup`, `build` and `test` for Maven, Gradle and npm projects in one file Trackwall writes into the projects folder on the user's click (`.config/mise/conf.d/trackwall-convention-tasks.toml`), which mise reads for every repo below; a repo's own mise task of the same name wins (ADR-157). Its state (`ConventionTasksState`) is `absent`, `current` or `changed`.

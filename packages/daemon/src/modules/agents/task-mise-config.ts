@@ -4,11 +4,12 @@ import { lstat, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { MISE_CONFIG_NAME, type MiseConfigChange, type TaskMiseConfig } from "@trackwall/protocol";
 import { DomainError } from "../../infra/errors.ts";
+import { findMisePackages } from "../../infra/mise-packages.ts";
 import { isInside } from "../../infra/path-inside.ts";
 
 /**
  * The mise config of a task worktree (§4.4, ADR-59): the files mise reads for the tasks and the environment of a run in
- * the worktree root, each with a hash of its content. These are the config files (also the local ones git ignores,
+ * the worktree root and in its packages (ADR-305), each with a hash of its content. These are the config files (also the local ones git ignores,
  * such as `mise.local.toml`, which the task changes do not show), `.tool-versions` and the file tasks. A task stores the
  * snapshot the user trusted, and mise tasks run in its worktree only while the current snapshot is the same. Files a
  * config names elsewhere (`task_config.includes`, `[env] _.source`, `_.file`) are not in it, like the build scripts a
@@ -39,13 +40,23 @@ interface Walk {
   bytes: number;
 }
 
-/** The mise files of a worktree with their content, sorted by path. */
+/**
+ * The mise files of a worktree with their content, sorted by path: those of its root and of each of its packages
+ * (ADR-305), whose mise tasks run in the worktree under the same trust, since the worktree is a trusted path for mise
+ * there too.
+ */
 async function readMiseFiles(worktree: string): Promise<Map<string, Buffer>> {
   const walk: Walk = { root: worktree, realRoot: await realpath(worktree), files: new Map(), bytes: 0 };
-  await addMatching(walk, [], (name) => MISE_CONFIG_NAME.test(name) || ROOT_FILE.test(name));
-  for (const dir of await dirsNamed(walk, [], [".config"])) await addMatching(walk, dir, (name) => MISE_CONFIG_NAME.test(name));
-  for (const names of MISE_DIRS) for (const dir of await dirsNamed(walk, [], names)) await addTree(walk, dir);
+  await addPlace(walk, []);
+  for (const pkg of await findMisePackages(worktree)) await addPlace(walk, pkg.split("/"));
   return new Map([...walk.files].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+/** The mise files mise reads in one folder it runs in: the worktree root or a package's folder. */
+async function addPlace(walk: Walk, place: readonly string[]): Promise<void> {
+  await addMatching(walk, place, (name) => MISE_CONFIG_NAME.test(name) || ROOT_FILE.test(name));
+  for (const dir of await dirsNamed(walk, place, [".config"])) await addMatching(walk, dir, (name) => MISE_CONFIG_NAME.test(name));
+  for (const names of MISE_DIRS) for (const dir of await dirsNamed(walk, place, names)) await addTree(walk, dir);
 }
 
 export async function readMiseConfig(worktree: string): Promise<MiseSnapshot> {

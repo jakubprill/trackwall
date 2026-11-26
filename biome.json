@@ -165,6 +165,7 @@
                       "!../../infra/copilot-home.ts",
                       "!../../infra/copilot-usage-receipt.ts",
                       "!../../infra/path-inside.ts",
+                      "!../../infra/mise-packages.ts",
                       "!../../infra/xml.ts",
                       "!../../infra/glob.ts",
                       "!../../infra/wait-limit.ts",

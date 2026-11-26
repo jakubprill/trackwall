@@ -28,6 +28,50 @@ export const MiseTaskName = z
 export type MiseTaskName = z.infer<typeof MiseTaskName>;
 
 /**
+ * A package of a monorepo for mise: a folder below the repo root with a mise config of its own (ADR-305), as a path
+ * relative to the repo root with `/` (`packages/client`). mise run from the repo root never reads it, so Trackwall lists
+ * and runs its mise tasks in the folder itself.
+ */
+export const MisePackagePath = z
+  .string()
+  .min(1)
+  .max(400)
+  .refine(
+    (p) =>
+      p
+        .split("/")
+        .every(
+          (segment) =>
+            segment !== "" && segment !== "." && segment !== ".." && [...segment].every((c) => c >= " " && c !== ":" && c !== "\\"),
+        ),
+    "a package path is folder names joined by '/', without '.', '..', ':' or '\\'",
+  );
+export type MisePackagePath = z.infer<typeof MisePackagePath>;
+
+/** mise's own notation for a mise task of a package (`//packages/client:test`), which its experimental monorepo mode reads. */
+const PACKAGE_TASK_PREFIX = "//";
+
+/** The name of the mise task `task` of `pkg` on the list (ADR-305): `//packages/client:test`. */
+export function packageTaskName(pkg: string, task: string): string {
+  return `${PACKAGE_TASK_PREFIX}${pkg}:${task}`;
+}
+
+/**
+ * The package and the mise task's own name in a name of the list (ADR-305): `package: null` for a mise task of the repo
+ * root. A package path has no `:`, so the first `:` after `//` ends it, and the rest is the name mise gives the task in
+ * the package (which may hold `:` itself, `build:ui`). A name with `//` but no valid package is a repo root's name.
+ */
+export function splitPackageTask(name: string): { package: string | null; task: string } {
+  if (!name.startsWith(PACKAGE_TASK_PREFIX)) return { package: null, task: name };
+  const colon = name.indexOf(":", PACKAGE_TASK_PREFIX.length);
+  if (colon === -1) return { package: null, task: name };
+  const pkg = name.slice(PACKAGE_TASK_PREFIX.length, colon);
+  const task = name.slice(colon + 1);
+  if (!MisePackagePath.safeParse(pkg).success || task === "") return { package: null, task: name };
+  return { package: pkg, task };
+}
+
+/**
  * Where a mise task runs: the repo root (`task: null`) or the worktree of a task of that repo (ADR-59); a service runs
  * as its mise task `dev` in the same places (ADR-61).
  */
@@ -74,10 +118,25 @@ export type MiseTask = z.infer<typeof MiseTask>;
  */
 const NoList = { message: z.string(), running: z.array(MiseTask) };
 
+/**
+ * A package of the repo with its own mise config (ADR-305) and why mise did not list its mise tasks (`null` when it did):
+ * `untrusted` until the user trusts its config, `error` for another mise error. Its listed mise tasks are on the repo's
+ * list under `packageTaskName`.
+ */
+export const MisePackage = z.object({
+  path: MisePackagePath,
+  problem: z.object({ kind: z.enum(["untrusted", "error"]), message: z.string() }).nullable(),
+});
+export type MisePackage = z.infer<typeof MisePackage>;
+
 /** The repo's mise tasks, or the reason mise did not list them. */
 export const MiseTasks = z.discriminatedUnion("kind", [
-  /** A repo without a mise config has an empty list. A mise task that left the config while running stays, so it can be stopped. */
-  z.object({ kind: z.literal("ok"), tasks: z.array(MiseTask) }),
+  /**
+   * A repo without a mise config has an empty list. A mise task that left the config while running stays, so it can be
+   * stopped. The mise tasks of the repo's packages (ADR-305) follow the root's, each named `//<package>:<task>`, and
+   * `packages` names every package found, also one whose mise tasks mise did not list.
+   */
+  z.object({ kind: z.literal("ok"), tasks: z.array(MiseTask), packages: z.array(MisePackage) }),
   /** There is no `mise` program in the daemon's `PATH`. */
   z.object({ kind: z.literal("not_installed"), ...NoList }),
   /** mise does not read the repo's config until the user trusts it (`mise trust`, the `trust` action). */
@@ -166,7 +225,10 @@ export const miseApi = {
   start: endpoint("start", MiseTaskRequest.extend({ arguments: MiseRunArguments.default([]) }).strict(), RunState),
   /** Returns after confirming that no process of the group is alive; a mise task that already ended returns its state. */
   stop: endpoint("stop", MiseTaskRequest, RunState),
-  /** `mise trust` in the repo root: the user's consent to the repo's mise config. Only from the UI, never from MCP (§8). */
+  /**
+   * `mise trust` in the repo root and in each of its packages (ADR-305): the user's consent to the repo's mise config.
+   * Only from the UI, never from MCP (§8).
+   */
   trust: endpoint("trust", z.object({ repo: RepoId }).strict(), MiseTasks),
   /** The state of the convention tasks file in the projects folder (ADR-157). */
   conventionTasks: endpoint("convention-tasks", z.object({}).strict(), ConventionTasksState),

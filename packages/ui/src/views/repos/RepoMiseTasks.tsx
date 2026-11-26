@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { post } from "@/lib/api";
 import type { Connection } from "@/lib/connection";
 import { relativeTime } from "@/lib/format";
+import { groupByPackage, type MisePackageGroup } from "@/lib/mise-packages";
 import { parseRunArguments } from "@/lib/mise-run-arguments";
 import { miseTaskOriginLabel } from "@/lib/mise-task-origin";
 import { isLive, runStateLabel, showsLastLines } from "@/lib/run-state";
@@ -30,7 +31,8 @@ const POLL_IDLE_MS = 10_000;
 
 /**
  * The repo's mise tasks (ADR-20): the list from `mise tasks ls`, each with where it is defined (ADR-110), start and stop of
- * the whole process group, the run state; above them the repo's local config files and their backup (ADR-86).
+ * the whole process group, the run state; above them the repo's local config files and their backup (ADR-86). The
+ * mise tasks of the repo's packages follow in a box per package (ADR-305).
  */
 export function RepoMiseTasks({ conn, repo }: { conn: Connection; repo: string }) {
   const load = useCallback(() => post(conn, miseApi.tasks, { repo }), [conn, repo]);
@@ -61,13 +63,17 @@ function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: st
     <Surface label={label} meta={list.length}>
       <ul className="divide-y">
         {list.map((task) => (
-          <TaskRow key={task.name} conn={conn} repo={repo} task={task} onChange={onChange} />
+          <TaskRow key={task.name} conn={conn} repo={repo} task={task} shortName={task.name} onChange={onChange} />
         ))}
       </ul>
     </Surface>
   );
   if (tasks.kind === "ok") {
-    return tasks.tasks.length === 0 ? (
+    const grouped = groupByPackage(tasks.tasks, tasks.packages);
+    const packages = grouped.packages.map((group) => (
+      <PackageTasks key={group.path} conn={conn} repo={repo} group={group} onChange={onChange} />
+    ));
+    return grouped.root.length === 0 && packages.length === 0 ? (
       <div className="flex flex-col gap-3">
         <p className="text-muted-foreground text-sm">
           This repo has no mise tasks. Add them under [tasks] in mise.toml in the repo root, or in mise.local.toml to keep them out of git,
@@ -78,8 +84,9 @@ function TaskPanel({ conn, repo, tasks, onChange }: { conn: Connection; repo: st
     ) : (
       <div className="flex flex-col gap-4">
         {hasService(tasks.tasks) && <RepoService conn={conn} repo={repo} />}
-        {rows(tasks.tasks, "mise tasks")}
-        {lacksConventionTask(tasks.tasks) && <ConventionTasks conn={conn} mode="offer" onWritten={onChange} />}
+        {grouped.root.length > 0 && rows(grouped.root, "mise tasks")}
+        {packages}
+        {lacksConventionTask(grouped.root) && <ConventionTasks conn={conn} mode="offer" onWritten={onChange} />}
       </div>
     );
   }
@@ -126,13 +133,52 @@ function NoList({
   return <ErrorWithRetry message={`mise: ${tasks.message}`} onRetry={onChange} />;
 }
 
-function Untrusted({ conn, repo, message, onTrusted }: { conn: Connection; repo: string; message: string; onTrusted: () => void }) {
+/**
+ * The mise tasks of one package of the repo (ADR-305) under its folder, or why mise did not list them: trusting it trusts
+ * the repo root's config and every package's, as the repo's own trust does.
+ */
+function PackageTasks({ conn, repo, group, onChange }: { conn: Connection; repo: string; group: MisePackageGroup; onChange: () => void }) {
+  const { problem } = group;
+  return (
+    <Surface path={group.path} meta={problem ? "–" : group.tasks.length}>
+      {problem?.kind === "untrusted" ? (
+        <div className="p-3">
+          <Untrusted conn={conn} repo={repo} message={problem.message} onTrusted={onChange} whose="this package's" />
+        </div>
+      ) : problem ? (
+        <div className="p-3">
+          <ErrorWithRetry message={`mise: ${problem.message}`} onRetry={onChange} />
+        </div>
+      ) : (
+        <ul className="divide-y">
+          {group.tasks.map(({ task, shortName }) => (
+            <TaskRow key={task.name} conn={conn} repo={repo} task={task} shortName={shortName} onChange={onChange} />
+          ))}
+        </ul>
+      )}
+    </Surface>
+  );
+}
+
+function Untrusted({
+  conn,
+  repo,
+  message,
+  onTrusted,
+  whose = "this repo's",
+}: {
+  conn: Connection;
+  repo: string;
+  message: string;
+  onTrusted: () => void;
+  whose?: string;
+}) {
   const trust = useAction(() => post(conn, miseApi.trust, { repo }), onTrusted);
   return (
     <div className="flex flex-col items-start gap-3">
       <p className="text-sm">
-        mise does not trust this repo's config, so it will not list its mise tasks. Trust it only if you know the repo: a mise config can
-        run programs.
+        mise does not trust {whose} config, so it will not list its mise tasks. Trust it only if you know the repo: a mise config can run
+        programs.
       </p>
       <p className="text-muted-foreground font-mono text-xs whitespace-pre-wrap break-all">{message}</p>
       <Button variant="outline" size="sm" onClick={trust.run} disabled={trust.pending}>
@@ -143,7 +189,20 @@ function Untrusted({ conn, repo, message, onTrusted }: { conn: Connection; repo:
   );
 }
 
-function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: string; task: MiseTask; onChange: () => void }) {
+/** `shortName`: the name shown, which in a package's box leaves out the package (ADR-305); the daemon gets `task.name`. */
+function TaskRow({
+  conn,
+  repo,
+  task,
+  shortName,
+  onChange,
+}: {
+  conn: Connection;
+  repo: string;
+  task: MiseTask;
+  shortName: string;
+  onChange: () => void;
+}) {
   const live = isLive(task.run);
   const state = runStateLabel(task.run);
   const [showLog, setShowLog] = useState(false);
@@ -170,7 +229,9 @@ function TaskRow({ conn, repo, task, onChange }: { conn: Connection; repo: strin
       <div className="flex items-center gap-3">
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-center gap-2">
-            <code className="text-primary truncate text-xs">{task.name}</code>
+            <code className="text-primary truncate text-xs" title={task.name}>
+              {shortName}
+            </code>
             {origin && (
               <Badge variant={origin.local ? "default" : "secondary"} title={origin.title}>
                 {origin.label}

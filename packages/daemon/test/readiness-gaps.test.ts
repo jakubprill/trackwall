@@ -8,7 +8,7 @@ function task(name: string, origin: MiseTask["origin"] = "repo"): MiseTask {
 }
 
 function tasks(...list: MiseTask[]): MiseTasks {
-  return { kind: "ok", tasks: list };
+  return { kind: "ok", tasks: list, packages: [] };
 }
 
 const BUILD_AND_TEST = tasks(task("build"), task("test"));

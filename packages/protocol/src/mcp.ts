@@ -452,7 +452,9 @@ export const SEVERAL_REPOS_RULE =
   "which costs a fraction of a session per repo, and the user still reviews, verifies and merges each repo's part on its own. " +
   `Propose a separate ${PROPOSE_TASK} per repo instead only when the user asks for separate tasks.`;
 const RepoTagsArg = z.array(TagName).max(20);
-const MiseTaskArg = MiseTaskName.describe(`mise task name from ${GET_REPO} (the miseTasks field)`);
+const MiseTaskArg = MiseTaskName.describe(
+  `mise task name from ${GET_REPO} (the miseTasks field); a mise task of a package with its own mise config is named //<package folder>:<task>`,
+);
 /** A mise task in a task's worktree instead of the repo root (ADR-59). */
 const MiseTaskTaskArg = TaskId.describe(
   `id of a task of this repo (from ${LIST_SESSIONS}; a task session finds its own in its instructions): the mise task in that task's worktree instead of the repo root`,
@@ -1310,7 +1312,8 @@ export const mcpTools = {
     auditArgs: ["repo", "task", "miseTask", "arguments"] as const,
     description:
       "Run a repo's mise task (mise run <task>) in the repo root in the user's projects folder, the same as the Run " +
-      "button in Trackwall, or with task in that task's worktree, so it builds and tests the task's changes. Only tasks " +
+      "button in Trackwall, or with task in that task's worktree, so it builds and tests the task's changes. A mise task " +
+      "of a package (//<package folder>:<task>) runs in that folder, without mise's experimental monorepo mode. Only tasks " +
       `listed by ${GET_REPO} (miseTasks) can run; a task that is already running there is not started again, and the result is its ` +
       `current run. Returns run: running with runId. Then call ${WAIT_FOR_MISE_TASK} to learn the exit code and ${TAIL} ` +
       "for the output (records of this run have its runId); pass the same task to both. A mise config the user has not " +
