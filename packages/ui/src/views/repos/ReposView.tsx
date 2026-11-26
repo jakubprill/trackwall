@@ -1,5 +1,5 @@
 import { NO_MISE_TAG, type Repo, type RepoList, type RepoTag, type RunningMiseTask, type SessionList } from "@trackwall/protocol";
-import { FolderOpen, ListChecks, Plus, RefreshCw, SquareTerminal, Star } from "lucide-react";
+import { FolderOpen, ListChecks, Plus, RefreshCw, SquareTerminal, Star, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ErrorWithRetry } from "@/components/ErrorWithRetry";
 import { Loading } from "@/components/Loading";
@@ -76,6 +76,7 @@ export function ReposView({
   const [selected, setSelected] = useState(initialRepo);
   const [openTab, setOpenTab] = useState<RepoTab>();
   const [panel, setPanel] = useState(firstPanel(initialRepo));
+  const [removed, setRemoved] = useState<RemovedNotice>();
   const list = useRepoList(conn, repoWatch.options(REPO_LIST_PACE));
   const sync = useSyncRun(conn, list.reload);
   const synced = syncedByPath(sync.run);
@@ -92,6 +93,7 @@ export function ReposView({
   const newOnServer = newOnServerSince(repos, serverCheck.data);
   const rows = allReposRows(repos, unpushed.data, newOnServer, new Date());
   const openRepo = (id: string, tab?: RepoTab) => {
+    setRemoved(undefined);
     setSelected(id);
     setOpenTab(tab);
     setPanel("repo");
@@ -160,6 +162,7 @@ export function ReposView({
         </nav>
       </aside>
       <section className="min-h-0 min-w-0 overflow-y-auto">
+        <RemovedRepoNotice removed={removed} onDismiss={() => setRemoved(undefined)} />
         {shown === "all" && repos.length > 0 && (
           <AllReposPanel
             conn={conn}
@@ -201,11 +204,37 @@ export function ReposView({
             sessions={sessions}
             runningLive={runningLive}
             onOpenInSessions={onOpenInSessions}
+            onRemoved={(movedTo) => {
+              setRemoved({ repo: current.id, movedTo });
+              setPanel("all");
+              list.reload();
+            }}
           />
         )}
         {/* With no repos to show, the list on the left says what to do; only the loading stays here. */}
         {!list.data && !list.error && <PanelLoading />}
       </section>
+    </div>
+  );
+}
+
+/** The repo the user just removed (ADR-303) and where its folder went, said above the panel until dismissed or a repo opens. */
+interface RemovedNotice {
+  repo: string;
+  movedTo: string;
+}
+
+function RemovedRepoNotice({ removed, onDismiss }: { removed: RemovedNotice | undefined; onDismiss: () => void }) {
+  if (!removed) return null;
+  return (
+    <div role="status" className="bg-card mx-6 mt-6 flex items-start gap-3 rounded-md border px-4 py-3 text-sm">
+      <p className="min-w-0 flex-1">
+        {removed.repo} was removed from Trackwall. Its folder is now <span className="font-mono text-xs break-all">{removed.movedTo}</span>.
+        Move it back to the projects folder to bring the repo back.
+      </p>
+      <Button variant="ghost" size="icon" onClick={onDismiss} aria-label="Dismiss">
+        <X />
+      </Button>
     </div>
   );
 }

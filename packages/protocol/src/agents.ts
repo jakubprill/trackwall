@@ -1083,6 +1083,13 @@ export const TaskWorktreeSize = z.object({
 export type TaskWorktreeSize = z.infer<typeof TaskWorktreeSize>;
 const ProposalRequest = z.object({ proposal: TaskId }).strict();
 
+/** The repo to remove and its name as the user typed it to confirm (ADR-303); a mistyped name moves nothing. */
+const RemoveRepoRequest = z.object({ repo: RepoId, confirmation: z.string().max(200) }).strict();
+
+/** Where the removed repo's folder went, inside `.trackwall/removed` of the projects folder (ADR-83). */
+export const RemovedRepo = z.object({ movedTo: z.string() });
+export type RemovedRepo = z.infer<typeof RemovedRepo>;
+
 export const agentsApi = {
   sessions: endpoint("sessions", z.object({}).strict(), SessionList),
   /**
@@ -1403,6 +1410,11 @@ export const agentsApi = {
    * the repo moves into `.trackwall/removed` in the projects folder. A refusal leaves the proposal waiting.
    */
   approveRepoRemoval: endpoint("approve-repo-removal", ProposalRequest, Done),
+  /**
+   * The user removes a repo from the Repos view (ADR-303): `confirmation` is the repo's name as the user typed it and must
+   * equal `repo`. The same checks and move as an approved removal (ADR-83); the proposals for the repo are rejected.
+   */
+  removeRepo: endpoint("remove-repo", RemoveRepoRequest, RemovedRepo),
   /**
    * Rejects a proposal: it leaves the list, and a session waiting on it gets `proposal_rejected` with the user's reason
    * when they gave one (ADR-55); an empty reason is no reason.

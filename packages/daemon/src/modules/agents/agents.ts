@@ -331,6 +331,8 @@ export class Agents {
   readonly #queues: AgentQueuesFile;
   /** The sessions a restart is stopping and starting again: a second restart of one would unlist the first one's new session. */
   readonly #restarting = new Set<string>();
+  /** The repos being removed right now, from the Repos view (ADR-303) or a proposal (ADR-83): a second removal is refused. */
+  readonly #removing = new Set<string>();
   readonly #launcher: SessionLauncher;
   readonly #javaNavigation: JavaNavigationServers;
   readonly #autoReviews: AutoReviews;
@@ -741,30 +743,68 @@ export class Agents {
   /**
    * The user approves removing a repo (ADR-83). Refused while anything of the repo would lose its folder: a session in
    * it, a task (its worktree belongs to the repo's git directory) or a process started there. A refusal leaves the
-   * proposal waiting, so the user ends those and approves again. The other proposals for the repo are rejected with it,
-   * since they could no longer start.
+   * proposal waiting, so the user ends those and approves again.
    */
   async approveRepoRemoval(id: string): Promise<void> {
     const proposal = this.#proposals.get(id);
     if (proposal.kind !== "remove_repo") throw new DomainError("bad_request", `proposal ${id} is not a repo removal`);
     const repoDir = this.#proposals.removalDir(id);
     if (repoDir === undefined) throw new Error(`repo removal ${id} has no folder`);
-    if (this.#proposals.list().some((p) => proposalRepos(p).includes(proposal.repo) && this.#proposals.approving(p.id)))
-      throw new DomainError("bad_request", `${proposal.repo} is already being removed or a task of it started`);
-    this.#assertNothingRunsIn(proposal.repo, repoDir);
-    this.#proposals.take(id);
-    let movedTo: string;
-    try {
-      movedTo = await this.#deps.repos.removeRepo(proposal.repo, repoDir, () => this.#assertNothingRunsIn(proposal.repo, repoDir));
-    } catch (err) {
-      this.#proposals.release(id, true);
-      throw err;
-    }
+    const movedTo = await this.#whileRemoving(proposal.repo, async () => {
+      this.#assertNothingRunsIn(proposal.repo, repoDir);
+      this.#proposals.take(id);
+      try {
+        return await this.#moveRepoOut(proposal.repo, repoDir);
+      } catch (err) {
+        this.#proposals.release(id, true);
+        throw err;
+      }
+    });
     this.#proposals.release(id, false);
     this.#coordination.repoRemoved(proposal, movedTo);
+    this.#rejectProposalsFor(proposal.repo);
+  }
+
+  /**
+   * The user removes a repo from the Repos view (ADR-303), confirmed by typing its name, which must be exactly the repo's
+   * id: the same checks and move as an approved removal, so a repo with a session, a task or a process is refused alike.
+   */
+  async removeRepo(repo: string, confirmation: string): Promise<string> {
+    if (confirmation !== repo) throw new DomainError("bad_request", `type the repo's name, ${repo}, to remove it`);
+    const movedTo = await this.#whileRemoving(repo, async () => {
+      const repoDir = await this.#deps.repos.repoPath(repo);
+      this.#assertNothingRunsIn(repo, repoDir);
+      return this.#moveRepoOut(repo, repoDir);
+    });
+    this.#rejectProposalsFor(repo);
+    return movedTo;
+  }
+
+  /**
+   * Runs one removal of `repo` at a time: refused at once while another removal of it runs or a proposal for it is being
+   * approved (a removal, or a task starting), before anything is awaited, so two removals never both pass their checks.
+   */
+  async #whileRemoving<T>(repo: string, removal: () => Promise<T>): Promise<T> {
+    if (this.#removing.has(repo) || this.#proposals.list().some((p) => proposalRepos(p).includes(repo) && this.#proposals.approving(p.id)))
+      throw new DomainError("bad_request", `${repo} is already being removed or a task of it started`);
+    this.#removing.add(repo);
+    try {
+      return await removal();
+    } finally {
+      this.#removing.delete(repo);
+    }
+  }
+
+  /** The last check runs right before the rename, with nothing awaited in between, so nothing starts in the repo meanwhile. */
+  #moveRepoOut(repo: string, repoDir: string): Promise<string> {
+    return this.#deps.repos.removeRepo(repo, repoDir, () => this.#assertNothingRunsIn(repo, repoDir));
+  }
+
+  /** The other proposals for a removed repo could no longer start, so they are rejected with the reason. */
+  #rejectProposalsFor(repo: string): void {
     for (const other of this.#proposals.list())
-      if (proposalRepos(other).includes(proposal.repo) && this.#proposals.find(other.id))
-        this.rejectProposal(other.id, `${proposal.repo} was removed from the projects folder`);
+      if (proposalRepos(other).includes(repo) && this.#proposals.find(other.id))
+        this.rejectProposal(other.id, `${repo} was removed from the projects folder`);
   }
 
   #assertNothingRunsIn(repo: string, repoDir: string): void {

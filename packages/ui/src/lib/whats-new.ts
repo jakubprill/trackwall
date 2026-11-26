@@ -33,9 +33,16 @@ export interface WhatsNewEntry {
 /**
  * The changes worth a look, newest first. A feature a user should notice after an update adds its entry at the top in
  * the same PR (AGENTS.md), and the oldest entries go when the list would hold more than `WHATS_NEW_MOST`: a computer
- * that skipped that many changes reads the release notes.
+ * that skipped that many changes reads the release notes. "Tips" stays last: it is the entry whose Show brings back a
+ * tip, which `tips.e2e.ts` checks, so the list always has one.
  */
 export const WHATS_NEW: readonly WhatsNewEntry[] = [
+  {
+    id: "remove-a-repo",
+    title: "Remove a repo",
+    text: "Remove… in a repo's header takes the repo off the list once you type its name: its folder moves into .trackwall/removed, and nothing is deleted.",
+    show: { place: { kind: "view", view: "repos" } },
+  },
   {
     id: "failed-tests-open",
     title: "Failed tests open to their stack trace",
@@ -59,12 +66,6 @@ export const WHATS_NEW: readonly WhatsNewEntry[] = [
     title: "Plan and knowledge in the workspace store",
     text: "Turn on Keep Plan and knowledge in the store, and the approved knowledge, routines, board and your task templates get a history in git and go with the store's pushes.",
     show: { place: { kind: "settings", category: "workspace" } },
-  },
-  {
-    id: "sync-main-in-new-task",
-    title: "Sync main in the New task form",
-    text: "When a repo's main is behind the server, the New task form says so above Create task and offers Sync main, so the task starts from the newest code.",
-    show: { place: { kind: "new-session" } },
   },
   {
     id: "tips",
