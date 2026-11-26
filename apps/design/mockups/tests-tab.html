@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tests tab of a task</title>
+<link rel="stylesheet" href="../tokens.css">
+</head>
+<body>
+<style>
+body{background:var(--background);color:var(--foreground);font-family:var(--font-sans);margin:0;padding:24px;display:flex;flex-direction:column;gap:32px}
+.cap{font-size:15px;font-weight:600;margin:0 0 8px}
+.cap span{color:var(--muted-foreground);font-weight:400;font-size:13px}
+.win{width:1000px;border:1px solid var(--border);border-radius:6px;background:var(--background);overflow:hidden;font-size:12px}
+.hud{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground)}
+.head{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--border)}
+.btn{border:1px solid var(--border);border-radius:4px;padding:3px 10px;white-space:nowrap}
+.btn.p{border-color:var(--primary);color:var(--primary)}
+.dim{color:var(--muted-foreground)}
+.mono{font-family:var(--font-mono)}
+.bad{color:var(--destructive)} .ok{color:var(--success)} .warn{color:var(--warning)}
+.row{display:flex;align-items:center;gap:10px}
+.pill{border-radius:999px;padding:1px 8px;font-family:var(--font-mono);font-size:11px;background:color-mix(in oklch,var(--destructive) 15%,transparent);color:var(--destructive)}
+.sp{flex:1}
+.tabs{display:flex;gap:18px;padding:6px 14px 0;border-bottom:1px solid var(--border)}
+.tabs span{padding-bottom:5px;color:var(--muted-foreground)}
+.tabs .on{border-bottom:2px solid var(--primary);color:var(--foreground)}
+.tabs .badge{padding-bottom:0;display:inline-block;min-width:16px;text-align:center;border-radius:999px;padding:0 5px;margin-left:4px;font-size:10px;background:var(--destructive);color:var(--foreground);font-weight:600;line-height:16px}
+.bar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border)}
+.note{display:flex;align-items:center;gap:10px;padding:6px 14px;border-bottom:1px solid var(--border);background:color-mix(in oklch,var(--warning) 10%,transparent);color:var(--warning)}
+.trace{overflow-wrap:anywhere;background:var(--muted);border:1px solid var(--border);border-radius:4px;padding:8px 10px;font-family:var(--font-mono);font-size:11px;line-height:1.55}
+.trace a{color:var(--primary);text-decoration:underline;text-underline-offset:2px}
+.trace .lib{color:var(--muted-foreground)}
+.split{display:grid;grid-template-columns:360px minmax(0,1fr);height:400px}
+.list{border-right:1px solid var(--border);padding:0 0 8px;overflow:hidden}
+.list .n{padding:3px 12px;display:flex;gap:8px;align-items:center;white-space:nowrap}
+.list .n.c{padding-left:30px}
+.list .n.sel{background:var(--accent)}
+.t{margin-left:auto;color:var(--muted-foreground);font-family:var(--font-mono);font-size:11px}
+.filters{display:flex;gap:6px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);margin-bottom:6px}
+.f{border:1px solid var(--border);border-radius:999px;padding:1px 8px;white-space:nowrap}
+.f.on{background:var(--secondary);color:var(--primary);border-color:var(--primary)}
+.search{flex:1;border:1px solid var(--border);border-radius:4px;padding:2px 8px;color:var(--muted-foreground);min-width:0}
+.search.typed{color:var(--foreground)}
+.detail{min-width:0;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.ic{display:inline-block;width:8px;height:8px;border-radius:50%;flex:none}
+.ic.b{background:var(--destructive)} .ic.g{background:var(--success)} .ic.s{background:var(--muted-foreground)}
+.chev{color:var(--muted-foreground);width:10px;display:inline-block}
+.diff{font-family:var(--font-mono);font-size:11px;display:grid;grid-template-columns:70px 1fr;gap:2px 8px}
+.exp{color:var(--success)} .act{color:var(--destructive)}
+.empty{height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center}
+.mark{color:var(--primary)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:24px;width:1000px}
+.pair .win{width:auto}
+</style>
+
+<div id="failed"><p class="cap">1. The Tests tab opens on the failed tests only <span>— no pages and no passed tests: the list holds every failed test of the worktree's newest reports, the first one open on the right</span></p>
+<div class="win">
+ <div class="head"><b>orders-api</b><span class="dim">Fix discount rounding for multi-currency carts</span><span class="sp"></span><span class="btn">Verify</span><span class="btn">Review</span></div>
+ <div class="tabs"><span>Terminal</span><span>Shell</span><span>Changes</span><span class="on">Tests<span class="badge">4</span></span><span>Rounds</span><span>Impact</span><span>MCP calls</span></div>
+ <div class="bar"><span>412 tests · <span class="bad">3 failed · 1 error</span> · 6 skipped · 41.7 s</span><span class="dim">reports from 2 min ago · 38 files</span><span class="sp"></span><span class="btn">Refresh</span><span class="btn p">Fix failed tests</span></div>
+ <div class="split">
+  <div class="list">
+   <div class="filters"><span class="f on">Failed 4</span><span class="f">Skipped 6</span><span class="f">All 412</span><span class="search">Filter by name</span></div>
+   <div class="n"><span class="chev">▾</span><span class="ic b"></span><span class="mono">DiscountCalculatorTest</span><span class="t">2 of 18</span></div>
+   <div class="n c sel"><span class="ic b"></span><span class="mono">appliesPercentDiscountInEur</span><span class="t">0.04 s</span></div>
+   <div class="n c"><span class="ic b"></span><span class="mono">roundsHalfEvenForPln</span><span class="t">0.01 s</span></div>
+   <div class="n"><span class="chev">▾</span><span class="ic b"></span><span class="mono">CartControllerIT</span><span class="t">1 of 9</span></div>
+   <div class="n c"><span class="ic b"></span><span class="mono">returnsTotalWithDiscount</span><span class="t">1.20 s</span></div>
+   <div class="n"><span class="chev">▾</span><span class="ic b"></span><span class="mono">OrderRepositoryTest</span><span class="t">1 of 12</span></div>
+   <div class="n c"><span class="ic b"></span><span class="mono">savesOrderWithLines</span><span class="pill">error</span><span class="t">0.31 s</span></div>
+  </div>
+  <div class="detail">
+   <div class="row"><span class="mono bad" style="font-size:13px">appliesPercentDiscountInEur</span><span class="pill">failure</span><span class="sp"></span><span class="btn">Fix this</span></div>
+   <div class="dim mono">shop.pricing.DiscountCalculatorTest · pricing/target/surefire-reports/TEST-shop.pricing.DiscountCalculatorTest.xml</div>
+   <div class="diff"><span class="dim">expected</span><span class="exp">90.00</span><span class="dim">actual</span><span class="act">89.99</span></div>
+   <div class="trace">org.opentest4j.AssertionFailedError: expected: &lt;90.00&gt; but was: &lt;89.99&gt;<br>
+    <span class="lib">&nbsp;&nbsp;… 3 library frames</span><br>
+    &nbsp;&nbsp;at shop.pricing.DiscountCalculator.apply(<a>DiscountCalculator.java:41</a>)<br>
+    &nbsp;&nbsp;at shop.pricing.DiscountCalculatorTest.appliesPercentDiscountInEur(<a>DiscountCalculatorTest.java:58</a>)<br>
+    <span class="lib">&nbsp;&nbsp;… 5 library frames</span><br>
+    <span class="lib">… 54 more lines in the report</span></div>
+   <div class="dim" style="font-size:11px">A link in the trace opens the file at that line in VS Code. "Fix this" sends this test to the task's agent.</div>
+  </div>
+ </div>
+</div></div>
+
+<div id="all"><p class="cap">2. "All" with a filter <span>— every test, passed ones too, still without pages; classes with no failure stay folded, a filter by name narrows the list as you type</span></p>
+<div class="win">
+ <div class="head"><b>orders-api</b><span class="dim">Fix discount rounding for multi-currency carts</span><span class="sp"></span><span class="btn">Verify</span><span class="btn">Review</span></div>
+ <div class="tabs"><span>Terminal</span><span>Shell</span><span>Changes</span><span class="on">Tests<span class="badge">4</span></span><span>Rounds</span><span>Impact</span><span>MCP calls</span></div>
+ <div class="bar"><span>412 tests · <span class="bad">3 failed · 1 error</span> · 6 skipped · 41.7 s</span><span class="dim">reports from 2 min ago · 38 files</span><span class="sp"></span><span class="btn">Refresh</span><span class="btn p">Fix failed tests</span></div>
+ <div class="split">
+  <div class="list">
+   <div class="filters"><span class="f">Failed 4</span><span class="f">Skipped 6</span><span class="f on">All 412</span><span class="search typed">discount</span></div>
+   <div class="n"><span class="chev">▾</span><span class="ic b"></span><span class="mono">DiscountCalculatorTest</span><span class="t">2 of 18</span></div>
+   <div class="n c"><span class="ic b"></span><span class="mono">appliesPercentDiscountInEur</span><span class="t">0.04 s</span></div>
+   <div class="n c"><span class="ic b"></span><span class="mono">roundsHalfEvenForPln</span><span class="t">0.01 s</span></div>
+   <div class="n c sel"><span class="ic g"></span><span class="mono">appliesFixedDiscount</span><span class="t">0.01 s</span></div>
+   <div class="n c"><span class="ic g"></span><span class="mono">ignoresDiscountBelowZero</span><span class="t">0.00 s</span></div>
+   <div class="n c"><span class="ic s"></span><span class="mono dim">appliesDiscountForJpy</span><span class="t">skipped</span></div>
+   <div class="n c dim"><span class="ic g" style="visibility:hidden"></span>… 13 more passed</div>
+   <div class="n"><span class="chev">▾</span><span class="ic b"></span><span class="mono">CartControllerIT</span><span class="t">1 of 9</span></div>
+   <div class="n c"><span class="ic b"></span><span class="mono">returnsTotalWithDiscount</span><span class="t">1.20 s</span></div>
+   <div class="n"><span class="chev">▸</span><span class="ic g"></span><span class="mono">DiscountPolicyTest</span><span class="t">7 passed</span></div>
+   <div class="n"><span class="chev">▸</span><span class="ic g"></span><span class="mono">DiscountCodeParserTest</span><span class="t">11 passed</span></div>
+  </div>
+  <div class="detail">
+   <div class="row"><span class="mono ok" style="font-size:13px">appliesFixedDiscount</span><span class="dim">passed · 0.01 s</span></div>
+   <div class="dim mono">shop.pricing.DiscountCalculatorTest · pricing/target/surefire-reports/TEST-shop.pricing.DiscountCalculatorTest.xml</div>
+   <div class="dim">A passed test has nothing more to show.</div>
+  </div>
+ </div>
+</div></div>
+
+<div id="states"><p class="cap">3. When nothing failed, and when the worktree has no reports <span>— the tab has no red count; "Verify" runs the tests where there are no reports yet</span></p>
+<div class="pair">
+ <div class="win">
+  <div class="tabs"><span>Terminal</span><span>Changes</span><span class="on">Tests</span><span>Rounds</span></div>
+  <div class="bar"><span>412 tests · 6 skipped · 41.7 s</span><span class="dim">reports from 5 min ago</span><span class="sp"></span><span class="btn">Refresh</span></div>
+  <div class="empty"><div class="ok" style="font-size:14px">✓ No test failed</div><div class="dim">All 406 tests that ran passed.</div><span class="f">Show all 412</span></div>
+ </div>
+ <div class="win">
+  <div class="tabs"><span>Terminal</span><span>Changes</span><span class="on">Tests</span><span>Rounds</span></div>
+  <div class="bar"><span class="dim">No test reports</span><span class="sp"></span><span class="btn">Refresh</span></div>
+  <div class="empty"><div style="font-size:14px">No test reports in this worktree yet</div><div class="dim">Run the tests with Verify, or let the agent run them.<br>Maven, Gradle, Vitest and other tools that write JUnit XML.</div><span class="btn p">Verify</span></div>
+ </div>
+</div></div>
+
+<div id="outdated"><p class="cap">4. Reports older than the changes <span>— after the agent edits files the results may be stale; the note says so, the list stays</span></p>
+<div class="win">
+ <div class="tabs"><span>Terminal</span><span>Shell</span><span>Changes</span><span class="on">Tests<span class="badge">4</span></span><span>Rounds</span><span>Impact</span><span>MCP calls</span></div>
+ <div class="note"><span>Files changed after these reports were written, so some results may be out of date.</span><span class="sp"></span><span class="btn">Verify again</span></div>
+ <div class="bar"><span>412 tests · <span class="bad">3 failed · 1 error</span> · 6 skipped · 41.7 s</span><span class="dim">reports from 14 min ago · 38 files</span><span class="sp"></span><span class="btn">Refresh</span><span class="btn p">Fix failed tests</span></div>
+</div></div>
+</body></html>

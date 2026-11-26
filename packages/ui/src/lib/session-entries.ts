@@ -284,9 +284,9 @@ function selects(selection: Exclude<SessionSelection, undefined | { kind: "new" 
 
 /**
  * The tabs of a task's panel: its session (the session terminal, or the conversation view, ADR-137), its worktree
- * changes, its rounds (ADR-168), its impact on other repos (ADR-147) and its MCP calls.
+ * changes, the tests of its reports (ADR-304), its rounds (ADR-168), its impact on other repos (ADR-147) and its MCP calls.
  */
-export type TaskTab = "session" | "shell" | "changes" | "compare" | "rounds" | "impact" | "mcp-calls";
+export type TaskTab = "session" | "shell" | "changes" | "tests" | "compare" | "rounds" | "impact" | "mcp-calls";
 
 /**
  * The tabs a task's panel shows: its session's tab only while it has a session, named "Chat" for a task in the
@@ -300,6 +300,7 @@ export function taskTabs(session: Pick<Session, "view"> | undefined, hasOtherAtt
     ...sessionTab,
     { id: "shell", label: "Shell" },
     { id: "changes", label: "Changes" },
+    { id: "tests", label: "Tests" },
     ...compareTab,
     { id: "rounds", label: "Rounds" },
     { id: "impact", label: "Impact" },

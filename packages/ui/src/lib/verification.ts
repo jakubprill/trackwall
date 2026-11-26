@@ -53,9 +53,13 @@ export function verificationDuration(verification: Verification): string | null 
 /** A Java class with its package (`shop.cart.CartTest`); a jest or Vitest suite is a file (`cart.test.ts`) or a title instead. */
 const QUALIFIED_CLASS = /^([a-z_$][\w$]*\.)+[A-Z][\w$]*$/;
 
+/** A test class without its package: `CartTest` of `shop.cart.CartTest`; a suite that is a file or a title stays whole. */
+export function shortClassName(owner: string): string {
+  return QUALIFIED_CLASS.test(owner) ? owner.slice(owner.lastIndexOf(".") + 1) : owner;
+}
+
 /** A failed test as the user finds it in the code: the class without its package (or the suite), then the test name. */
 export function failedTestName(failure: TestFailure): string {
-  const owner = failure.className ?? failure.suite;
-  const shortOwner = QUALIFIED_CLASS.test(owner) ? owner.slice(owner.lastIndexOf(".") + 1) : owner;
+  const shortOwner = shortClassName(failure.className ?? failure.suite);
   return shortOwner === "" || shortOwner === failure.name ? failure.name : `${shortOwner} › ${failure.name}`;
 }

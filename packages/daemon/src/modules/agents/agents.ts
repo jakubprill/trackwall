@@ -1293,6 +1293,11 @@ export class Agents {
     return this.#tasks.worktreeSize(id);
   }
 
+  /** Whether a file task `id` changed was written after `sinceMs` (ADR-304): its test reports may be about earlier changes. */
+  taskChangedSince(id: string, sinceMs: number): Promise<boolean> {
+    return this.#tasks.changedSince(id, sinceMs);
+  }
+
   /** One hash of what a task's worktree holds (ADR-209): a verification keeps the one its run started on. */
   taskFingerprint(id: string): Promise<string> {
     return this.#tasks.fingerprint(id);
